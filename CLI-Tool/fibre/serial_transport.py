@@ -61,10 +61,10 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
     This function blocks until cancellation_token is set.
     Channels spawned by this function run until channel_termination_token is set.
     """
-    if not path:
+    if path == None:
         # This regex should match all desired port names on macOS,
         # Linux and Windows but might match some incorrect port names.
-        regex = r'^(/dev/(tty|cu)\..*|/dev/ttyACM.*|COM[0-9]+)$'
+        regex = r'^(/dev/tty\.usbmodem.*|/dev/ttyACM.*|COM[0-9]+)$'
     else:
         regex = "^" + path + "$"
 

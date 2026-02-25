@@ -40,33 +40,32 @@ subparsers.add_parser('liveplotter', help="For plotting of REF parameters (i.e. 
 # General arguments
 parser.add_argument("-p", "--path", metavar="PATH", action="store",
                     help="The path(s) where REF-board(s) should be discovered.\n"
-                    "By default the script will connect to any REF-board on USB or serial.\n\n"
+                         "By default the script will connect to any REF-board on USB.\n\n"
                          "To select a specific USB device:\n"
                          "  --path usb:BUS:DEVICE\n"
-                    "where BUS and DEVICE are the bus and device numbers on Linux.\n\n"
+                         "usbwhere BUS and DEVICE are the bus and device numbers as shown in `lsusb`.\n\n"
                          "To select a specific serial port:\n"
                          "  --path serial:PATH\n"
-                    "where PATH is the path of the serial port.\n"
-                    "Examples: Linux \"/dev/ttyUSB0\", macOS \"/dev/cu.usbmodemXXXX\", Windows \"COM3\".\n"
-                    "You can use `ls /dev/tty* /dev/cu.*` on macOS/Linux to find the correct port.\n\n"
+                         "where PATH is the path of the serial port. For example \"/dev/ttyUSB0\".\n"
+                         "You can use `ls /dev/tty*` to find the correct port.\n\n"
                          "You can combine USB and serial specs by separating them with a comma (no space!)\n"
                          "Example:\n"
-                    "  --path usb,serial:/dev/cu.usbmodemXXXX\n"
-                    "means \"discover any USB device or a serial device on that serial path\"")
+                         "  --path usb,serial:/dev/ttyUSB0\n"
+                         "means \"discover any USB device or a serial device on /dev/ttyUSB0\"")
 parser.add_argument("-s", "--serial-number", action="store",
                     help="The 12-digit serial number of the device. "
-                    "This is a string consisting of 12 upper case hexadecimal "
-                    "digits. \n"
+                         "This is a string consisting of 12 upper case hexadecimal "
+                         "digits as displayed in lsusb. \n"
                          "    example: 385F324D3037\n"
-                    "You can list USB serial identifiers with platform tools "
-                    "(for example `lsusb` on Linux or System Information on macOS).\n"
+                         "You can list all devices connected to USB by running\n"
+                         "(lsusb -d 1209:0d32 -v; lsusb -d 0483:df11 -v) | grep iSerial\n"
                          "If omitted, any device is accepted.")
 parser.add_argument("-v", "--verbose", action="store_true",
                     help="print debug information")
 parser.add_argument("--version", action="store_true",
                     help="print version information and exit")
 
-parser.set_defaults(path="usb,serial")
+parser.set_defaults(path="usb")
 args = parser.parse_args()
 
 # Default command

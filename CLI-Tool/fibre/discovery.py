@@ -16,7 +16,6 @@ from fibre.protocol import ChannelBrokenException, TimeoutError
 # Load all installed transport layers
 
 channel_types = {}
-known_channel_types = {'usb', 'serial', 'tcp', 'udp'}
 
 try:
     import fibre.usbbulk_transport
@@ -99,11 +98,7 @@ def find_all(path, serial_number,
             logger.debug("Unexpected exception after discovering channel: " + traceback.format_exc())
 
     # For each connection type, kick off an appropriate discovery loop
-    any_channel_started = False
     for search_spec in path.split(','):
-        search_spec = search_spec.strip()
-        if search_spec == '':
-            continue
         prefix = search_spec.split(':')[0]
         the_rest = ':'.join(search_spec.split(':')[1:])
         if prefix in channel_types:
@@ -111,18 +106,11 @@ def find_all(path, serial_number,
                              args=(the_rest, serial_number, did_discover_channel, search_cancellation_token, channel_termination_token, logger))
             t.daemon = True
             t.start()
-            any_channel_started = True
-        elif prefix in known_channel_types:
-            logger.debug("Skipping unavailable transport '{}'".format(prefix))
         else:
             raise Exception("Invalid path spec \"{}\"".format(search_spec))
 
-    if not any_channel_started:
-        raise Exception("No available transports for path spec \"{}\". Available: {}".format(
-            path, ','.join(sorted(channel_types.keys()))))
 
-
-def find_any(path="usb,serial", serial_number=None,
+def find_any(path="usb", serial_number=None,
         search_cancellation_token=None, channel_termination_token=None,
         timeout=None, logger=Logger(verbose=False)):
     """

@@ -2,27 +2,8 @@ import fibre
 import ref_tool
 from ref_tool.utils import start_liveplotter
 
-
-def _get_detected_serial_ports():
-    try:
-        import serial.tools.list_ports
-        ports = [p.device for p in serial.tools.list_ports.comports()]
-        ports.sort()
-        return ports
-    except Exception:
-        return []
-
 def print_banner():
     print('Please connect your Dummy-Robot.')
-    ports = _get_detected_serial_ports()
-    if len(ports) > 0:
-        print('Detected serial ports:')
-        for p in ports:
-            print('  - {}'.format(p))
-        print('Tip: if needed, start with --path serial:<port>')
-    else:
-        print('No serial ports detected.')
-        print('Tip: reconnect USB and check for /dev/cu.usbmodem* on macOS.')
     print('You can also type help() or quit().')
 
 def print_help(args, have_devices):

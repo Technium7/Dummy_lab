@@ -186,17 +186,9 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
       return False
     return True
 
-  backend_unavailable_reported = False
   while not cancellation_token.is_set():
     logger.debug("USB discover loop")
-    try:
-      devices = usb.core.find(find_all=True, custom_match=device_matcher)
-    except usb.core.NoBackendError:
-      if not backend_unavailable_reported:
-        logger.warn("USB backend not available (libusb missing). USB discovery disabled; serial discovery still works.")
-        backend_unavailable_reported = True
-      time.sleep(1)
-      continue
+    devices = usb.core.find(find_all=True, custom_match=device_matcher)
     for usb_device in devices:
       try:
         bulk_device = USBBulkTransport(usb_device, logger)
