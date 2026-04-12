@@ -10,6 +10,11 @@ import traceback
 import platform
 from fibre.utils import TimeoutError
 
+try:
+  import libusb_package
+except ImportError:
+  libusb_package = None
+
 # Currently we identify fibre-enabled devices by VID,PID
 # TODO: identify by USB descriptors
 WELL_KNOWN_VID_PID_PAIRS = [
@@ -17,6 +22,18 @@ WELL_KNOWN_VID_PID_PAIRS = [
   (0x1209, 0x0D32),
   (0x1209, 0x0D33)
 ]
+
+def _get_pyusb_backend(logger):
+  if platform.system() != 'Windows':
+    return None
+  if libusb_package is None:
+    return None
+  try:
+    return libusb_package.get_libusb1_backend()
+  except Exception:
+    logger.debug("Failed to load libusb backend from libusb-package")
+    logger.debug(traceback.format_exc())
+    return None
 
 class USBBulkTransport(fibre.protocol.PacketSource, fibre.protocol.PacketSink):
   def __init__(self, dev, logger):
@@ -168,12 +185,11 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
                       "Expected a string of the format BUS:DEVICE where BUS "
                       "and DEVICE are integers.".format(path))
   
-  known_devices = []
+  known_devices = set()
+  backend = _get_pyusb_backend(logger)
   def device_matcher(device):
     #print("  test {:04X}:{:04X}".format(device.idVendor, device.idProduct))
     try:
-      if (device.bus, device.address) in known_devices:
-        return False
       if bus != None and device.bus != bus:
         return False
       if address != None and device.address != address:
@@ -188,8 +204,19 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
 
   while not cancellation_token.is_set():
     logger.debug("USB discover loop")
-    devices = usb.core.find(find_all=True, custom_match=device_matcher)
+    try:
+      devices = list(usb.core.find(find_all=True, custom_match=device_matcher, backend=backend))
+    except usb.core.NoBackendError:
+      logger.debug("USB backend not available. Install libusb backend for pyusb on this platform.")
+      time.sleep(1)
+      continue
+
+    visible_devices = set((d.bus, d.address) for d in devices)
+    known_devices.intersection_update(visible_devices)
+
     for usb_device in devices:
+      if (usb_device.bus, usb_device.address) in known_devices:
+        continue
       try:
         bulk_device = USBBulkTransport(usb_device, logger)
         logger.debug(bulk_device.info())
@@ -208,8 +235,8 @@ def discover_channels(path, serial_number, callback, cancellation_token, channel
           continue
         else:
           logger.debug("USB device init failed. Ignoring this device. More info: " + traceback.format_exc())
-          known_devices.append((usb_device.bus, usb_device.address))
+          known_devices.add((usb_device.bus, usb_device.address))
       else:
-        known_devices.append((usb_device.bus, usb_device.address))
+        known_devices.add((usb_device.bus, usb_device.address))
         callback(channel)
     time.sleep(1)
