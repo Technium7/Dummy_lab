@@ -76,6 +76,9 @@ class AsciiRobotClient:
     def stop(self) -> Optional[str]:
         return self._send_command("!STOP", wait_ms=150)
 
+    def reset(self) -> Optional[str]:
+        return self._send_command("!RESET", wait_ms=300)
+
     def set_command_mode(self, mode: int) -> Optional[str]:
         return self._send_command(f"#CMDMODE {int(mode)}", wait_ms=120)
 

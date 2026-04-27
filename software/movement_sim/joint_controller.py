@@ -254,10 +254,8 @@ def run_status_window() -> None:
     except Exception as exc:
         raise SystemExit(f"Tkinter is not available in this Python environment: {exc}") from exc
 
-    try:
-        import select
-    except Exception as exc:
-        raise SystemExit(f"Select is not available: {exc}") from exc
+    import threading
+    import queue
 
     root = tk.Tk()
     root.title("End Link Status")
@@ -288,23 +286,47 @@ def run_status_window() -> None:
         pos_var.set(f"pos: ({pos[0]:.3f}, {pos[1]:.3f}, {pos[2]:.3f})")
         rpy_var.set(f"rpy: ({rpy[0]:.3f}, {rpy[1]:.3f}, {rpy[2]:.3f})")
 
-    def poll_stdin() -> None:
+    # Use a queue to receive stdin messages in a thread-safe, cross-platform way
+    message_queue: queue.Queue[Optional[str]] = queue.Queue()
+
+    def read_stdin_thread() -> None:
+        """Background thread to read from stdin without blocking (works on Windows and Unix)."""
         try:
-            ready, _, _ = select.select([sys.stdin], [], [], 0)
-            if ready:
+            while True:
                 line = sys.stdin.readline()
-                if line == "":
+                if not line:
+                    message_queue.put(None)
+                    break
+                message_queue.put(line.strip())
+        except Exception:
+            message_queue.put(None)
+
+    reader_thread = threading.Thread(target=read_stdin_thread, daemon=True)
+    reader_thread.start()
+
+    def poll_messages() -> None:
+        """Check queue for messages and apply updates."""
+        try:
+            while True:
+                try:
+                    msg = message_queue.get_nowait()
+                except queue.Empty:
+                    break
+                if msg is None:
                     root.destroy()
                     return
-                payload = json.loads(line)
-                if isinstance(payload, dict):
-                    apply_payload(payload)
+                try:
+                    payload = json.loads(msg)
+                    if isinstance(payload, dict):
+                        apply_payload(payload)
+                except Exception:
+                    pass
         except Exception:
             pass
-        root.after(50, poll_stdin)
+        root.after(50, poll_messages)
 
     root.protocol("WM_DELETE_WINDOW", root.destroy)
-    root.after(50, poll_stdin)
+    root.after(50, poll_messages)
     root.mainloop()
 
 
@@ -340,6 +362,11 @@ def launch_viewer(
         load_flags |= p.URDF_USE_SELF_COLLISION
         load_flags |= p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     robot_id = p.loadURDF(str(urdf_path), useFixedBase=fixed_base, flags=load_flags)
+
+    # Define joint offsets (degrees) so user sees [0, -73, 180, 0, 0, 0] at startup
+    # Simulator loads with all joints at 0; we map: q_bullet = q_user + q_offset; q_user = q_bullet - q_offset
+    # So offset is the negation of desired display: display [0, -73, 180, ...] => offset [0, 73, -180, ...]
+    joint_offsets_deg = [0.0, 73.0, -180.0, 0.0, 0.0, 0.0]
 
     parent_of_link: Dict[int, int] = {}
     for joint_idx in range(p.getNumJoints(robot_id)):
@@ -401,7 +428,16 @@ def launch_viewer(
         name = info[1].decode("utf-8", errors="replace")
         lower, upper = joint_limits_or_defaults(joint_type, float(info[8]), float(info[9]))
         current = float(p.getJointState(robot_id, joint_idx)[0])
-        slider_id = p.addUserDebugParameter(name, lower, upper, max(lower, min(current, upper)))
+        # Convert simulator angle to user angle: q_user = q_bullet - offset
+        # For revolute: both lower/upper and current are in radians, offsets are in degrees
+        if joint_type == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
+            offset_rad = math.radians(joint_offsets_deg[joint_idx])
+            current_user = math.degrees(current - offset_rad)
+            lower_user = math.degrees(lower - offset_rad)
+            upper_user = math.degrees(upper - offset_rad)
+            slider_id = p.addUserDebugParameter(f"{name} (deg)", lower_user, upper_user, max(lower_user, min(current_user, upper_user)))
+        else:
+            slider_id = p.addUserDebugParameter(name, lower, upper, max(lower, min(current, upper)))
         return joint_idx, slider_id, name
 
     def rebuild_all_sliders() -> Dict[int, Tuple[int, str]]:
@@ -445,10 +481,18 @@ def launch_viewer(
         rebuild_needed = False
         for joint_idx, (slider_id, joint_name) in list(joint_slider_map.items()):
             try:
-                target = p.readUserDebugParameter(slider_id)
+                target_user = p.readUserDebugParameter(slider_id)
             except Exception:
                 rebuild_needed = True
                 break
+
+            # Convert user target to simulator: q_bullet = q_user + offset
+            info = p.getJointInfo(robot_id, joint_idx)
+            if info[2] == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
+                offset_rad = math.radians(joint_offsets_deg[joint_idx])
+                target = math.radians(target_user) + offset_rad
+            else:
+                target = target_user
 
             p.setJointMotorControl2(
                 bodyUniqueId=robot_id,
@@ -459,6 +503,7 @@ def launch_viewer(
             )
 
             position, velocity, _, applied_torque = p.getJointState(robot_id, joint_idx)
+            # For error comparison, use simulator frame
             error = abs(target - float(position))
             if error > 0.02 and abs(float(velocity)) < 1e-3:
                 stall_frames[joint_idx] = stall_frames.get(joint_idx, 0) + 1

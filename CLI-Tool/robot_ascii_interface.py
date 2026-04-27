@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Robot ASCII Protocol Interface
-Provides a simple Python interface to send ASCII commands to the DummyRobot over COM5.
+Provides a simple Python interface to send ASCII commands to the DummyRobot over COM3.
 """
 
 import serial
@@ -10,12 +10,12 @@ import sys
 
 
 class RobotAsciiInterface:
-    def __init__(self, port='COM5', baudrate=115200, timeout=1.0):
+    def __init__(self, port='COM3', baudrate=115200, timeout=1.0):
         """
         Initialize serial connection to robot.
         
         Args:
-            port: Serial port name (default: COM5)
+            port: Serial port name (default: COM3)
             baudrate: Baud rate (default: 115200)
             timeout: Read timeout in seconds (default: 1.0)
         """
