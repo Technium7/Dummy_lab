@@ -1,7 +1,2 @@
-"""Manual control pipeline modules.
+"""Manual control package for physical robot teleoperation."""
 
-Phase 1 layout:
-- control_solver: teleop + IK trajectory generation in PyBullet
-- motion_plan: smooth continuous joint tracking planner
-- ascii_comm: ASCII protocol communication with robot
-"""

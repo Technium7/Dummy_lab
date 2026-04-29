@@ -353,7 +353,7 @@ def status_gui_process_main(queue_obj) -> None:
 
     root = tk.Tk()
     root.title("End Controller Inputs")
-    root.geometry("560x220")
+    root.geometry("760x520")
 
     mapping = (
         "Linear: W/S -> +X/-X, A/D -> +Y/-Y, Q/E -> +Z/-Z\n"
@@ -368,9 +368,20 @@ def status_gui_process_main(queue_obj) -> None:
 
     keys_var = tk.StringVar(value="Active keys: (none)")
     twist_var = tk.StringVar(value="vx=0.000 vy=0.000 vz=0.000 m/s | wx=0.000 wy=0.000 rad/s")
+    joints_var = tk.StringVar(value="Joint positions:\n  (waiting for simulator data)")
 
     tk.Label(frame, textvariable=keys_var, anchor="w", font=("Helvetica", 12)).pack(fill="x", pady=(2, 6))
     tk.Label(frame, textvariable=twist_var, anchor="w", font=("Helvetica", 12)).pack(fill="x")
+    tk.Label(frame, text="Current Joint Locations", font=("Helvetica", 12, "bold"), anchor="w").pack(
+        fill="x", pady=(10, 4)
+    )
+    tk.Label(
+        frame,
+        textvariable=joints_var,
+        justify="left",
+        anchor="nw",
+        font=("Consolas", 10),
+    ).pack(fill="both", expand=True)
 
     def poll() -> None:
         while True:
@@ -390,6 +401,7 @@ def status_gui_process_main(queue_obj) -> None:
 
             keys_var.set(f"Active keys: {msg.get('active_keys', '(none)')}")
             twist_var.set(str(msg.get("twist", twist_var.get())))
+            joints_var.set(str(msg.get("joint_locations", joints_var.get())))
 
         root.after(50, poll)
 
@@ -420,7 +432,13 @@ class ControlStatusWindow:
             self._proc = None
             return False
 
-    def update(self, active_keys: Sequence[str], twist: Sequence[float]) -> None:
+    def update(
+        self,
+        active_keys: Sequence[str],
+        twist: Sequence[float],
+        joint_names: Sequence[str],
+        joint_positions: Sequence[float],
+    ) -> None:
         if self._queue is None:
             return
         key_text = " ".join(active_keys) if active_keys else "(none)"
@@ -428,7 +446,9 @@ class ControlStatusWindow:
             f"vx={twist[0]:+.3f} vy={twist[1]:+.3f} vz={twist[2]:+.3f} m/s"
             f" | wx={twist[3]:+.3f} wy={twist[4]:+.3f} rad/s"
         )
-        msg = {"active_keys": key_text, "twist": twist_text}
+        joint_lines = [f"{name}: {pos:+.4f}" for name, pos in zip(joint_names, joint_positions)]
+        joint_text = "Joint positions:\n" + ("\n".join(joint_lines) if joint_lines else "  (none)")
+        msg = {"active_keys": key_text, "twist": twist_text, "joint_locations": joint_text}
         try:
             self._queue.put_nowait(msg)
         except Exception:
@@ -620,6 +640,10 @@ def launch_end_controller(
         raise SystemExit("Robot has no links beyond base; cannot run end-effector IK.")
 
     end_link_name = p.getJointInfo(robot_id, end_link_idx)[12].decode("utf-8", errors="replace")
+    all_joint_indices = list(range(p.getNumJoints(robot_id)))
+    all_joint_names = [
+        p.getJointInfo(robot_id, idx)[1].decode("utf-8", errors="replace") for idx in all_joint_indices
+    ]
     print(f"Using end link index {end_link_idx}: {end_link_name}")
     print("Controllable joints:")
     for idx, name in zip(joint_indices, joint_names):
@@ -692,9 +716,9 @@ def launch_end_controller(
                 wy -= angular_speed
                 active_keys.append("J")
 
-            status_gui.update(active_keys, [vx, vy, vz, wx, wy])
-
             current_state = [float(p.getJointState(robot_id, j)[0]) for j in joint_indices]
+            all_joint_positions = [float(p.getJointState(robot_id, j)[0]) for j in all_joint_indices]
+            status_gui.update(active_keys, [vx, vy, vz, wx, wy], all_joint_names, all_joint_positions)
 
             # No key pressed: actively command zero joint velocities.
             if abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) <= 1e-12:

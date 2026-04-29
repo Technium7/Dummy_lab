@@ -1,86 +1,58 @@
-# Manual Control (Phase 1)
+# Manual Control
 
-This folder integrates:
-- End-effector IK teleop trajectory generation (from movement_sim/end_controller.py logic)
-- Continuous smooth tracking and gating execution (from CLI-Tool/test_robot_smooth_ct.py logic)
-- ASCII serial communication to robot
+Manual control for physical robot using:
 
-## Modules
+- End-effector keyboard IK in PyBullet
+- Joint transform from simulated joints to physical robot joints
+- Async trajectory-point streaming to robot ASCII interface
+- Separate status window with transformed joint display
 
-- `control_solver.py`: PyBullet teleop + IK solver; outputs time-series joint targets/velocities.
-- `motion_plan.py`: Continuous tracking planner with freeze/run gating and speed conversion.
-- `ascii_comm.py`: ASCII protocol communication layer.
-- `trajectory_schema.py`: Recorded trajectory data model and JSON persistence.
-- `manual_control_app.py`: CLI entrypoint (`record`, `execute`, and `live`).
+## Code structure
 
-## Usage
+Runtime implementation is split by function:
 
-Record teleop IK trajectory:
+- `manual_control_app.py`: entrypoint and argument handling
+- `controller_runtime.py`: main control loop (sim + robot streaming)
+- `ik_core.py`: IK helpers and Jacobian solve
+- `mapping.py`: joint transform and speed mapping
+- `status_window.py`: instruction/status UI
+- `urdf_tools.py`: URDF/Xacro discovery and materialization
 
-```bash
-python software/manual_control/manual_control_app.py record \
-  --root . \
-  --robot software/movement_sim/Dummy_ros2_description/urdf/Dummy_ros2.xacro \
-  --output software/manual_control/recorded_trajectory.json \
-  --duration 30
-```
+Reference-only script:
 
-Execute recorded trajectory on robot:
+- `test_end_controller_smooth_ct.py`
+
+## Run
 
 ```bash
-python software/manual_control/manual_control_app.py execute \
-  --input software/manual_control/recorded_trajectory.json \
-  --port COM5 \
-  --control-dt-ms 150
+python software/manual_control/manual_control_app.py --port COM3
 ```
 
-Live teleop control on robot (no record step):
+Windows venv example:
 
 ```bash
-python software/manual_control/manual_control_app.py live \
-  --root . \
-  --robot software/manual_control/Dummy_ros2_description/urdf/Dummy_ros2.xacro \
-  --port COM5 \
-  --stream-hz 6.667
+.\.venv\Scripts\python.exe software/manual_control/manual_control_app.py --port COM3
 ```
 
-Quick start from `software/manual_control` (uses local default robot path):
+## Important options
 
-```bash
-python manual_control_app.py live --port COM5
-```
+- `--robot`: URDF/Xacro path
+- `--sim-hz`: simulation/control loop rate
+- `--control-dt-ms`: robot command loop period in ms (lower = faster updates)
+- `--linear-speed`: base linear command speed
+- `--angular-speed-deg`: base angular command speed
+- `--joint-vel-limit`: optional joint velocity clamp
+- `--port`, `--baudrate`, `--timeout`: robot serial settings
 
-By default, `live` moves the robot to home position once at startup.
-To skip this behavior, add:
+## Controls
 
-```bash
---no-home-first
-```
+- Linear: `W/S -> -Y/+Y`, `A/D -> -X/+X`, `Q/E -> +Z/-Z`
+- Angular: `H/K -> +Wy/-Wy`, `U/J -> +Wx/-Wx`
+- Home: `T` -> `[0, 0, 90, 0, 0, 0]`
 
-If keyboard control is not captured, click inside the PyBullet window.
-`live` also enables in-window twist sliders (`vx/vy/vz/wx/wy`) by default.
-Disable sliders if needed:
+## Behavior notes
 
-```bash
---no-twist-sliders
-```
+- Motion speed scales from a low starting multiplier and increases while keys are held.
+- On key release, robot holds the last target position (prevents drift).
+- Pressing `T` latches HOME target briefly so stream updates do not override it.
 
-During `live`, the simulator now mirrors robot joint feedback (`#GETJPOS`) so the PyBullet pose reflects what the robot reports.
-Feedback poll rate is configurable with `--feedback-hz` (default: 8).
-
-Default REST pose is `[0, -73, 180, 0, 0, 0]` (degrees).
-Default HOME pose is `[0, 0, 90, 0, 0, 0]` (degrees).
-At startup (`--home-first`), controller moves `REST -> HOME` and updates simulator pose from robot feedback during this transition.
-
-## Notes
-
-- `record` supports keyboard mapping from the original end-controller:
-  - Linear: `W/S`, `A/D`, `Q/E`
-  - Angular: `H/K`, `U/J`
-- `execute` uses command mode 2 and asynchronous `&` trajectory streaming.
-- `live` uses the same teleop key mapping as `record` and now runs: IK target -> `ContinuousTracker` -> asynchronous `&` streaming (same smoothing pipeline style as `CLI-Tool/test_robot_smooth_ct.py`).
-- `live` homes once at startup by default (`--no-home-first` to disable).
-- Startup protocol for `execute/live` is `STOP -> START -> CMDMODE 2`, matching `CLI-Tool/test_robot_smooth_ct.py`.
-- Default `live` stream rate is 6.667 Hz (150 ms), matching `CLI-Tool/test_robot_smooth_ct.py` control period.
-- Default `live` robot model path is `software/manual_control/Dummy_ros2_description/urdf/Dummy_ros2.xacro`.
-- This is host-side phase-1 integration; for deterministic hard real-time execution, move the final trajectory interpolator to firmware C++.
