@@ -363,10 +363,11 @@ def launch_viewer(
         load_flags |= p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
     robot_id = p.loadURDF(str(urdf_path), useFixedBase=fixed_base, flags=load_flags)
 
-    # Define joint offsets (degrees) so user sees [0, -73, 180, 0, 0, 0] at startup
-    # Simulator loads with all joints at 0; we map: q_bullet = q_user + q_offset; q_user = q_bullet - q_offset
-    # So offset is the negation of desired display: display [0, -73, 180, ...] => offset [0, 73, -180, ...]
-    joint_offsets_deg = [0.0, 73.0, -180.0, 0.0, 0.0, 0.0]
+    # Define joint offsets (degrees) so user sees [0, -73, 180, 0, 0, 0] at startup.
+    # Simulator loads with all joints at 0; we map: q_bullet = -q_user * sign + q_offset.
+    # With sign = [1, 1, -1, 1, 1, 1], q_offset is chosen so the startup display is unchanged.
+    joint_signs = [1.0, -1.0, 1.0, 1.0, 1.0, 1.0]
+    joint_offsets_deg = [0.0, 73.0, 180.0, 0.0, 0.0, 0.0]
 
     parent_of_link: Dict[int, int] = {}
     for joint_idx in range(p.getNumJoints(robot_id)):
@@ -420,6 +421,14 @@ def launch_viewer(
         rotation = tuple(float(v) for v in p.getEulerFromQuaternion(state[5]))
         return end_link_idx, position, rotation
 
+    def sim_to_user(value: float, offset: float, sign: float) -> float:
+        return sign * (offset - value)
+
+    def user_bounds_from_sim(lower: float, upper: float, offset: float, sign: float) -> Tuple[float, float]:
+        lower_user = sim_to_user(lower, offset, sign)
+        upper_user = sim_to_user(upper, offset, sign)
+        return (min(lower_user, upper_user), max(lower_user, upper_user))
+
     def create_slider_for_joint(joint_idx: int) -> Optional[Tuple[int, int, str]]:
         info = p.getJointInfo(robot_id, joint_idx)
         joint_type = info[2]
@@ -428,16 +437,19 @@ def launch_viewer(
         name = info[1].decode("utf-8", errors="replace")
         lower, upper = joint_limits_or_defaults(joint_type, float(info[8]), float(info[9]))
         current = float(p.getJointState(robot_id, joint_idx)[0])
-        # Convert simulator angle to user angle: q_user = q_bullet - offset
-        # For revolute: both lower/upper and current are in radians, offsets are in degrees
+        sign = joint_signs[joint_idx] if joint_idx < len(joint_signs) else 1.0
+        # Convert simulator angle to user angle: q_user = sign * (q_offset - q_bullet)
         if joint_type == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
             offset_rad = math.radians(joint_offsets_deg[joint_idx])
-            current_user = math.degrees(current - offset_rad)
-            lower_user = math.degrees(lower - offset_rad)
-            upper_user = math.degrees(upper - offset_rad)
+            current_user = math.degrees(sim_to_user(current, offset_rad, sign))
+            lower_user, upper_user = user_bounds_from_sim(lower, upper, offset_rad, sign)
+            lower_user = math.degrees(lower_user)
+            upper_user = math.degrees(upper_user)
             slider_id = p.addUserDebugParameter(f"{name} (deg)", lower_user, upper_user, max(lower_user, min(current_user, upper_user)))
         else:
-            slider_id = p.addUserDebugParameter(name, lower, upper, max(lower, min(current, upper)))
+            current_user = sim_to_user(current, 0.0, sign)
+            lower_user, upper_user = user_bounds_from_sim(lower, upper, 0.0, sign)
+            slider_id = p.addUserDebugParameter(name, lower_user, upper_user, max(lower_user, min(current_user, upper_user)))
         return joint_idx, slider_id, name
 
     def rebuild_all_sliders() -> Dict[int, Tuple[int, str]]:
@@ -486,13 +498,14 @@ def launch_viewer(
                 rebuild_needed = True
                 break
 
-            # Convert user target to simulator: q_bullet = q_user + offset
+            # Convert user target to simulator: q_bullet = -q_user * sign + q_offset
             info = p.getJointInfo(robot_id, joint_idx)
+            sign = joint_signs[joint_idx] if joint_idx < len(joint_signs) else 1.0
             if info[2] == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
                 offset_rad = math.radians(joint_offsets_deg[joint_idx])
-                target = math.radians(target_user) + offset_rad
+                target = offset_rad - sign * math.radians(target_user)
             else:
-                target = target_user
+                target = -sign * target_user
 
             p.setJointMotorControl2(
                 bodyUniqueId=robot_id,
