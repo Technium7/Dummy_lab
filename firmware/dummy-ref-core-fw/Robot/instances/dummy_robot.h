@@ -56,7 +56,7 @@ private:
 class StepHand : public CtrlStepMotor {
     public:
         StepHand(CAN_HandleTypeDef* hcan, uint8_t id)
-                : CtrlStepMotor(hcan, id, false, 8, -100, 100) // 固定参数：inverse=false, reduction=1, 角度范围0-100
+                : CtrlStepMotor(hcan, id, true, 8, -100, 100) // Fixed params: inverse=true, reduction=8, angle range -100~100
         {
         }
     
@@ -71,9 +71,12 @@ class StepHand : public CtrlStepMotor {
             SetAngleWithVelocityLimit(ag,70);
         }
   
-        void SetAngleWithCurrentLimit(float inverse)
+        void SetAngleWithCurrentLimit(float directionSign)
         {
-            SetCurrentSetPoint(inverse*current);
+            float signedCurrent = directionSign * current;
+            if (inverseDirection)
+                signedCurrent = -signedCurrent;
+            SetCurrentSetPoint(signedCurrent);
         }
     
 

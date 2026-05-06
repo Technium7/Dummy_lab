@@ -12,7 +12,6 @@ import pybullet_data
 from ik_core import compute_dls_joint_velocity, get_controllable_joints, is_key_down, resolve_end_link
 from mapping import (
     HOME_JOINTS_DEG,
-    MIN_SPEED,
     deg_speed_to_ascii_speed,
     sim_rad_to_transformed_deg,
     sim_vel_rad_to_transformed_deg_s,
@@ -168,16 +167,16 @@ def launch_controller(
                 wrist_vel -= angular_cmd_speed
                 active_keys.append("Y")
             now_s = time.perf_counter()
-            if is_key_down(events, "o") and (now_s - last_hand_close_s) >= hand_cmd_min_interval_s:
+            if is_key_down(events, "o") and (now_s - last_hand_open_s) >= hand_cmd_min_interval_s:
                 active_keys.append("O")
-                robot.hand_enable()
-                print(f"[Robot] HAND_C -> {robot.hand_close()}")
-                last_hand_close_s = now_s
-            if is_key_down(events, "p") and (now_s - last_hand_open_s) >= hand_cmd_min_interval_s:
-                active_keys.append("P")
                 robot.hand_enable()
                 print(f"[Robot] HAND_O -> {robot.hand_open()}")
                 last_hand_open_s = now_s
+            if is_key_down(events, "p") and (now_s - last_hand_close_s) >= hand_cmd_min_interval_s:
+                active_keys.append("P")
+                robot.hand_enable()
+                print(f"[Robot] HAND_C -> {robot.hand_close()}")
+                last_hand_close_s = now_s
             if is_key_triggered(events, "t"):
                 active_keys.append("T")
                 for local_idx, joint_idx in enumerate(joint_indices[:6]):
@@ -185,7 +184,6 @@ def launch_controller(
                 hold_target_deg = HOME_JOINTS_DEG[:]
                 home_latch_until_s = time.perf_counter() + 1.2
 
-            current_state = [float(p.getJointState(robot_id, j)[0]) for j in joint_indices]
             all_joint_positions = [float(p.getJointState(robot_id, j)[0]) for j in all_joint_indices]
             transformed_joint_positions_deg = [sim_rad_to_transformed_deg(idx, pos) for idx, pos in enumerate(all_joint_positions)]
             home_latched = time.perf_counter() < home_latch_until_s
