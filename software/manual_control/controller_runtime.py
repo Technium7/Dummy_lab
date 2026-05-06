@@ -26,6 +26,12 @@ if str(CLI_TOOL_DIR) not in sys.path:
 from robot_ascii_interface import RobotAsciiInterface  # type: ignore
 
 
+def is_key_triggered(events: dict[int, int], char: str) -> bool:
+    lower = ord(char.lower())
+    upper = ord(char.upper())
+    return ((events.get(lower, 0) & p.KEY_WAS_TRIGGERED) != 0) or ((events.get(upper, 0) & p.KEY_WAS_TRIGGERED) != 0)
+
+
 def launch_controller(
     urdf_path: Path,
     fixed_base: bool,
@@ -85,6 +91,8 @@ def launch_controller(
     time.sleep(0.2)
     print(f"[Robot] CMDMODE 2 -> {robot.set_command_mode(2)}")
     time.sleep(0.2)
+    print(f"[Robot] HAND_EN -> {robot.hand_enable()}")
+    time.sleep(0.1)
 
     status_gui = ControlStatusWindow()
     status_gui.start()
@@ -106,16 +114,22 @@ def launch_controller(
     speed_scale_rise_per_sec = 5.0
     hold_target_deg: List[float] | None = None
     home_latch_until_s = 0.0
+    last_hand_open_s = 0.0
+    last_hand_close_s = 0.0
+    hand_cmd_min_interval_s = 0.2
 
     try:
         while p.isConnected():
             events = p.getKeyboardEvents()
-            moving_key_down = any(is_key_down(events, k) for k in ("w", "s", "a", "d", "q", "e", "h", "k", "u", "j"))
+            moving_key_down = any(
+                is_key_down(events, k) for k in ("w", "s", "a", "d", "q", "e", "h", "k", "u", "j", "i", "y")
+            )
             speed_scale = min(speed_scale_max, speed_scale + speed_scale_rise_per_sec * dt) if moving_key_down else speed_scale_min
             linear_cmd_speed = linear_speed * speed_scale
             angular_cmd_speed = angular_speed * speed_scale
 
             vx = vy = vz = wx = wy = 0.0
+            wrist_vel = 0.0
             active_keys: List[str] = []
             if is_key_down(events, "w"):
                 vy -= linear_cmd_speed
@@ -147,7 +161,24 @@ def launch_controller(
             if is_key_down(events, "j"):
                 wx -= angular_cmd_speed
                 active_keys.append("J")
-            if events.get(ord("t"), 0) & p.KEY_WAS_TRIGGERED:
+            if is_key_down(events, "i"):
+                wrist_vel += angular_cmd_speed
+                active_keys.append("I")
+            if is_key_down(events, "y"):
+                wrist_vel -= angular_cmd_speed
+                active_keys.append("Y")
+            now_s = time.perf_counter()
+            if is_key_down(events, "o") and (now_s - last_hand_close_s) >= hand_cmd_min_interval_s:
+                active_keys.append("O")
+                robot.hand_enable()
+                print(f"[Robot] HAND_C -> {robot.hand_close()}")
+                last_hand_close_s = now_s
+            if is_key_down(events, "p") and (now_s - last_hand_open_s) >= hand_cmd_min_interval_s:
+                active_keys.append("P")
+                robot.hand_enable()
+                print(f"[Robot] HAND_O -> {robot.hand_open()}")
+                last_hand_open_s = now_s
+            if is_key_triggered(events, "t"):
                 active_keys.append("T")
                 for local_idx, joint_idx in enumerate(joint_indices[:6]):
                     p.resetJointState(robot_id, joint_idx, targetValue=transformed_deg_to_sim_rad(local_idx, HOME_JOINTS_DEG[local_idx]), targetVelocity=0.0)
@@ -168,15 +199,19 @@ def launch_controller(
                     hold_target_deg = transformed_joint_positions_deg[:6]
                 robot_target_deg = hold_target_deg
 
-            status_gui.update(active_keys, [vx, vy, vz, wx, wy], all_joint_names, transformed_joint_positions_deg)
+            status_gui.update(active_keys, [vx, vy, vz, wx, wy, wrist_vel], all_joint_names, transformed_joint_positions_deg)
 
-            if abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) <= 1e-12:
+            if abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) + abs(wrist_vel) <= 1e-12:
                 commanded_velocity = [0.0] * len(joint_indices)
             else:
-                qdot = compute_dls_joint_velocity(robot_id, end_link_idx, joint_indices, [vx, vy, vz, wx, wy], damping, rotation_weight)
+                qdot = compute_dls_joint_velocity(
+                    robot_id, end_link_idx, joint_indices, [vx, vy, vz, wx, wy], damping, rotation_weight
+                )
                 commanded_velocity = [float(v) for v in qdot] if qdot is not None else [0.0] * len(joint_indices)
                 if joint_vel_limit > 0.0:
                     commanded_velocity = [min(max(v, -joint_vel_limit), joint_vel_limit) for v in commanded_velocity]
+            if len(joint_indices) >= 6:
+                commanded_velocity[5] = wrist_vel
 
             for j_idx, vel in zip(joint_indices, commanded_velocity):
                 p.setJointMotorControl2(bodyUniqueId=robot_id, jointIndex=j_idx, controlMode=p.VELOCITY_CONTROL, targetVelocity=vel, force=joint_force)

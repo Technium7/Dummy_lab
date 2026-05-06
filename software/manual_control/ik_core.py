@@ -108,13 +108,14 @@ def compute_dls_joint_velocity(
     n = len(joint_indices)
     if n == 0:
         return None
-    jt = [[rows[r][c] for r in range(5)] for c in range(n)]
+    n_task = 5
+    jt = [[rows[r][c] for r in range(n_task)] for c in range(n)]
     h = [[0.0 for _ in range(n)] for _ in range(n)]
     g = [0.0 for _ in range(n)]
     for i in range(n):
         for j in range(n):
-            h[i][j] = sum(jt[i][k] * rows[k][j] for k in range(5))
+            h[i][j] = sum(jt[i][k] * rows[k][j] for k in range(n_task))
         h[i][i] += damping * damping
-        g[i] = sum(jt[i][k] * float(task_twist[k]) * weights[k] for k in range(5))
+        g[i] = sum(jt[i][k] * float(task_twist[k]) * weights[k] for k in range(n_task))
     return solve_linear_system(h, g)
 

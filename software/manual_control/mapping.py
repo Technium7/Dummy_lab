@@ -4,10 +4,11 @@ import math
 from typing import Sequence
 
 JOINT_SIGNS = [1.0, -1.0, 1.0, 1.0, 1.0, 1.0]
-JOINT_OFFSETS_DEG = [0.0, 73.0, 180.0, 0.0, 0.0, 0.0]
+JOINT_OFFSETS_DEG = [0.0, 75.0, 180.0, 0.0, 0.0, 0.0]
 HOME_JOINTS_DEG = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 
-JOINT_REDUCTION = [30.0, 30.0, 30.0, 24.0, 30.0, 50.0]
+# Matches firmware CtrlStepMotor reductions for J1..J6 (dummy_ref_core DummyRobot ctor).
+JOINT_REDUCTION = [50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
 DOMINANT_REDUCTION = max(JOINT_REDUCTION)
 MIN_SPEED = 10.0
 MAX_SPEED = 30.0
