@@ -10,7 +10,7 @@ HOME_JOINTS_DEG = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 # Matches firmware CtrlStepMotor reductions for J1..J6 (dummy_ref_core DummyRobot ctor).
 JOINT_REDUCTION = [50.0, 50.0, 50.0, 50.0, 50.0, 50.0]
 DOMINANT_REDUCTION = max(JOINT_REDUCTION)
-MIN_SPEED = 10.0
+MIN_SPEED = 5.0
 MAX_SPEED = 30.0
 
 

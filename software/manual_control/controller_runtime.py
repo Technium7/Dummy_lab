@@ -107,10 +107,10 @@ def launch_controller(
     control_dt_s = max(0.02, float(control_dt_ms) / 1000.0)
     next_robot_tick = time.perf_counter()
 
-    speed_scale = 0.5
-    speed_scale_min = 0.5
+    speed_scale = 0.14
+    speed_scale_min = 0.14
     speed_scale_max = 2.5
-    speed_scale_rise_per_sec = 5.0
+    speed_scale_rise_per_sec = 1.8
     hold_target_deg: List[float] | None = None
     home_latch_until_s = 0.0
     last_hand_open_s = 0.0
