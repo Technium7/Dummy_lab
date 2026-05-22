@@ -2,11 +2,16 @@
 """
 Robot ASCII Protocol Interface
 Provides a simple Python interface to send ASCII commands to the DummyRobot over COM3.
+
+Run as a script for a raw ASCII REPL (type full lines such as ``#OFFSET_J 1``)::
+
+    python -m robot_ascii_interface.robot_ascii_interface --port COM3
 """
 
+import argparse
 import serial
-import time
 import sys
+import time
 
 
 class RobotAsciiInterface:
@@ -57,16 +62,22 @@ class RobotAsciiInterface:
         except serial.SerialException:
             pass
     
-    def send_command(self, cmd, wait_ms=200):
+    def send_command(self, cmd, wait_ms=200, *, extra_read_sec: float = 0.0):
         """
         Send a command and get response.
         
         Args:
             cmd: Command string (e.g., "!START", "#GETJPOS", "&10,0,90,0,0,0,20")
             wait_ms: Wait time before reading response (milliseconds)
+            extra_read_sec: Additional time to keep polling for a line after ``wait_ms``
+                (use for slow firmware paths such as ``!HOME``).
             
         Returns:
             Response string or None if timeout
+            
+        Note:
+            After the pre-wait, the reader keeps polling for a ``wait_ms``-scaled horizon
+            plus ``extra_read_sec``, so slow replies are not missed.
         """
         if not self.ser or not self.ser.is_open:
             print("Not connected")
@@ -83,7 +94,11 @@ class RobotAsciiInterface:
         
         try:
             responses = []
-            deadline = time.time() + max(self.timeout, 0.3)
+            wait_s = wait_ms / 1000.0
+            read_window_s = (
+                max(3.0, self.timeout * 4.0, wait_s + self.timeout * 3.0) + extra_read_sec
+            )
+            deadline = time.time() + read_window_s
 
             while time.time() < deadline:
                 raw = self.ser.readline()
@@ -120,11 +135,36 @@ class RobotAsciiInterface:
         resp = self.send_command('!STOP')
         return resp
     
-    def home(self):
+    def home(self, wait_ms: int = 1500, *, extra_read_sec: float = 30.0):
         """Home all joints to (0, 0, 90, 0, 0, 0)."""
-        resp = self.send_command('!HOME', wait_ms=2000)
+        resp = self.send_command("!HOME", wait_ms=wait_ms, extra_read_sec=extra_read_sec)
         return resp
-    
+
+    def calibrate_home_offset(self, wait_ms: int = 8000):
+        """
+        Run firmware global home-offset calibration (firmware: !CALIBRATION -> CalibrateHomeOffset).
+        Typical response line: ``calibration ok``. Increase wait_ms if the routine takes longer.
+        """
+        return self.send_command('!CALIBRATION', wait_ms=wait_ms)
+
+    def apply_joint_home_offset(self, joint: int, wait_ms: int = 500):
+        """
+        Use the motor's current position as its zero/home reference (firmware: #OFFSET_J).
+
+        In the reference firmware this command is handled on the USB ASCII path only (not the
+        trimmed UART4 # handler).
+
+        Args:
+            joint: Motor index 1..7 (matches firmware motorJ[node]; 1..6 are arm joints).
+
+        Returns:
+            Response string from the controller, or None on timeout.
+        """
+        j = int(joint)
+        if j < 1 or j > 7:
+            raise ValueError("joint must be in 1..7")
+        return self.send_command(f'#OFFSET_J {j}', wait_ms=wait_ms)
+
     def reset(self):
         """Reset to rest position."""
         resp = self.send_command('!RESET', wait_ms=2000)
@@ -380,10 +420,15 @@ class RobotAsciiInterface:
         
         return False  # Timeout
     
-    def interactive_shell(self):
-        """Run interactive command shell."""
-        print("Robot ASCII Interface - Interactive Shell")
-        print("Type 'help' for available commands, 'exit' to quit")
+    def interactive_shell(self, default_wait_ms: int = 200):
+        """
+        Read lines from stdin and send each non-empty line verbatim over serial (raw ASCII REPL).
+
+        Type full protocol strings, for example ``#OFFSET_J 1`` or ``!START``. Use ``help`` / ``exit`` as built-ins.
+        """
+        print("Robot ASCII Interface — raw command REPL")
+        print("Enter full lines exactly as on the wire (e.g. #OFFSET_J 1, !START, #GETJPOS).")
+        print("Type help for examples, exit to quit.")
         print("-" * 60)
         
         while True:
@@ -400,12 +445,16 @@ class RobotAsciiInterface:
                     print("""
 Available Commands:
   Control:
-    !START              - Enable robot
+    !START              - Enable robo
     !STOP               - Emergency stop
     !HOME               - Home position
+    !CALIBRATION        - Calibrate home offsets (global routine)
     !RESET              - Rest position
     !DISABLE            - Disable motors
-    
+
+  Home offset (per motor, USB path):
+    #OFFSET_J <1-7>     - Set current position as home for that joint motor
+
   Query:
     #GETJPOS            - Get joint positions
     #GETLPOS            - Get linear position
@@ -425,8 +474,7 @@ Available Commands:
 """)
                     continue
                 
-                # Send raw command
-                resp = self.send_command(user_input)
+                resp = self.send_command(user_input, wait_ms=default_wait_ms)
                 if resp:
                     print(f"Response: {resp}")
                 else:
@@ -439,20 +487,33 @@ Available Commands:
                 print(f"Error: {e}")
 
 
-def main():
-    # Create interface
-    robot = RobotAsciiInterface()
-    
-    # Connect
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Open serial and type raw ASCII robot commands (e.g. #OFFSET_J 1, !START)."
+    )
+    parser.add_argument("--port", type=str, default="COM3", help="Serial port (default COM3)")
+    parser.add_argument("--baudrate", type=int, default=115200, help="Baud rate")
+    parser.add_argument("--timeout", type=float, default=1.0, help="Serial read timeout (seconds)")
+    parser.add_argument(
+        "--send-wait-ms",
+        type=int,
+        default=200,
+        metavar="MS",
+        help="Delay before reading the response after each line (increase if you see timeouts)",
+    )
+    return parser.parse_args()
+
+
+def main() -> None:
+    args = _parse_args()
+    robot = RobotAsciiInterface(port=args.port, baudrate=args.baudrate, timeout=args.timeout)
     if not robot.connect():
         sys.exit(1)
-    
     try:
-        # Run interactive shell
-        robot.interactive_shell()
+        robot.interactive_shell(default_wait_ms=args.send_wait_ms)
     finally:
         robot.disconnect()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

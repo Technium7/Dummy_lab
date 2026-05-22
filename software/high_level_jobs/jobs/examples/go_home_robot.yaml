@@ -1,0 +1,49 @@
+# Run without an LLM (same steps the model should emit for "go to home position"):
+#   cd software
+#   python -m high_level_jobs run high_level_jobs/jobs/examples/go_home_robot.yaml --robot-port COM3 --execute
+#
+# COM port: CLI --robot-port or ctx defaults; YAML may omit port to use CLI/env.
+
+job_id: go_home_robot
+initial_state: CONNECT
+
+states:
+  CONNECT:
+    description: Open serial (or verify already open)
+    steps:
+      - action: robot_check_connected
+        params:
+          auto_connect: true
+
+  ENABLE:
+    description: Send !START so the arm is enabled
+    steps:
+      - action: robot_ensure_enabled
+        params: {}
+
+  MOVE_HOME:
+    description: Send firmware !HOME
+    steps:
+      - action: robot_home
+        params: {}
+
+  END:
+    description: Done
+    steps:
+      - action: log_message
+        params:
+          text: "Home sequence finished."
+
+transitions:
+  - from: CONNECT
+    event: done
+    to: ENABLE
+  - from: ENABLE
+    event: done
+    to: MOVE_HOME
+  - from: MOVE_HOME
+    event: done
+    to: END
+
+terminal_states:
+  - END

@@ -19,10 +19,10 @@ from mapping import (
 )
 from status_window import ControlStatusWindow
 
-CLI_TOOL_DIR = Path(__file__).resolve().parents[2] / "CLI-Tool"
-if str(CLI_TOOL_DIR) not in sys.path:
-    sys.path.append(str(CLI_TOOL_DIR))
-from robot_ascii_interface import RobotAsciiInterface  # type: ignore
+_SOFTWARE_DIR = Path(__file__).resolve().parents[1]
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+from robot_ascii_interface import RobotAsciiInterface
 
 
 def is_key_triggered(events: dict[int, int], char: str) -> bool:

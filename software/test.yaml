@@ -1,0 +1,28 @@
+job_id: go_home
+initial_state: CONNECT
+states:
+  CONNECT:
+    description: ''
+    steps:
+    - action: robot_check_connected
+      params:
+        auto_connect: true
+  ENABLE:
+    description: ''
+    steps:
+    - action: robot_ensure_enabled
+      params: {}
+  MOVE_HOME:
+    description: ''
+    steps:
+    - action: robot_home
+      params: {}
+  END:
+    description: Done.
+    steps:
+    - action: log_message
+      params:
+        text: Done.
+transitions: []
+terminal_states:
+- END

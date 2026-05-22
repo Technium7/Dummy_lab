@@ -1,0 +1,46 @@
+# Edit this file or copy it for new jobs. Loaded by: python -m high_level_jobs run jobs/examples/hello_job.yaml
+#
+# Registered actions (see subtasks/registry.py):
+#   - log_message: { text: "..." }
+#   - wait_seconds: { seconds: 0.1 }
+#
+# TODO: add actions like move_joints, run_vision_servo, run_onnx_policy, etc.
+
+job_id: hello_example
+initial_state: START
+
+states:
+  START:
+    description: "Placeholder entry state"
+    steps:
+      - action: log_message
+        params:
+          text: "Replace this job with your real sequence."
+      - action: wait_seconds
+        params:
+          seconds: 0.05
+
+  NEXT:
+    description: "Second placeholder"
+    steps:
+      - action: log_message
+        params:
+          text: "Add your subtasks in registry.CUSTOM_SUBTASKS"
+
+  END:
+    description: "Terminal sink"
+    steps:
+      - action: log_message
+        params:
+          text: "Job finished."
+
+transitions:
+  - from: START
+    event: done
+    to: NEXT
+  - from: NEXT
+    event: done
+    to: END
+
+terminal_states:
+  - END

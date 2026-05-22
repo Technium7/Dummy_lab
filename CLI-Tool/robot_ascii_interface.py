@@ -57,13 +57,14 @@ class RobotAsciiInterface:
         except serial.SerialException:
             pass
     
-    def send_command(self, cmd, wait_ms=200):
+    def send_command(self, cmd, wait_ms=200, *, extra_read_sec: float = 0.0):
         """
         Send a command and get response.
         
         Args:
             cmd: Command string (e.g., "!START", "#GETJPOS", "&10,0,90,0,0,0,20")
             wait_ms: Wait time before reading response (milliseconds)
+            extra_read_sec: Additional time to keep polling for a line after ``wait_ms``.
             
         Returns:
             Response string or None if timeout
@@ -83,7 +84,11 @@ class RobotAsciiInterface:
         
         try:
             responses = []
-            deadline = time.time() + max(self.timeout, 0.3)
+            wait_s = wait_ms / 1000.0
+            read_window_s = (
+                max(3.0, self.timeout * 4.0, wait_s + self.timeout * 3.0) + extra_read_sec
+            )
+            deadline = time.time() + read_window_s
 
             while time.time() < deadline:
                 raw = self.ser.readline()
@@ -120,9 +125,9 @@ class RobotAsciiInterface:
         resp = self.send_command('!STOP')
         return resp
     
-    def home(self):
+    def home(self, wait_ms: int = 1500, *, extra_read_sec: float = 30.0):
         """Home all joints to (0, 0, 90, 0, 0, 0)."""
-        resp = self.send_command('!HOME', wait_ms=2000)
+        resp = self.send_command("!HOME", wait_ms=wait_ms, extra_read_sec=extra_read_sec)
         return resp
     
     def reset(self):

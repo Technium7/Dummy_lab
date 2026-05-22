@@ -1,0 +1,63 @@
+{
+  "captured_utc": "2026-05-20T01:29:50.505425+00:00",
+  "device": {
+    "name": "Intel RealSense D415",
+    "serial": "024122062290",
+    "firmware": "5.17.0.10"
+  },
+  "streams": {
+    "width": 640,
+    "height": 480,
+    "fps": 30
+  },
+  "depth_scale_m_per_unit": 0.0010000000474974513,
+  "depth_stats_mm": {
+    "valid_pixels": 290462,
+    "total_pixels": 307200,
+    "min_mm": 443,
+    "max_mm": 4313,
+    "mean_mm": 2576.51,
+    "center_mm": 1967,
+    "center_m": 1.967
+  },
+  "intrinsics": {
+    "depth": {
+      "width": 640,
+      "height": 480,
+      "fx": 597.5131225585938,
+      "fy": 597.5131225585938,
+      "ppx": 316.5443115234375,
+      "ppy": 252.60581970214844,
+      "model": "distortion.brown_conrady",
+      "coeffs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    },
+    "color": {
+      "width": 640,
+      "height": 480,
+      "fx": 613.4502563476562,
+      "fy": 613.3627319335938,
+      "ppx": 326.4379577636719,
+      "ppy": 235.8017578125,
+      "model": "distortion.inverse_brown_conrady",
+      "coeffs": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
+    }
+  },
+  "files": {
+    "color_png": "shot_20260520_012949.color.png",
+    "depth_png": "shot_20260520_012949.depth.png",
+    "depth_npy": "shot_20260520_012949.depth.npy",
+    "depth_vis_png": "shot_20260520_012949.depth_vis.png"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "comment": "World-frame targets from env_robot_control_sim (base at origin, robot rotated 180 deg about Z). For an exact teleop match, copy joint angles from the control-sim status window into goal_joints_deg.",
+  "start_joints_deg": [0.0, 0.0, 90.0, 0.0, 0.0, 0.0],
+  "goal_joints_deg": null,
+  "target_end_link": {
+    "position_m": [0.0010, 0.3062, 0.1715],
+    "orientation_rpy_rad": [0.4912, 0.0265, -3.1190]
+  }
+}
