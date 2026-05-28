@@ -4,50 +4,36 @@ Plan joint trajectories from **HOME** to a target end-link pose in the packaging
 
 ## Pipeline
 
-1. **PyBullet collision checking** — robot vs static OBJ environment (+ self-collision).
-2. **RRTConnect** — bidirectional RRT-Connect (same logic as OMPL `RRTConnect`).
-3. **CHOMP** — gradient smoothing (smoothness + obstacle + path prior).
-4. **Playback** — kinematic joint interpolation (no motor fighting), capped joint step per frame, 1 s settle at HOME before moving.
-5. **Goal accuracy** — coordinate-descent IK refinement targets under **0.1 mm** end-link position error.
+1. **Collision queries** — binary validity from penetration; optimization uses signed clearance/penetration distance (`collision.py`).
+2. **Discrete iLQR (JAX)** — JIT Riccati backward pass + vectorized line search; PyBullet collision penalty/gradient per waypoint in NumPy.
+3. **Playback** — kinematic joint interpolation in PyBullet GUI.
 
-> The official `ompl` Python wheel is not available on Windows; planners are implemented in Python with the same algorithm structure.
+## Collision model
+
+| API | Type | Meaning |
+|-----|------|---------|
+| `is_state_valid` | **0/1** | `True` if worst penetration ≤ 1e-4 m |
+| `max_penetration_depth` | continuous | Penetration depth (m), 0 if separated |
+| `min_clearance_distance` | continuous | Minimum `getClosestPoints` separation (m) |
+| `signed_obstacle_distance` | continuous | `+clearance` or `-penetration` |
+| `collision_penalty` | continuous | Quadratic on penetration; barrier inside clearance margin |
 
 ## Edit targets
 
-Update [`plan_targets.json`](plan_targets.json):
-
-```json
-{
-  "start_joints_deg": [0, 0, 90, 0, 0, 0],
-  "target_end_link": {
-    "position_m": [0.0010, 0.3062, 0.1715],
-    "orientation_rpy_rad": [0.4912, 0.0265, -3.1190]
-  }
-}
-```
-
-Default target values match the reference screenshot in `test_end_position.png`.
+Update [`plan_targets.json`](plan_targets.json) (include `goal_joints_deg` from `env_robot_control_sim` for best results).
 
 ## Run
 
-From repo root:
-
 ```bash
-pip install pybullet numpy scipy xacro
+pip install pybullet numpy scipy xacro jax
 python software/trajectory_planner/plan_and_demo.py
 ```
 
-Plan without GUI (faster check):
+Collision penalty is **off** by default (fast joint tracking only). Re-enable with `--collision-penalty`.
 
 ```bash
 python software/trajectory_planner/plan_and_demo.py --plan-only
-```
-
-**Deterministic planning:** same path every time with default `--seed 42`. Cached to `last_plan.npz`.
-
-**Identical playback:** replay the cached plan without replanning:
-
-```bash
+rm software/trajectory_planner/last_plan.npz   # after changing targets
 python software/trajectory_planner/plan_and_demo.py --replay
 ```
 
@@ -56,10 +42,9 @@ python software/trajectory_planner/plan_and_demo.py --replay
 | File | Role |
 |------|------|
 | `plan_and_demo.py` | Main entry: plan + play + compare GUI |
-| `plan_targets.json` | Editable start joints and target end pose |
-| `scene.py` | Load robot (Z flipped 180°) + environment |
-| `collision.py` | PyBullet validity / obstacle cost |
-| `rrt_connect.py` | RRTConnect planner |
-| `chomp.py` | CHOMP-style smoother |
-| `env_robot_preview.py` | Static preview (sliders) |
+| `lqr_planner.py` | iLQR orchestration (JAX + PyBullet) |
+| `lqr_jax.py` | JIT backward / forward / cost |
+| `collision.py` | Validity + signed distance + penalty |
+| `trajectory_utils.py` | Resample / pin endpoints |
+| `scene.py` | Load robot + environment |
 | `env_robot_control_sim.py` | Manual IK teleop in scene |

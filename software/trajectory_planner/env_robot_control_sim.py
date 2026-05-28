@@ -1,7 +1,7 @@
 """PyBullet sim: robot + static OBJ environment with end-effector IK control (movement_sim/end_controller).
 
 Robot base is rotated 180° about Z to match the physical cell orientation.
-A separate Tk window shows the end-link world position and orientation.
+A separate Tk window shows the end-link pose and current joint angles (deg) for plan_targets.json.
 
 Usage — from repo root (Dummy_lab/):
   python software/trajectory_planner/env_robot_control_sim.py
@@ -148,10 +148,20 @@ def start_end_link_status_process(script_path: Path) -> Optional[subprocess.Pope
         return None
 
 
+def get_controllable_joints_deg(robot_id: int, joint_indices: List[int]) -> List[float]:
+    """First six controllable joints in transformed deg (robot frame, matches plan_targets.json)."""
+    degs: List[float] = []
+    for local_idx, joint_idx in enumerate(joint_indices[:6]):
+        sim_rad = float(p.getJointState(robot_id, joint_idx)[0])
+        degs.append(sim_rad_to_transformed_deg(local_idx, sim_rad))
+    return degs
+
+
 def send_end_link_status(
     proc: Optional[subprocess.Popen[str]],
     end_link_pose: Optional[Tuple[int, Tuple[float, float, float], Tuple[float, float, float]]],
     note: str = "",
+    joints_deg: Optional[Sequence[float]] = None,
 ) -> None:
     if proc is None or proc.stdin is None:
         return
@@ -159,6 +169,10 @@ def send_end_link_status(
     if end_link_pose is not None:
         index, pos, rpy = end_link_pose
         payload.update({"index": index, "pos": list(pos), "rpy": list(rpy)})
+    if joints_deg is not None:
+        rounded = [round(float(v), 4) for v in joints_deg]
+        payload["joints_deg"] = rounded
+        payload["joints_deg_json"] = json.dumps(rounded)
     try:
         proc.stdin.write(json.dumps(payload) + "\n")
         proc.stdin.flush()
@@ -191,21 +205,36 @@ def run_end_link_status_window() -> None:
 
     root = tk.Tk()
     root.title("End Link Position (env_robot_control_sim)")
-    root.geometry("460x170")
+    root.geometry("520x260")
     root.attributes("-topmost", True)
 
     title_var = tk.StringVar(value="End Link: unavailable")
     pos_var = tk.StringVar(value="position (m): -")
     rpy_var = tk.StringVar(value="orientation rpy (rad): -")
+    joints_var = tk.StringVar(value="joints (deg): -")
+    joints_json_var = tk.StringVar(value="goal_joints_deg: -")
     note_var = tk.StringVar(value="")
 
     tk.Label(root, textvariable=title_var, font=("Helvetica", 14, "bold")).pack(pady=(10, 2))
     tk.Label(root, textvariable=pos_var, font=("Consolas", 12)).pack()
     tk.Label(root, textvariable=rpy_var, font=("Consolas", 12)).pack()
+    tk.Label(root, text="Joint angles (robot frame, deg)", font=("Helvetica", 11, "bold")).pack(anchor="w", padx=12, pady=(8, 0))
+    tk.Label(root, textvariable=joints_var, font=("Consolas", 11)).pack(anchor="w", padx=12)
+    tk.Label(root, textvariable=joints_json_var, font=("Consolas", 10), foreground="#004488").pack(anchor="w", padx=12, pady=(2, 0))
     tk.Label(root, textvariable=note_var, font=("Helvetica", 10), foreground="#aa0000").pack(pady=(6, 0))
 
     def apply_payload(payload: Dict[str, object]) -> None:
         note_var.set(str(payload.get("note", "")))
+        joints = payload.get("joints_deg")
+        if isinstance(joints, list) and joints:
+            joints_var.set(
+                "joints (deg): "
+                + ", ".join(f"J{i+1}={float(v):+.2f}" for i, v in enumerate(joints))
+            )
+            joints_json_var.set(f"goal_joints_deg: {payload.get('joints_deg_json', json.dumps(joints))}")
+        else:
+            joints_var.set("joints (deg): -")
+            joints_json_var.set("goal_joints_deg: -")
         if not bool(payload.get("available", False)):
             title_var.set("End Link: unavailable")
             pos_var.set("position (m): -")
@@ -384,14 +413,18 @@ def run_control_sim(
             vx = vy = vz = wx = wy = 0.0
             active_keys: List[str] = []
 
+            joints_deg = get_controllable_joints_deg(robot_id, joint_indices)
+
             if is_key_triggered(events, "t"):
                 active_keys.append("T")
                 apply_home_pose(robot_id, joint_indices)
                 home_latch_until_s = time.perf_counter() + 1.0
+                joints_deg = list(HOME_JOINTS_DEG[:6])
                 send_end_link_status(
                     end_pose_proc,
                     get_end_link_pose(robot_id, end_link_idx),
                     note="HOME [0, 0, 90, 0, 0, 0] deg",
+                    joints_deg=joints_deg,
                 )
 
             home_latched = time.perf_counter() < home_latch_until_s
@@ -435,7 +468,11 @@ def run_control_sim(
             control_gui.update(active_keys, [vx, vy, vz, wx, wy], all_joint_names, transformed_deg)
 
             if frame_idx - last_end_pose_frame >= 15:
-                send_end_link_status(end_pose_proc, get_end_link_pose(robot_id, end_link_idx))
+                send_end_link_status(
+                    end_pose_proc,
+                    get_end_link_pose(robot_id, end_link_idx),
+                    joints_deg=joints_deg,
+                )
                 last_end_pose_frame = frame_idx
 
             if home_latched or abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) <= 1e-12:

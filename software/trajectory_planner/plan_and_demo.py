@@ -1,8 +1,7 @@
-"""Plan HOME -> target end pose with RRTConnect + CHOMP, play back in PyBullet.
+"""Plan HOME -> target end pose with discrete iLQR, play back in PyBullet.
 
-Collision checking uses PyBullet contacts against the static environment mesh.
-RRTConnect and CHOMP are Python implementations matching OMPL/MoveIt algorithms
-(official ``ompl`` pip package is not available on Windows).
+Collision: binary validity from penetration depth; optimization uses signed
+clearance/penetration distance (see ``collision.py``).
 
 Edit targets in plan_targets.json for future runs.
 
@@ -18,7 +17,6 @@ from __future__ import annotations
 import argparse
 import json
 import math
-import random
 import subprocess
 import sys
 import time
@@ -43,9 +41,9 @@ from movement_sim.joint_controller import (  # noqa: E402
     discover_descriptions,
     materialize_urdf,
 )
-from trajectory_planner.chomp import chomp_smooth, pin_trajectory_endpoints, resample_trajectory  # noqa: E402
-from trajectory_planner.collision import collision_cost, is_state_valid  # noqa: E402
-from trajectory_planner.rrt_connect import RRTConnectPlanner, interpolate_path_dense, joint_distance  # noqa: E402
+from trajectory_planner.collision import is_state_valid, signed_obstacle_distance  # noqa: E402
+from trajectory_planner.lqr_planner import plan_lqr_trajectory  # noqa: E402
+from trajectory_planner.trajectory_utils import pin_trajectory_endpoints  # noqa: E402
 from trajectory_planner.scene import (  # noqa: E402
     PlanningScene,
     build_planning_scene,
@@ -216,44 +214,39 @@ def plan_trajectory(
     target_pos: Sequence[float],
     target_rpy: Sequence[float],
     seed: int = 42,
+    enable_collision_penalty: bool = False,
 ) -> Optional[np.ndarray]:
-    valid = lambda q: is_state_valid(scene, q)  # noqa: E731
-
-    print(f"Planning with RRTConnect (seed={seed}, PyBullet collision checker)...")
-    planner = RRTConnectPlanner(
-        scene, valid, step_size=0.10, max_iterations=12000, goal_tolerance=0.12, rng=random.Random(seed)
-    )
-    path = planner.plan(start_q, goal_q)
-    if path is None:
-        print("RRTConnect failed to find a path.")
-        return None
-    print(f"RRTConnect: {len(path)} waypoints, path length={sum(joint_distance(path[i], path[i+1]) for i in range(len(path)-1)):.3f} rad")
-
+    del seed  # reserved for cache metadata only
     start_arr = np.asarray(start_q, dtype=np.float64)
     goal_arr = np.asarray(goal_q, dtype=np.float64)
-    path[0] = start_arr
-    path[-1] = goal_arr
 
-    sparse = interpolate_path_dense(path, samples_per_segment=8)
-    sparse[0] = start_arr
-    sparse[-1] = goal_arr
-    print(f"CHOMP smoothing ({len(sparse)} samples)...")
-    smooth = chomp_smooth(
+    if enable_collision_penalty:
+        d_start = signed_obstacle_distance(scene, start_arr)
+        d_goal = signed_obstacle_distance(scene, goal_arr)
+        print(
+            f"Signed obstacle distance (m): start={d_start:+.4f}, goal={d_goal:+.4f} "
+            "(+ clearance, - penetration)"
+        )
+        print("Planning with JAX iLQR (joint tracking + collision penalty)...")
+    else:
+        print("Planning with JAX iLQR (joint tracking only; collision penalty OFF)...")
+
+    dense = plan_lqr_trajectory(
         scene,
-        sparse,
-        collision_cost_fn=lambda q: collision_cost(scene, q),
-        is_valid=valid,
-        start_q=start_arr,
-        goal_q=goal_arr,
-        n_iterations=60,
+        start_arr,
+        goal_arr,
+        horizon=80,
+        n_ilqr_iterations=35,
+        enable_collision_penalty=enable_collision_penalty,
     )
-    dense = resample_trajectory(smooth, n_samples=150)
-    dense = pin_trajectory_endpoints(dense, start_arr, goal_arr)
-    if not all(valid(dense[i]) for i in range(len(dense))):
-        print("Warning: CHOMP path has collisions; using RRTConnect path resampled.")
-        sparse[0] = start_arr
-        sparse[-1] = goal_arr
-        dense = pin_trajectory_endpoints(resample_trajectory(sparse, n_samples=150), start_arr, goal_arr)
+    if dense is None:
+        print("LQR planning failed (invalid start/goal or optimizer could not proceed).")
+        return None
+
+    if enable_collision_penalty:
+        collisions = sum(1 for i in range(len(dense)) if not is_state_valid(scene, dense[i]))
+        if collisions > 0:
+            print(f"Warning: resampled trajectory has {collisions} colliding samples.")
 
     set_joint_positions(scene, dense[-1])
     pos, rpy = get_end_link_pose(scene)
@@ -425,8 +418,6 @@ def playback_trajectory(
     """Kinematic playback only (no motors, no gravity) with capped joint step per frame."""
     dt = 1.0 / max(1.0, hz)
     goal_arr = np.asarray(goal_q, dtype=np.float64)
-    trajectory = prepare_playback_trajectory(trajectory, trajectory[0], goal_arr)
-
     # Gravity was moving the arm away from commanded joint angles between frames.
     p.setGravity(0.0, 0.0, 0.0)
     p.setRealTimeSimulation(0)
@@ -505,7 +496,7 @@ def playback_trajectory(
 def parse_args() -> argparse.Namespace:
     root = _repo_root()
     default_env = root / "physical_env" / "packaging_station_edit.obj"
-    parser = argparse.ArgumentParser(description="RRTConnect + CHOMP plan and PyBullet demo.")
+    parser = argparse.ArgumentParser(description="iLQR joint-space plan and PyBullet demo.")
     parser.add_argument("--root", type=Path, default=root)
     parser.add_argument("--robot", type=str, default="Dummy_ros2")
     parser.add_argument("--env", type=Path, default=default_env)
@@ -514,7 +505,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--end-link", type=str, default="")
     parser.add_argument("--plan-only", action="store_true", help="Plan and print summary without GUI playback.")
     parser.add_argument("--replay", action="store_true", help="Replay last_plan.npz (skip replanning).")
-    parser.add_argument("--seed", type=int, default=42, help="RRTConnect RNG seed (same seed => same path).")
+    parser.add_argument("--seed", type=int, default=42, help="Stored in plan cache metadata (legacy).")
+    parser.add_argument(
+        "--collision-penalty",
+        action="store_true",
+        help="Enable PyBullet collision penalty in iLQR (slower; default is off).",
+    )
     parser.add_argument(
         "--verify-coordinates",
         action="store_true",
@@ -616,7 +612,15 @@ def main() -> None:
             if goal_q is None:
                 raise SystemExit("Could not find a valid IK goal configuration.")
 
-            trajectory = plan_trajectory(scene, start_q, goal_q, target_pos, target_rpy, seed=args.seed)
+            trajectory = plan_trajectory(
+                scene,
+                start_q,
+                goal_q,
+                target_pos,
+                target_rpy,
+                seed=args.seed,
+                enable_collision_penalty=args.collision_penalty,
+            )
             p.disconnect()
             if trajectory is None:
                 raise SystemExit("Planning failed.")
@@ -666,6 +670,8 @@ def main() -> None:
         # Re-apply refined goal in GUI scene so FK matches planning (same URDF, zero physics drift).
         if goal_joints_deg is None:
             goal_q = refine_joint_config_to_pose(scene_gui, target_pos, target_rpy, goal_q)
+        else:
+            goal_q = joint_array_from_transformed_deg(scene_gui, goal_joints_deg)
         trajectory = prepare_playback_trajectory(trajectory, start_q, goal_q)
 
         set_joint_positions(scene_gui, trajectory[0])

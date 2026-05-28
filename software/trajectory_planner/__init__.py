@@ -1,1 +1,1 @@
-"""Trajectory planning: RRTConnect + CHOMP with PyBullet collision checking."""
+"""Trajectory planning: discrete iLQR with PyBullet signed-distance collision penalties."""
