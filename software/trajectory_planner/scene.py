@@ -26,6 +26,16 @@ class PlanningScene:
     joint_names: List[str]
     end_link_idx: int
     end_link_name: str
+    client_id: int = 0
+
+
+def disconnect_planning_scene(scene: PlanningScene) -> None:
+    """Disconnect only this scene's PyBullet client (does not close other clients)."""
+    try:
+        if p.getConnectionInfo(physicsClientId=scene.client_id)["isConnected"]:
+            p.disconnect(physicsClientId=scene.client_id)
+    except Exception:
+        pass
 
 
 def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
@@ -105,6 +115,7 @@ def build_planning_scene(
         joint_names=names,
         end_link_idx=end_link_idx,
         end_link_name=end_link_name,
+        client_id=cid,
     )
 
 
@@ -172,6 +183,21 @@ def solve_ik(
     return [float(sol[j]) for j in scene.joint_indices[:n]]
 
 
+def pose_error_rad(
+    current_pos: Sequence[float],
+    current_rpy: Sequence[float],
+    target_pos: Sequence[float],
+    target_rpy: Sequence[float],
+) -> Tuple[float, float]:
+    """Position error (m) and orientation error (rad) between two world-frame poses."""
+    pos_err_m = float(np.linalg.norm(np.asarray(current_pos) - np.asarray(target_pos)))
+    cq = p.getQuaternionFromEuler(list(current_rpy))
+    tq = p.getQuaternionFromEuler(list(target_rpy))
+    dot = min(1.0, max(-1.0, abs(sum(a * b for a, b in zip(cq, tq)))))
+    ori_err_rad = 2.0 * math.acos(dot)
+    return pos_err_m, ori_err_rad
+
+
 def measure_pose_error(
     scene: PlanningScene,
     target_pos: Sequence[float],
@@ -180,13 +206,7 @@ def measure_pose_error(
 ) -> Tuple[float, float]:
     set_joint_positions(scene, q)
     pos, rpy = get_end_link_pose(scene)
-    t_pos = np.asarray(target_pos, dtype=np.float64)
-    pos_err_m = float(np.linalg.norm(t_pos - np.asarray(pos, dtype=np.float64)))
-    tq = p.getQuaternionFromEuler(list(target_rpy))
-    cq = p.getQuaternionFromEuler(list(rpy))
-    dot = min(1.0, max(-1.0, abs(sum(a * b for a, b in zip(cq, tq)))))
-    ori_err_rad = 2.0 * math.acos(dot)
-    return pos_err_m, ori_err_rad
+    return pose_error_rad(pos, rpy, target_pos, target_rpy)
 
 
 def refine_joint_config_to_pose(

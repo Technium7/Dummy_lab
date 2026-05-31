@@ -4,23 +4,47 @@ Plan joint trajectories from **HOME** to a target end-link pose in the packaging
 
 ## Pipeline
 
-1. **Collision queries** — binary validity from penetration; optimization uses signed clearance/penetration distance (`collision.py`).
-2. **Discrete iLQR (JAX)** — JIT Riccati backward pass + vectorized line search; PyBullet collision penalty/gradient per waypoint in NumPy.
-3. **Playback** — kinematic joint interpolation in PyBullet GUI.
+1. **Goal resolution** (`goals.py`) — teleop joints, or IK + refinement from `target_end_link` (`--goal-pose`).
+2. **Nominal iLQR** (`ilqr_core.py` + `lqr_jax.py`) — JAX joint-space tracking to `goal_q`.
+3. **SCP collision** (`scp_planner.py`, optional) — linearized env clearance constraints.
+4. **Playback** (`playback.py` + `plan_and_demo.py`) — kinematic joint motion in PyBullet GUI.
+
+## Layout
+
+| Module | Role |
+|--------|------|
+| `plan_and_demo.py` | CLI: plan, cache, playback |
+| `targets.py` | `plan_targets.json` + `last_plan.npz` cache |
+| `goals.py` | Teleop / IK goal joint resolution |
+| `planning.py` | Run iLQR/SCP and verify terminal FK |
+| `config.py` | Shared defaults (horizon, SCP, margins) |
+| `lqr_planner.py` | Public planning API |
+| `ilqr_core.py` | iLQR iteration helpers |
+| `lqr_jax.py` | JIT Riccati backward / forward / cost |
+| `scp_planner.py` | Nominal iLQR + SCP refinement |
+| `collision.py` | PyBullet queries + SCP constraint batches |
+| `collision_report.py` | `--show-collision` terminal report |
+| `trajectory_utils.py` | Resample, pin endpoints, dedupe |
+| `scene.py` | PyBullet scene, FK, IK, pose error |
+| `compare_window.py` | Live target vs current pose window |
+| `playback.py` | GUI trajectory playback |
+
+## Goal modes
+
+| Mode | Flag | How goal is chosen |
+|------|------|-------------------|
+| Joint angles (default) | — | `goal_joints_deg` from teleop, or IK fallback |
+| Pose → IK joints | `--goal-pose` | IK/refine `target_end_link`, plan tracks those joints |
 
 ## Collision model
 
-| API | Type | Meaning |
-|-----|------|---------|
-| `is_state_valid` | **0/1** | `True` if worst penetration ≤ 1e-4 m |
-| `max_penetration_depth` | continuous | Penetration depth (m), 0 if separated |
-| `min_clearance_distance` | continuous | Minimum `getClosestPoints` separation (m) |
-| `signed_obstacle_distance` | continuous | `+clearance` or `-penetration` |
-| `collision_penalty` | continuous | Quadratic on penetration; barrier inside clearance margin |
+| API | Meaning |
+|-----|---------|
+| `is_state_valid` | No env penetration (> 0.1 mm) on arm links |
+| `signed_obstacle_distance` | Env `+clearance` or `−penetration` (m) |
+| `evaluate_collision_metrics` | Full metrics for `--show-collision` |
 
-## Edit targets
-
-Update [`plan_targets.json`](plan_targets.json) (include `goal_joints_deg` from `env_robot_control_sim` for best results).
+Base link (`-1`) is excluded from env checks. Self-collision is reported but not used for planning.
 
 ## Run
 
@@ -29,22 +53,25 @@ pip install pybullet numpy scipy xacro jax
 python software/trajectory_planner/plan_and_demo.py
 ```
 
-Collision penalty is **off** by default (fast joint tracking only). Re-enable with `--collision-penalty`.
+Collision planning is **off** by default. Enable with `--collision-penalty` (SCP).
 
 ```bash
-python software/trajectory_planner/plan_and_demo.py --plan-only
-rm software/trajectory_planner/last_plan.npz   # after changing targets
-python software/trajectory_planner/plan_and_demo.py --replay
+python software/trajectory_planner/plan_and_demo.py --collision-penalty
+python software/trajectory_planner/plan_and_demo.py --goal-pose
+python software/trajectory_planner/plan_and_demo.py --replay --show-collision
 ```
 
-## Scripts
+Edit targets in [`plan_targets.json`](plan_targets.json). Delete `last_plan.npz` after changing targets or planner flags.
 
-| File | Role |
-|------|------|
-| `plan_and_demo.py` | Main entry: plan + play + compare GUI |
-| `lqr_planner.py` | iLQR orchestration (JAX + PyBullet) |
-| `lqr_jax.py` | JIT backward / forward / cost |
-| `collision.py` | Validity + signed distance + penalty |
-| `trajectory_utils.py` | Resample / pin endpoints |
-| `scene.py` | Load robot + environment |
-| `env_robot_control_sim.py` | Manual IK teleop in scene |
+`last_plan.npz` stores the planned trajectory, `goal_q`, targets, and plan flags. Replay loads only the cache: no second IK, no teleop joint override, no rewriting trajectory endpoints. Playback follows the saved waypoints and ends on `trajectory[-1]`.
+
+## Tuning
+
+| Flag | Effect |
+|------|--------|
+| `--planner-collision-stride N` | PyBullet every Nth SCP waypoint (default 12) |
+| `--scp-weight W` | Constraint strength (default 60) |
+| `--clearance-margin M` | Required clearance in m (default 3 mm) |
+| `--collision-exact` | Per-link clearance (slow) |
+
+Manual teleop: `env_robot_control_sim.py`.

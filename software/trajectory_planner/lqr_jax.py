@@ -9,6 +9,9 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
+# Match NumPy float64 used by the planner (avoids float64 truncation warnings).
+jax.config.update("jax_enable_x64", True)
+
 # Dynamics: q_{k+1} = q_k + u_k  =>  f_x = I, f_u = I
 
 
@@ -22,6 +25,7 @@ def _ilqr_backward_pass(
     traj: jnp.ndarray,
     u_nom: jnp.ndarray,
     goal: jnp.ndarray,
+    terminal_goal: jnp.ndarray,
     col_grad: jnp.ndarray,
     q_weight: float,
     r_weight: float,
@@ -32,7 +36,7 @@ def _ilqr_backward_pass(
     dof = traj.shape[1]
     eye = jnp.eye(dof)
 
-    err_n = traj[-1] - goal
+    err_n = traj[-1] - terminal_goal
     vx = 2.0 * qf_weight * err_n + col_grad[-1]
     vxx = 2.0 * qf_weight * eye
 
@@ -96,7 +100,6 @@ def _ilqr_forward_pass(
 
     _, xs = jax.lax.scan(step, start, (k_ff, k_fb, traj[:-1], u_nom))
     out = jnp.vstack([start[None, :], xs])
-    out = out.at[-1].set(goal)
     out = out.at[0].set(start)
     return out
 
@@ -106,6 +109,7 @@ def _quadratic_tracking_cost(
     traj: jnp.ndarray,
     u: jnp.ndarray,
     goal: jnp.ndarray,
+    terminal_goal: jnp.ndarray,
     col_penalties: jnp.ndarray,
     q_weight: float,
     r_weight: float,
@@ -114,7 +118,7 @@ def _quadratic_tracking_cost(
     err_stages = traj[:-1] - goal
     stage = q_weight * jnp.sum(err_stages * err_stages)
     stage = stage + r_weight * jnp.sum(u * u) + jnp.sum(col_penalties[:-1])
-    err_t = traj[-1] - goal
+    err_t = traj[-1] - terminal_goal
     terminal = qf_weight * jnp.sum(err_t * err_t) + col_penalties[-1]
     return stage + terminal
 
@@ -154,10 +158,10 @@ class IlqrJaxSolver:
         al = jnp.array([1.0])
         lo = jnp.full(dof, -3.14)
         hi = jnp.full(dof, 3.14)
-        _ilqr_backward_pass(traj, u, g, cg, 1.0, 1.0, 1.0, 1e-2)
+        _ilqr_backward_pass(traj, u, g, g, cg, 1.0, 1.0, 1.0, 1e-2)
         _ilqr_forward_pass(traj, u, jnp.zeros((h - 1, dof)), jnp.zeros((h - 1, dof, dof)), g, g, 1.0, lo, hi, 0.1)
         _forward_all_alphas(traj, u, jnp.zeros((h - 1, dof)), jnp.zeros((h - 1, dof, dof)), g, g, al, lo, hi, 0.1)
-        _quadratic_tracking_cost(traj, u, g, cp, 1.0, 1.0, 1.0)
+        _quadratic_tracking_cost(traj, u, g, g, cp, 1.0, 1.0, 1.0)
 
     def backward(
         self,
@@ -169,11 +173,14 @@ class IlqrJaxSolver:
         r_weight: float,
         qf_weight: float,
         reg: float,
+        terminal_goal: np.ndarray | None = None,
     ) -> Tuple[np.ndarray, np.ndarray]:
+        tg = np.asarray(terminal_goal if terminal_goal is not None else goal, dtype=np.float64)
         k_ff, k_fb = _ilqr_backward_pass(
             jnp.asarray(traj),
             jnp.asarray(u_nom),
             jnp.asarray(goal),
+            jnp.asarray(tg),
             jnp.asarray(col_grad),
             q_weight,
             r_weight,
@@ -218,15 +225,20 @@ class IlqrJaxSolver:
         q_weight: float,
         r_weight: float,
         qf_weight: float,
+        terminal_goal: np.ndarray | None = None,
+        terminal_extra_cost: float = 0.0,
     ) -> float:
+        tg = np.asarray(terminal_goal if terminal_goal is not None else goal, dtype=np.float64)
         return float(
             _quadratic_tracking_cost(
                 jnp.asarray(traj),
                 jnp.asarray(u),
                 jnp.asarray(goal),
+                jnp.asarray(tg),
                 jnp.asarray(col_penalties),
                 q_weight,
                 r_weight,
                 qf_weight,
             )
+            + terminal_extra_cost
         )

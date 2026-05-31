@@ -1,124 +1,104 @@
-"""Discrete-time iLQR joint-space trajectory optimization (JAX Riccati + PyBullet collision)."""
+"""Discrete-time iLQR entry point; SCP when collision planning is enabled."""
 
 from __future__ import annotations
 
 from typing import Optional, Sequence
 
-import numpy as np
-
-from .collision import batch_collision_penalty_and_gradient, is_state_valid
-from .lqr_jax import IlqrJaxSolver
+from .config import (
+    DEFAULT_CLEARANCE_MARGIN,
+    DEFAULT_ENDPOINT_RELAX_FRACTION,
+    DEFAULT_ENDPOINT_SKIP_FRACTION,
+    DEFAULT_HORIZON,
+    DEFAULT_N_ILQR_ITERATIONS,
+    DEFAULT_PLANNER_COLLISION_STRIDE,
+    DEFAULT_RESAMPLE_TO,
+    DEFAULT_SCP_CONSTRAINT_WEIGHT,
+    DEFAULT_SCP_ILQR_PER_OUTER,
+    DEFAULT_SCP_OUTER_ITERATIONS,
+    DEFAULT_SCP_TRUST_REGION_RAD,
+    DEFAULT_SCP_VIOLATION_TOL,
+    DEFAULT_SCP_WEIGHT_SCALE,
+)
 from .scene import PlanningScene
-from .trajectory_utils import pin_trajectory_endpoints, resample_trajectory
-
-_JAX_SOLVER: Optional[IlqrJaxSolver] = None
-
-
-def _get_solver() -> IlqrJaxSolver:
-    global _JAX_SOLVER
-    if _JAX_SOLVER is None:
-        _JAX_SOLVER = IlqrJaxSolver()
-    return _JAX_SOLVER
-
-
-def _clip_states(traj: np.ndarray, low: np.ndarray, high: np.ndarray) -> np.ndarray:
-    out = traj.copy()
-    np.clip(out, low, high, out=out)
-    return out
-
-
-def _initial_guess(start_q: np.ndarray, goal_q: np.ndarray, horizon: int) -> np.ndarray:
-    t = np.linspace(0.0, 1.0, horizon)
-    return start_q + t[:, None] * (goal_q - start_q)[None, :]
 
 
 def plan_lqr_trajectory(
     scene: PlanningScene,
     start_q: Sequence[float],
     goal_q: Sequence[float],
-    horizon: int = 80,
-    n_ilqr_iterations: int = 35,
+    horizon: int = DEFAULT_HORIZON,
+    n_ilqr_iterations: int = DEFAULT_N_ILQR_ITERATIONS,
     q_weight: float = 8.0,
     qf_weight: float = 120.0,
     r_weight: float = 2.5,
-    clearance_margin: float = 0.02,
-    penetration_weight: float = 5.0e4,
-    clearance_weight: float = 80.0,
+    clearance_margin: float = DEFAULT_CLEARANCE_MARGIN,
     reg: float = 1e-2,
     max_control_step: float = 0.12,
     line_search_alphas: Optional[Sequence[float]] = None,
-    resample_to: int = 150,
+    resample_to: int = DEFAULT_RESAMPLE_TO,
     enable_collision_penalty: bool = False,
+    scp_outer_iterations: int = DEFAULT_SCP_OUTER_ITERATIONS,
+    scp_ilqr_per_outer: int = DEFAULT_SCP_ILQR_PER_OUTER,
+    scp_constraint_weight: float = DEFAULT_SCP_CONSTRAINT_WEIGHT,
+    scp_weight_scale: float = DEFAULT_SCP_WEIGHT_SCALE,
+    scp_violation_tol: float = DEFAULT_SCP_VIOLATION_TOL,
+    scp_trust_region_rad: float = DEFAULT_SCP_TRUST_REGION_RAD,
+    collision_stride: int = DEFAULT_PLANNER_COLLISION_STRIDE,
+    exact_clearance: bool = False,
+    endpoint_relax_fraction: float = DEFAULT_ENDPOINT_RELAX_FRACTION,
+    endpoint_skip_fraction: float = DEFAULT_ENDPOINT_SKIP_FRACTION,
+    verbose: bool = True,
 ) -> Optional[np.ndarray]:
     """
-    Optimize joint trajectory with JAX-compiled discrete iLQR.
+    Optimize a joint trajectory with discrete iLQR (JAX Riccati).
 
-    When ``enable_collision_penalty`` is False (default), only joint-to-goal tracking
-    and control regularization are optimized (no PyBullet queries in the iLQR loop).
+    With ``enable_collision_penalty``, runs nominal iLQR then SCP collision refinement.
+    Terminal cost always tracks ``goal_q`` joint angles.
     """
-    start = np.asarray(start_q, dtype=np.float64)
-    goal = np.asarray(goal_q, dtype=np.float64)
-    horizon = max(4, int(horizon))
-    low = np.asarray(scene.lower_limits, dtype=np.float64)
-    high = np.asarray(scene.upper_limits, dtype=np.float64)
-
     if enable_collision_penalty:
-        if not is_state_valid(scene, start) or not is_state_valid(scene, goal):
-            return None
+        from .scp_planner import plan_scp_trajectory
 
-    penalty_kw = dict(
-        clearance_margin=clearance_margin,
-        penetration_weight=penetration_weight,
-        clearance_weight=clearance_weight,
+        return plan_scp_trajectory(
+            scene,
+            start_q,
+            goal_q,
+            horizon=horizon,
+            n_ilqr_iterations=n_ilqr_iterations,
+            resample_to=resample_to,
+            clearance_margin=clearance_margin,
+            q_weight=q_weight,
+            qf_weight=qf_weight,
+            r_weight=r_weight,
+            reg=reg,
+            max_control_step=max_control_step,
+            line_search_alphas=line_search_alphas,
+            scp_outer_iterations=scp_outer_iterations,
+            scp_ilqr_per_outer=scp_ilqr_per_outer,
+            scp_constraint_weight=scp_constraint_weight,
+            scp_weight_scale=scp_weight_scale,
+            scp_violation_tol=scp_violation_tol,
+            scp_trust_region_rad=scp_trust_region_rad,
+            collision_stride=collision_stride,
+            exact_clearance=exact_clearance,
+            endpoint_relax_fraction=endpoint_relax_fraction,
+            endpoint_skip_fraction=endpoint_skip_fraction,
+            verbose=verbose,
+        )
+
+    from .scp_planner import plan_nominal_ilqr_trajectory
+
+    return plan_nominal_ilqr_trajectory(
+        scene,
+        start_q,
+        goal_q,
+        horizon=horizon,
+        n_ilqr_iterations=n_ilqr_iterations,
+        q_weight=q_weight,
+        qf_weight=qf_weight,
+        r_weight=r_weight,
+        reg=reg,
+        max_control_step=max_control_step,
+        line_search_alphas=line_search_alphas,
+        resample_to=resample_to,
+        verbose=verbose,
     )
-    alphas = list(line_search_alphas or (1.0, 0.5, 0.25, 0.1, 0.05))
-    solver = _get_solver()
-
-    traj = _initial_guess(start, goal, horizon)
-    traj[0] = start
-    traj[-1] = goal
-    traj = _clip_states(traj, low, high)
-    u_nom = traj[1:] - traj[:-1]
-
-    zero_pen = np.zeros(horizon, dtype=np.float64)
-    zero_grad = np.zeros((horizon, start.shape[0]), dtype=np.float64)
-
-    for _ in range(n_ilqr_iterations):
-        if enable_collision_penalty:
-            col_pen, col_grad = batch_collision_penalty_and_gradient(scene, traj, **penalty_kw)
-        else:
-            col_pen, col_grad = zero_pen, zero_grad
-        total = solver.total_cost(traj, u_nom, goal, col_pen, q_weight, r_weight, qf_weight)
-
-        k_ff, k_fb = solver.backward(
-            traj, u_nom, goal, col_grad, q_weight, r_weight, qf_weight, reg
-        )
-        candidates = solver.forward_candidates(
-            traj, u_nom, k_ff, k_fb, start, goal, alphas, low, high, max_control_step
-        )
-
-        accepted = False
-        for alpha_idx, candidate in enumerate(candidates):
-            new_traj = np.array(candidate, dtype=np.float64, copy=True)
-            new_traj[0] = start
-            new_traj[-1] = goal
-            new_u = new_traj[1:] - new_traj[:-1]
-            if enable_collision_penalty:
-                col_pen_new, _ = batch_collision_penalty_and_gradient(scene, new_traj, **penalty_kw)
-            else:
-                col_pen_new = zero_pen
-            trial = solver.total_cost(new_traj, new_u, goal, col_pen_new, q_weight, r_weight, qf_weight)
-            if trial <= total * 1.02:
-                traj = np.array(new_traj, dtype=np.float64, copy=True)
-                u_nom = traj[1:] - traj[:-1]
-                accepted = True
-                if alpha_idx > 0:
-                    pass  # used smaller alpha after line search
-                break
-
-        if not accepted:
-            break
-
-    dense = resample_trajectory(traj, resample_to)
-    dense = pin_trajectory_endpoints(dense, start, goal)
-    return dense
