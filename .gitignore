@@ -6,3 +6,10 @@
 **/__pycache__/
 **/*.pyc
 **/cmake-build-*/
+
+# grab_sensor — local training data, weights, and debug captures
+software/high_level_jobs/subtasks/grab_sensor/dataset/**/*
+!software/high_level_jobs/subtasks/grab_sensor/dataset/README.md
+software/high_level_jobs/subtasks/grab_sensor/debug/
+software/**/yolov8n.pt
+software/grasp_overlay.png

@@ -1,0 +1,254 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal, Mapping, Tuple
+
+import numpy as np
+
+GraspOrientationMode = Literal["follow_object", "fixed_robot"]
+VisionMode = Literal["depth_segment", "yolo_grasp"]
+
+
+@dataclass(frozen=True)
+class GraspOnObjectFrame:
+    """
+    Gripper target relative to the vision-estimated TABLE OBJECT pose.
+
+    This is not the camera. The camera only locates the object; this block
+    encodes how the gripper should relate to that object (edge, tilt, offset).
+    """
+
+    position_mm: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    rpy_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    approach_offset_mm: float = 0.0
+
+    def position_m(self) -> np.ndarray:
+        return np.asarray(self.position_mm, dtype=np.float64) * 1e-3
+
+
+# Backward-compatible alias (object on table was named "sensor" in early drafts).
+GraspInSensorFrame = GraspOnObjectFrame
+
+
+@dataclass(frozen=True)
+class ApproachConfig:
+    pre_grasp_offset_mm: float = 80.0
+    retreat_after_close_mm: float = 40.0
+
+
+@dataclass(frozen=True)
+class SegmentationConfig:
+    min_depth_m: float = 0.25
+    max_depth_m: float = 0.55
+    min_area_px: int = 400
+    morph_kernel_px: int = 5
+
+
+@dataclass(frozen=True)
+class YoloConfig:
+    model_path: Path
+    class_name: str = "sensor"
+    confidence: float = 0.35
+    iou: float = 0.45
+    crop_padding_px: int = 16
+
+
+@dataclass(frozen=True)
+class GraspNetConfig:
+    model_path: Path
+    depth_patch_radius_px: int = 3
+    predict_on: Literal["full_frame", "crop"] = "crop"
+    bbox_margin_px: int = 12
+    depth_min_m: float = 0.25
+    depth_max_m: float = 0.85
+
+
+@dataclass(frozen=True)
+class CameraToRobot:
+    """
+    Fixed D415 mount: camera optical frame -> robot base (planner world) frame.
+
+    Calibrate once. The table object is NOT configured here — vision finds it.
+    """
+
+    translation_m: Tuple[float, float, float]
+    rpy_deg: Tuple[float, float, float]
+
+
+CameraExtrinsics = CameraToRobot
+
+
+@dataclass(frozen=True)
+class GrabSensorConfig:
+    camera_to_robot: CameraToRobot
+    grasp_on_object: GraspOnObjectFrame
+    approach: ApproachConfig
+    segmentation: SegmentationConfig
+    vision_mode: VisionMode = "depth_segment"
+    yolo: YoloConfig | None = None
+    grasp_net: GraspNetConfig | None = None
+    grasp_orientation_mode: GraspOrientationMode = "follow_object"
+    fixed_grasp_rpy_robot_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    env_path: Path = field(default_factory=lambda: Path("physical_env/packaging_station_edit.obj"))
+    mesh_scale: float = 1.0
+    robot_name: str = "Dummy_ros2"
+    end_link: str = ""
+    enable_collision: bool = False
+    plan_seed: int = 42
+    save_debug_dir: Path | None = None
+
+    @property
+    def camera_extrinsics(self) -> CameraToRobot:
+        return self.camera_to_robot
+
+    @property
+    def grasp_in_sensor_frame(self) -> GraspOnObjectFrame:
+        return self.grasp_on_object
+
+    @staticmethod
+    def from_mapping(data: Mapping[str, Any], base_dir: Path | None = None) -> GrabSensorConfig:
+        base = base_dir or Path.cwd()
+
+        grasp_raw = data.get("grasp_on_object") or data.get("grasp_in_sensor_frame") or {}
+        approach_raw = data.get("approach", {})
+        seg_raw = data.get("segmentation", {})
+        yolo_raw = data.get("yolo", {})
+        grasp_net_raw = data.get("grasp_net", {})
+        cam_raw = data.get("camera_to_robot") or data.get("camera_extrinsics") or {}
+        paths_raw = data.get("paths", {})
+
+        package_dir = Path(__file__).resolve().parent
+        default_model_dir = package_dir / "dataset" / "grasp_keypoints" / "model"
+
+        def _resolve_model_path(raw_path: str | None, default_name: str) -> Path:
+            if raw_path:
+                p = Path(str(raw_path))
+            else:
+                p = default_model_dir / default_name
+            if not p.is_absolute():
+                p = (base / p).resolve()
+            return p
+
+        vision_raw = str(data.get("vision_mode", "depth_segment")).strip().lower()
+        if vision_raw not in ("depth_segment", "yolo_grasp"):
+            raise ValueError(
+                f"vision_mode must be 'depth_segment' or 'yolo_grasp', got {vision_raw!r}"
+            )
+
+        env_rel = str(paths_raw.get("env", "physical_env/packaging_station_edit.obj"))
+        env_path = Path(env_rel)
+        if not env_path.is_absolute():
+            env_path = (base / env_rel).resolve()
+
+        debug = paths_raw.get("save_debug_dir")
+        debug_path = None
+        if debug:
+            debug_path = Path(str(debug))
+            if not debug_path.is_absolute():
+                debug_path = (base / debug_path).resolve()
+
+        grasp_pos_mm = tuple(float(v) for v in grasp_raw.get("position_mm", [0.0, 0.0, 0.0])[:3])
+        grasp_rpy_deg = tuple(float(v) for v in grasp_raw.get("rpy_deg", [0.0, 0.0, 0.0])[:3])
+        mode_raw = str(data.get("grasp_orientation_mode", "follow_object")).strip().lower()
+        if mode_raw not in ("follow_object", "fixed_robot"):
+            raise ValueError(
+                f"grasp_orientation_mode must be 'follow_object' or 'fixed_robot', got {mode_raw!r}"
+            )
+
+        fixed_rpy = tuple(
+            float(v) for v in data.get("fixed_grasp_rpy_robot_deg", [0.0, 0.0, 0.0])[:3]
+        )
+
+        predict_on_raw = str(grasp_net_raw.get("predict_on", "full_frame")).strip().lower()
+        if predict_on_raw not in ("full_frame", "crop"):
+            raise ValueError(
+                f"grasp_net.predict_on must be 'full_frame' or 'crop', got {predict_on_raw!r}"
+            )
+
+        return GrabSensorConfig(
+            camera_to_robot=CameraToRobot(
+                translation_m=tuple(float(v) for v in cam_raw.get("translation_m", [0.0, 0.0, 0.0])[:3]),  # type: ignore
+                rpy_deg=tuple(float(v) for v in cam_raw.get("rpy_deg", [0.0, 0.0, 0.0])[:3]),  # type: ignore
+            ),
+            grasp_on_object=GraspOnObjectFrame(
+                position_mm=grasp_pos_mm,  # type: ignore[arg-type]
+                rpy_deg=grasp_rpy_deg,  # type: ignore[arg-type]
+                approach_offset_mm=float(grasp_raw.get("approach_offset_mm", 0.0)),
+            ),
+            approach=ApproachConfig(
+                pre_grasp_offset_mm=float(approach_raw.get("pre_grasp_offset_mm", 80.0)),
+                retreat_after_close_mm=float(approach_raw.get("retreat_after_close_mm", 40.0)),
+            ),
+            segmentation=SegmentationConfig(
+                min_depth_m=float(seg_raw.get("min_depth_m", 0.25)),
+                max_depth_m=float(seg_raw.get("max_depth_m", 0.55)),
+                min_area_px=int(seg_raw.get("min_area_px", 400)),
+                morph_kernel_px=int(seg_raw.get("morph_kernel_px", 5)),
+            ),
+            vision_mode=vision_raw,  # type: ignore[arg-type]
+            yolo=YoloConfig(
+                model_path=_resolve_model_path(yolo_raw.get("model_path"), "sensor_yolo.pt"),
+                class_name=str(yolo_raw.get("class_name", "sensor")),
+                confidence=float(yolo_raw.get("confidence", 0.35)),
+                iou=float(yolo_raw.get("iou", 0.45)),
+                crop_padding_px=int(yolo_raw.get("crop_padding_px", 16)),
+            ),
+            grasp_net=GraspNetConfig(
+                model_path=_resolve_model_path(grasp_net_raw.get("model_path"), "grasp_point.pt"),
+                depth_patch_radius_px=int(grasp_net_raw.get("depth_patch_radius_px", 3)),
+                predict_on=predict_on_raw,  # type: ignore[arg-type]
+                bbox_margin_px=int(grasp_net_raw.get("bbox_margin_px", 12)),
+                depth_min_m=float(grasp_net_raw.get("depth_min_m", 0.25)),
+                depth_max_m=float(grasp_net_raw.get("depth_max_m", 0.85)),
+            ),
+            grasp_orientation_mode=mode_raw,  # type: ignore[arg-type]
+            fixed_grasp_rpy_robot_deg=fixed_rpy,  # type: ignore[arg-type]
+            env_path=env_path,
+            mesh_scale=float(paths_raw.get("mesh_scale", 1.0)),
+            robot_name=str(paths_raw.get("robot", "Dummy_ros2")),
+            end_link=str(paths_raw.get("end_link", "")),
+            enable_collision=bool(data.get("enable_collision", False)),
+            plan_seed=int(data.get("plan_seed", 42)),
+            save_debug_dir=debug_path,
+        )
+
+
+@dataclass
+class TableObjectDetection:
+    """Vision estimate of the pick target (table object) in the camera frame."""
+
+    centroid_cam_m: np.ndarray
+    yaw_rad: float
+    object_rpy_cam_rad: np.ndarray
+    mask: np.ndarray
+    n_points: int
+    bbox_xy: Tuple[int, int, int, int]
+
+    @property
+    def sensor_rpy_cam_rad(self) -> np.ndarray:
+        return self.object_rpy_cam_rad
+
+
+SensorDetection = TableObjectDetection
+
+
+@dataclass
+class GraspTargets:
+    """End-effector grasp poses in robot base / planner world frame."""
+
+    pre_grasp_pos_m: np.ndarray
+    pre_grasp_rpy_rad: np.ndarray
+    grasp_pos_m: np.ndarray
+    grasp_rpy_rad: np.ndarray
+    object_pos_m: np.ndarray
+    object_rpy_rad: np.ndarray
+    debug: dict[str, Any] = field(default_factory=dict)
+
+    @property
+    def sensor_pos_m(self) -> np.ndarray:
+        return self.object_pos_m
+
+    @property
+    def sensor_rpy_rad(self) -> np.ndarray:
+        return self.object_rpy_rad

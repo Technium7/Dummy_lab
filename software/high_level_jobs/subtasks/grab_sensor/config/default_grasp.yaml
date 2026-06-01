@@ -1,0 +1,70 @@
+# Pick up the TABLE OBJECT (sensor workpiece on the table).
+#
+# The D415 is NOT the object being picked. It is a fixed camera that LOOKS at the table.
+# You only configure where that camera is mounted relative to the robot (camera_to_robot).
+# Vision finds the object; grasp_on_object turns that into a gripper target.
+
+# --- Fixed hardware calibration (set once) ---------------------------------
+# Camera optical frame -> robot base frame (same as PyBullet planner world).
+# Checkerboard / touch-teach / AprilTag on robot base. Placeholders below.
+camera_to_robot:
+  translation_m: [0.35, 0.0, 0.42]
+  rpy_deg: [-90.0, 0.0, 180.0]
+
+# --- Vision mode -----------------------------------------------------------
+# depth_segment  — depth band + blob + PCA (legacy)
+# yolo_grasp     — YOLO bbox + RGBD grasp CNN on crop
+vision_mode: yolo_grasp
+
+yolo:
+  model_path: software/high_level_jobs/subtasks/grab_sensor/dataset/grasp_keypoints/model/sensor_yolo.pt
+  class_name: sensor
+  confidence: 0.35
+  crop_padding_px: 16
+
+grasp_net:
+  model_path: software/high_level_jobs/subtasks/grab_sensor/dataset/grasp_keypoints/model/grasp_point.pt
+  depth_patch_radius_px: 3
+  predict_on: crop
+  bbox_margin_px: 12
+  depth_min_m: 0.25
+  depth_max_m: 0.85
+
+# --- Legacy depth segmentation (used when vision_mode: depth_segment) ------
+segmentation:
+  # Depth band over the table surface where the object appears
+  min_depth_m: 0.28
+  max_depth_m: 0.52
+  min_area_px: 400
+  morph_kernel_px: 5
+
+# --- Grasp target from vision ----------------------------------------------
+# How to build the grasp pose after the camera locates the object:
+#
+#   follow_object  — vision gives object pose (PCA); grasp_on_object adds tilt/offset
+#   fixed_robot    — vision gives grasp XYZ only; orientation from fixed_grasp_rpy_robot_deg
+grasp_orientation_mode: fixed_robot
+
+# Taught offset from detected object frame to gripper target (not the camera).
+# Object frame from PCA: X = long edge, Z = face normal pointing up from table.
+grasp_on_object:
+  position_mm: [0.0, 0.0, 0.0]
+  rpy_deg: [0.0, 15.0, 0.0]       # e.g. 15 deg wrist tilt about object Y
+  approach_offset_mm: 5.0
+
+# Used when grasp_orientation_mode: fixed_robot (location from camera, angle fixed)
+fixed_grasp_rpy_robot_deg: [0.0, 90.0, 0.0]
+
+approach:
+  pre_grasp_offset_mm: 80.0
+  retreat_after_close_mm: 40.0
+
+paths:
+  env: physical_env/packaging_station_edit.obj
+  mesh_scale: 1.0
+  robot: Dummy_ros2
+  end_link: ""
+  save_debug_dir: software/high_level_jobs/subtasks/grab_sensor/debug
+
+enable_collision: false
+plan_seed: 42
