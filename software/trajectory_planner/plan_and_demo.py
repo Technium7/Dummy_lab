@@ -74,18 +74,15 @@ from trajectory_planner.trajectory_utils import (  # noqa: E402
     compress_duplicate_waypoints,
     prepare_playback_trajectory,
 )
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    root = _repo_root()
+    root = repo_root()
     default_env = root / "physical_env" / "packaging_station_edit.obj"
     parser = argparse.ArgumentParser(description="iLQR joint-space plan and PyBullet demo.")
     parser.add_argument("--root", type=Path, default=root)
-    parser.add_argument("--robot", type=str, default="Dummy_ros2")
+    parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT)
     parser.add_argument("--env", type=Path, default=default_env)
     parser.add_argument("--targets", type=Path, default=targets_path())
     parser.add_argument("--mesh-scale", type=float, default=1.0)

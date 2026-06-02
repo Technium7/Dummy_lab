@@ -30,10 +30,7 @@ from trajectory_planner.scene import (  # noqa: E402
     pose_error_rad,
     set_joint_positions,
 )
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
 
 def robot_deg_to_sim_rad(joints_deg: Sequence[float]) -> List[float]:
@@ -52,10 +49,10 @@ class PoseError:
 def fk_scene(
     *,
     root: Path | None = None,
-    robot_hint: str = "Dummy_ros2",
+    robot_hint: str = DEFAULT_ROBOT,
     env_rel: str = "physical_env/packaging_station_edit.obj",
 ) -> Iterator[PlanningScene]:
-    root = root or _repo_root()
+    root = root or repo_root()
     env = root / env_rel
     descs = discover_descriptions(root)
     selected = choose_description(descs, robot_hint, root)

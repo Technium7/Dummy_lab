@@ -1,4 +1,4 @@
-"""PyBullet preview: Dummy_ros2 (or chosen URDF) at world origin with a static OBJ environment.
+"""PyBullet preview: default gripper URDF (or chosen URDF) at world origin with a static OBJ environment.
 
 Usage — path depends on current directory:
 
@@ -8,7 +8,7 @@ Usage — path depends on current directory:
   From software/ (do not prefix another software/):
     python trajectory_planner/env_robot_preview.py
 
-  Options (same either way): --robot Dummy_ros2  --env ../physical_env/packaging_station_edit.obj
+  Options (same either way): --env ../physical_env/packaging_station_edit.obj
 
 Robot base is placed at (0,0,0) in the same frame as the environment mesh (OBJ vertex coordinates).
 """
@@ -39,18 +39,15 @@ from movement_sim.joint_controller import (  # noqa: E402
     joint_limits_or_defaults,
     materialize_urdf,
 )
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
-    root = _repo_root()
+    root = repo_root()
     default_env = root / "physical_env" / "packaging_station_edit.obj"
     parser = argparse.ArgumentParser(description="Preview robot + static OBJ environment in PyBullet.")
     parser.add_argument("--root", type=Path, default=root, help="Workspace root for URDF discovery.")
-    parser.add_argument("--robot", type=str, default="Dummy_ros2", help="URDF/Xacro path or name filter.")
+    parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT, help="URDF/Xacro path or name filter.")
     parser.add_argument("--env", type=Path, default=default_env, help="Wavefront .obj for the static scene.")
     parser.add_argument("--mesh-scale", type=float, default=1.0, help="Uniform scale applied to the OBJ mesh.")
     parser.add_argument("--fixed-base", action="store_true", default=True, help="Load robot with fixed base.")

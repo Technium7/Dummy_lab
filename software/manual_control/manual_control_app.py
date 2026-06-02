@@ -2,16 +2,22 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from pathlib import Path
 
+_SOFTWARE_DIR = Path(__file__).resolve().parent.parent
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+
 from controller_runtime import launch_controller
+from robot_config import DEFAULT_ROBOT, repo_root
 from urdf_tools import build_package_map, choose_description, discover_descriptions, materialize_urdf
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manual control runtime (modular).")
-    parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument("--robot", type=str, default="")
+    parser.add_argument("--root", type=Path, default=repo_root())
+    parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT)
     parser.add_argument("--fixed-base", action="store_true", default=True)
     parser.add_argument("--floating-base", action="store_true")
     parser.add_argument("--end-link", type=str, default="")

@@ -53,10 +53,7 @@ from movement_sim.joint_controller import (  # noqa: E402
     discover_descriptions,
     materialize_urdf,
 )
-
-
-def _repo_root() -> Path:
-    return Path(__file__).resolve().parent.parent.parent
+from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
 
 # Base orientation: 180° about world Z (align sim with physical robot).
@@ -64,13 +61,13 @@ _BASE_ORIENTATION_Z_180 = p.getQuaternionFromEuler([0.0, 0.0, math.pi])
 
 
 def parse_args() -> argparse.Namespace:
-    root = _repo_root()
+    root = repo_root()
     default_env = root / "physical_env" / "packaging_station_edit.obj"
     parser = argparse.ArgumentParser(
         description="Sim robot + OBJ environment with end-effector IK control."
     )
     parser.add_argument("--root", type=Path, default=root, help="Workspace root for URDF discovery.")
-    parser.add_argument("--robot", type=str, default="Dummy_ros2", help="URDF/Xacro path or name filter.")
+    parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT, help="URDF/Xacro path or name filter.")
     parser.add_argument("--env", type=Path, default=default_env, help="Wavefront .obj for the static scene.")
     parser.add_argument("--mesh-scale", type=float, default=1.0, help="Uniform scale applied to the OBJ mesh.")
     parser.add_argument("--fixed-base", action="store_true", default=True, help="Load robot with fixed base.")

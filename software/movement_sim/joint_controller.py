@@ -2,13 +2,13 @@
 
 Usage:
   python software/movement_sim/joint_controller.py
-  python software/movement_sim/joint_controller.py --robot Dummy_ros2
-  python software/movement_sim/joint_controller.py --robot software/movement_sim/Dummy_ros2_description/urdf/Dummy_ros2.xacro
+  python software/movement_sim/joint_controller.py --robot Dummy_ros2_gripper
 """
 
 from __future__ import annotations
 
 import argparse
+import sys
 import json
 import math
 import re
@@ -27,6 +27,11 @@ try:
 except ImportError as exc:
     raise SystemExit("Missing dependency: pybullet. Install with: pip install pybullet") from exc
 
+_SOFTWARE_DIR = Path(__file__).resolve().parent.parent
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+
+from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
 IGNORED_DIR_NAMES = {
     ".git",
@@ -42,8 +47,8 @@ IGNORED_DIR_NAMES = {
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Visualize URDF/Xacro and control joints with GUI sliders.")
-    parser.add_argument("--root", type=Path, default=Path.cwd(), help="Workspace root to search recursively for .urdf/.xacro files.")
-    parser.add_argument("--robot", type=str, default="", help="URDF/Xacro path, or a case-insensitive name filter.")
+    parser.add_argument("--root", type=Path, default=repo_root(), help="Workspace root to search recursively for .urdf/.xacro files.")
+    parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT, help="URDF/Xacro path, or a case-insensitive name filter.")
     parser.add_argument("--fixed-base", action="store_true", default=True, help="Load robot as fixed base (default: true).")
     parser.add_argument("--floating-base", action="store_true", help="Override and allow robot base to move under gravity.")
     parser.add_argument("--collision-check", choices=("off", "warn", "stop"), default="warn", help="Self-collision behavior when links interpenetrate: off, warn, or stop.")

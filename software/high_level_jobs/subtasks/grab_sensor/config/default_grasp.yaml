@@ -62,7 +62,7 @@ approach:
 paths:
   env: physical_env/packaging_station_edit.obj
   mesh_scale: 1.0
-  robot: Dummy_ros2
+  robot: Dummy_ros2_gripper
   end_link: ""
   save_debug_dir: software/high_level_jobs/subtasks/grab_sensor/debug
 

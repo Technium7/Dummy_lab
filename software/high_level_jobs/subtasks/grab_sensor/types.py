@@ -1,10 +1,17 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal, Mapping, Tuple
 
 import numpy as np
+
+_SOFTWARE_DIR = Path(__file__).resolve().parents[3]
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+
+from robot_config import DEFAULT_ROBOT_NAME  # noqa: E402
 
 GraspOrientationMode = Literal["follow_object", "fixed_robot"]
 VisionMode = Literal["depth_segment", "yolo_grasp"]
@@ -92,7 +99,7 @@ class GrabSensorConfig:
     fixed_grasp_rpy_robot_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     env_path: Path = field(default_factory=lambda: Path("physical_env/packaging_station_edit.obj"))
     mesh_scale: float = 1.0
-    robot_name: str = "Dummy_ros2"
+    robot_name: str = DEFAULT_ROBOT_NAME
     end_link: str = ""
     enable_collision: bool = False
     plan_seed: int = 42
@@ -206,7 +213,7 @@ class GrabSensorConfig:
             fixed_grasp_rpy_robot_deg=fixed_rpy,  # type: ignore[arg-type]
             env_path=env_path,
             mesh_scale=float(paths_raw.get("mesh_scale", 1.0)),
-            robot_name=str(paths_raw.get("robot", "Dummy_ros2")),
+            robot_name=str(paths_raw.get("robot", DEFAULT_ROBOT_NAME)),
             end_link=str(paths_raw.get("end_link", "")),
             enable_collision=bool(data.get("enable_collision", False)),
             plan_seed=int(data.get("plan_seed", 42)),
