@@ -12,19 +12,25 @@ import argparse
 import serial
 import sys
 import time
+from pathlib import Path
+
+_SOFTWARE_DIR = Path(__file__).resolve().parents[1]
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+from robot_config import default_robot_port
 
 
 class RobotAsciiInterface:
-    def __init__(self, port='COM3', baudrate=115200, timeout=1.0):
+    def __init__(self, port: str | None = None, baudrate=115200, timeout=1.0):
         """
         Initialize serial connection to robot.
         
         Args:
-            port: Serial port name (default: COM3)
+            port: Serial port name (default: platform-specific; see robot_config.default_robot_port)
             baudrate: Baud rate (default: 115200)
             timeout: Read timeout in seconds (default: 1.0)
         """
-        self.port = port
+        self.port = port if port is not None else default_robot_port()
         self.baudrate = baudrate
         self.timeout = timeout
         self.ser = None
@@ -491,7 +497,12 @@ def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Open serial and type raw ASCII robot commands (e.g. #OFFSET_J 1, !START)."
     )
-    parser.add_argument("--port", type=str, default="COM3", help="Serial port (default COM3)")
+    parser.add_argument(
+        "--port",
+        type=str,
+        default=default_robot_port(),
+        help="Serial port (env ROBOT_PORT; Linux default /dev/ttyACM0 or auto-detect)",
+    )
     parser.add_argument("--baudrate", type=int, default=115200, help="Baud rate")
     parser.add_argument("--timeout", type=float, default=1.0, help="Serial read timeout (seconds)")
     parser.add_argument(

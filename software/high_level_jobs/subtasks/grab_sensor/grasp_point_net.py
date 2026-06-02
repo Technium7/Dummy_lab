@@ -286,7 +286,7 @@ def _resolve_training_bbox(
 
     if yolo_model_path is not None and yolo_model_path.is_file():
         try:
-            from .types import YoloConfig
+            from .models import YoloConfig
             from .yolo_detect import detect_sensor_bbox
 
             yolo_cfg = YoloConfig(

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+
+from robot_config import default_robot_port
 from typing import Any, Mapping
 
 from high_level_jobs.subtasks.robot_actions import _get_or_create_robot, _v
@@ -103,7 +105,7 @@ def grab_sensor_execute(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
         _v(ctx, "[dry-run] grab_sensor_execute: would stream trajectory + close gripper")
         return
 
-    port = str(params.get("port") or ctx.get("robot_port") or "COM3")
+    port = str(params.get("port") or ctx.get("robot_port") or default_robot_port())
     baud = int(params.get("baudrate") or ctx.get("robot_baudrate") or 115200)
     robot = _get_or_create_robot(ctx, port, baud)
     if not robot.ser or not robot.ser.is_open:
@@ -124,7 +126,7 @@ def grab_sensor(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
         _v(ctx, "[dry-run] grab_sensor: detect + plan + execute (no hardware)")
         return
 
-    port = str(params.get("port") or ctx.get("robot_port") or "COM3")
+    port = str(params.get("port") or ctx.get("robot_port") or default_robot_port())
     baud = int(params.get("baudrate") or ctx.get("robot_baudrate") or 115200)
     robot = ctx.get("robot")
     exec_params = dict(params)

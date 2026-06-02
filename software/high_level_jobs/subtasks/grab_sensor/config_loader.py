@@ -6,7 +6,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from .types import GrabSensorConfig
+from .models import GrabSensorConfig
 
 
 def default_config_path() -> Path:

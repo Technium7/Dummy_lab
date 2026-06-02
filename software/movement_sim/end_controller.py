@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--floating-base",
         action="store_true",
-        help="Override and allow robot base to move under gravity.",
+        help="Override and allow robot base to move (not fixed to the world).",
     )
     parser.add_argument(
         "--end-link",
@@ -605,7 +605,7 @@ def launch_end_controller(
             p.setAdditionalSearchPath(str(path))
 
     p.resetSimulation()
-    p.setGravity(0, 0, -9.81)
+    p.setGravity(0, 0, 0)
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
     plane_path = Path(pybullet_data.getDataPath()) / "plane.urdf"
     if plane_path.exists():

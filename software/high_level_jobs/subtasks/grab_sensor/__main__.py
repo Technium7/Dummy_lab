@@ -12,13 +12,14 @@ if str(_SOFTWARE_DIR) not in sys.path:
 from high_level_jobs.subtasks.grab_sensor.config_loader import default_config_path, load_grab_sensor_config
 from high_level_jobs.subtasks.grab_sensor.pipeline import run_grab_sensor_pipeline
 from robot_ascii_interface import RobotAsciiInterface
+from robot_config import default_robot_port
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Detect sensor with D415, plan grasp, optionally execute.")
     p.add_argument("--config", type=Path, default=default_config_path())
     p.add_argument("--execute", action="store_true", help="Stream plan to robot and close gripper")
-    p.add_argument("--port", default=os.environ.get("ROBOT_PORT", "COM3"))
+    p.add_argument("--port", default=default_robot_port())
     p.add_argument("--baudrate", type=int, default=int(os.environ.get("ROBOT_BAUDRATE", "115200")))
     p.add_argument("--color-file", type=Path, default=None, help="Offline test from saved capture")
     p.add_argument("--depth-file", type=Path, default=None)

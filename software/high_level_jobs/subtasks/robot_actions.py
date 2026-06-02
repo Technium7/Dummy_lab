@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from typing import Any, Callable, Mapping
 
+from robot_config import default_robot_port
+
 logger = logging.getLogger(__name__)
 
 
@@ -27,7 +29,7 @@ def robot_check_connected(params: Mapping[str, Any], ctx: dict[str, Any]) -> Non
       port, baudrate — override ctx robot_port / robot_baudrate
       auto_connect — default True: call connect() if not open
     """
-    port = str(params.get("port") or ctx.get("robot_port") or "COM3")
+    port = str(params.get("port") or ctx.get("robot_port") or default_robot_port())
     baud = int(params.get("baudrate") or ctx.get("robot_baudrate") or 115200)
     auto = bool(params.get("auto_connect", True))
 
@@ -84,8 +86,8 @@ def robot_home(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     if robot is None or not robot.ser or not robot.ser.is_open:
         raise RuntimeError("Robot not connected")
 
-    cmd_wait = int(params.get("command_wait_ms", 1500))
-    extra_read = float(params.get("read_extra_sec", 30.0))
+    cmd_wait = int(params.get("command_wait_ms", 500))
+    extra_read = float(params.get("read_extra_sec", 20.0))
     resp = robot.home(wait_ms=cmd_wait, extra_read_sec=extra_read)
     if resp is None:
         raise RuntimeError("!HOME returned no response")

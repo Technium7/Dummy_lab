@@ -50,7 +50,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--root", type=Path, default=repo_root(), help="Workspace root to search recursively for .urdf/.xacro files.")
     parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT, help="URDF/Xacro path, or a case-insensitive name filter.")
     parser.add_argument("--fixed-base", action="store_true", default=True, help="Load robot as fixed base (default: true).")
-    parser.add_argument("--floating-base", action="store_true", help="Override and allow robot base to move under gravity.")
+    parser.add_argument("--floating-base", action="store_true", help="Override and allow robot base to move (not fixed to the world).")
     parser.add_argument("--collision-check", choices=("off", "warn", "stop"), default="warn", help="Self-collision behavior when links interpenetrate: off, warn, or stop.")
     parser.add_argument("--penetration-threshold", type=float, default=1e-4, help="Minimum penetration depth in meters to report (default: 1e-4).")
     parser.add_argument("--status-window", action="store_true", help=argparse.SUPPRESS)
@@ -353,7 +353,7 @@ def launch_viewer(
             p.setAdditionalSearchPath(str(path))
 
     p.resetSimulation()
-    p.setGravity(0, 0, -9.81)
+    p.setGravity(0, 0, 0)
     p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
     plane_path = Path(pybullet_data.getDataPath()) / "plane.urdf"
     if plane_path.exists():

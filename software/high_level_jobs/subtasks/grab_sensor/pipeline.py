@@ -14,7 +14,7 @@ from .grasp import compute_grasp_targets
 from .plan_motion import plan_approach_and_grasp
 from .pose import detect_table_object
 from .segment import segment_table_object
-from .types import GrabSensorConfig, GraspTargets, VisionMode
+from .models import GrabSensorConfig, GraspTargets, VisionMode
 from .visualize import save_grasp_overlay
 from .yolo_grasp import detect_with_yolo_grasp
 

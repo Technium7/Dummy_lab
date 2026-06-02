@@ -7,17 +7,22 @@ import sys
 from pathlib import Path
 from typing import Any
 
+_SOFTWARE_DIR = Path(__file__).resolve().parent.parent
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+
 from high_level_jobs.llm_client import OllamaClient, OpenAICompatClient
 from high_level_jobs.nl_compiler import compile_natural_language, load_prompt, save_job_yaml
 from high_level_jobs.runner import run_job, run_job_file
 from high_level_jobs.subtasks.registry import default_registry
+from robot_config import default_robot_port
 
 
 def _robot_cli_flags(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--robot-port",
-        default=os.environ.get("ROBOT_PORT", "COM3"),
-        help="Serial port for robot_check_connected default (env ROBOT_PORT).",
+        default=default_robot_port(),
+        help="Serial port for robot_check_connected (env ROBOT_PORT; auto-detect on Linux).",
     )
     parser.add_argument(
         "--robot-baudrate",

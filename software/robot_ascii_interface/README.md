@@ -28,7 +28,7 @@ Options:
 
 | Option | Default | Meaning |
 |--------|---------|---------|
-| `--port` | `COM3` | Serial device (Windows: `COMn`; Linux/macOS: e.g. `/dev/ttyUSB0`) |
+| `--port` | platform default | `COM3` (Windows), `/dev/ttyACM0` or auto-detect (Linux); override with `ROBOT_PORT` |
 | `--baudrate` | `115200` | Baud rate |
 | `--timeout` | `1.0` | Serial read timeout (seconds) |
 | `--send-wait-ms` | `200` | Delay after sending a line before reading the reply; increase if you often see timeouts |

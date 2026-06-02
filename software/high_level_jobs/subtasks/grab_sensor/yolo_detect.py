@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 
-from .types import YoloConfig
+from .models import YoloConfig
 
 
 @dataclass(frozen=True)

@@ -25,7 +25,7 @@ from trajectory_planner.scene import (  # noqa: E402
 )
 from trajectory_planner.trajectory_utils import compress_duplicate_waypoints  # noqa: E402
 
-from .types import GrabSensorConfig, GraspTargets
+from .models import GrabSensorConfig, GraspTargets
 
 
 def _repo_root() -> Path:

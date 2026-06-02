@@ -19,7 +19,7 @@ from trajectory_run.run_planned_trajectory import (  # noqa: E402
     stream_waypoints_deg,
 )
 
-from .types import GrabSensorConfig, GraspTargets
+from .models import GrabSensorConfig, GraspTargets
 
 
 def ensure_robot_ready(

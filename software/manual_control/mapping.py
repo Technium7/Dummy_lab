@@ -41,3 +41,13 @@ def deg_speed_to_ascii_speed(v_deg_per_s_list: Sequence[float]) -> float:
     max_ascii = MAX_SPEED * DOMINANT_REDUCTION / 36.0
     return clamp(demand, min_ascii, max_ascii)
 
+
+def max_ascii_speed() -> float:
+    """Peak ``&`` speed field for streaming moves (deg/s at the protocol layer)."""
+    return deg_speed_to_ascii_speed([MAX_SPEED] * 6)
+
+
+def home_stream_ascii_speed() -> float:
+    """Use when driving the robot to HOME via streamed waypoints (``T`` latch)."""
+    return max_ascii_speed()
+

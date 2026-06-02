@@ -10,7 +10,7 @@ import numpy as np
 from .capture import CaptureResult
 from .grasp_point_net import crop_region, load_grasp_model, predict_grasp_uv
 from .pose import backproject_mask_to_points_cam, estimate_object_pose_pca
-from .types import GrabSensorConfig, TableObjectDetection
+from .models import GrabSensorConfig, TableObjectDetection
 from .yolo_detect import YoloDetection, detect_sensor_bbox
 
 

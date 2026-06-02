@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw, ImageFont
 from .capture import CaptureResult
 from .grasp import camera_to_robot_matrix
 from .transforms import invert_transform, pose_to_matrix
-from .types import GrabSensorConfig, GraspTargets, TableObjectDetection
+from .models import GrabSensorConfig, GraspTargets, TableObjectDetection
 
 
 def _require_cv2():

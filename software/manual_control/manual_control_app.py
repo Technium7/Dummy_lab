@@ -10,7 +10,7 @@ if str(_SOFTWARE_DIR) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_DIR))
 
 from controller_runtime import launch_controller
-from robot_config import DEFAULT_ROBOT, repo_root
+from robot_config import DEFAULT_ROBOT, default_robot_port, repo_root
 from urdf_tools import build_package_map, choose_description, discover_descriptions, materialize_urdf
 
 
@@ -25,14 +25,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--angular-speed-deg", type=float, default=12.0)
     parser.add_argument("--joint-vel-limit", type=float, default=0.0)
     parser.add_argument("--sim-hz", type=float, default=480.0)
-    parser.add_argument("--speed-factor", type=float, default=2.0)
+    parser.add_argument(
+        "--speed-factor",
+        type=float,
+        default=1.0,
+        help="Sim time multiplier (>1 runs sim faster than real time; 1 keeps sim in sync with wall clock).",
+    )
     parser.add_argument("--rotation-weight", type=float, default=8.0)
     parser.add_argument("--joint-force", type=float, default=2000.0)
     parser.add_argument("--ik-damping", type=float, default=0.05)
-    parser.add_argument("--port", type=str, default="COM3")
+    parser.add_argument("--port", type=str, default=default_robot_port())
     parser.add_argument("--baudrate", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=0.4)
-    parser.add_argument("--control-dt-ms", type=float, default=60.0)
+    parser.add_argument(
+        "--control-dt-ms",
+        type=float,
+        default=20.0,
+        help="Period between robot & waypoints in ms (lower = less lag; min 20).",
+    )
+    parser.add_argument(
+        "--no-home-firmware",
+        action="store_true",
+        help="T key only streams HOME joints; default also sends firmware !HOME in the background.",
+    )
     return parser.parse_args()
 
 
@@ -48,7 +63,7 @@ def main() -> None:
     print(f"Loading URDF: {urdf_path}")
     if selected.suffix.lower() == ".xacro":
         urdf_text = urdf_path.read_text(encoding="utf-8")
-        if len(re.findall(r"<joint\\b", urdf_text)) == 0:
+        if len(re.findall(r"<joint\b", urdf_text)) == 0:
             print("Warning: resolved URDF has 0 joints. IK control will not work.")
     search_paths = {root, selected.parent, urdf_path.parent, *package_map.values()}
     try:
@@ -69,6 +84,7 @@ def main() -> None:
             baudrate=args.baudrate,
             timeout=args.timeout,
             control_dt_ms=args.control_dt_ms,
+            home_use_firmware=not args.no_home_firmware,
         )
     finally:
         if temp_file and temp_file.exists():

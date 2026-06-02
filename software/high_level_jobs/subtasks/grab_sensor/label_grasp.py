@@ -46,7 +46,7 @@ def _require_cv2_gui():
     if gui_match and gui_match.group(1).upper() == "NONE":
         raise SystemExit(
             "OpenCV was built without GUI support (opencv-python-headless).\n"
-            "Windows needs the full package:\n"
+            "Install the GUI build:\n"
             "  pip uninstall opencv-python-headless -y\n"
             "  pip install opencv-python"
         )

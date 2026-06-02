@@ -5,7 +5,7 @@ from typing import Any, Tuple
 import numpy as np
 
 from .transforms import matrix_to_rpy_rad
-from .types import TableObjectDetection
+from .models import TableObjectDetection
 
 
 def backproject_mask_to_points_cam(

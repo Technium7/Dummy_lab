@@ -22,6 +22,7 @@ from manual_control.mapping import (  # noqa: E402
     sim_rad_to_transformed_deg,
 )
 from robot_ascii_interface import RobotAsciiInterface  # noqa: E402
+from robot_config import default_robot_port  # noqa: E402
 from trajectory_run.plan_loader import default_plan_path, load_plan_npz, load_planned_trajectory_rad  # noqa: E402
 from trajectory_run.quintic_spline import (  # noqa: E402
     smooth_and_retime_waypoints,
@@ -518,7 +519,12 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run cached planner trajectory on the physical robot (home<->goal repeats)."
     )
-    parser.add_argument("--port", type=str, default="COM3", help="Serial port (default COM3)")
+    parser.add_argument(
+        "--port",
+        type=str,
+        default=None,
+        help="Serial port (default: ROBOT_PORT env or platform default)",
+    )
     parser.add_argument("--baudrate", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=1.0, help="Serial read timeout (s)")
     parser.add_argument(
@@ -669,6 +675,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    port = args.port or default_robot_port()
     if args.once or args.forward_only:
         args.repeats = 1
     if args.interval_ms <= 0:
@@ -723,9 +730,9 @@ def main() -> None:
             print(f"Planned leg duration: {planned_duration_s:.2f} s")
         return
 
-    robot = RobotAsciiInterface(port=args.port, baudrate=args.baudrate, timeout=args.timeout)
+    robot = RobotAsciiInterface(port=port, baudrate=args.baudrate, timeout=args.timeout)
     if not robot.connect():
-        raise SystemExit(f"Failed to connect on {args.port}")
+        raise SystemExit(f"Failed to connect on {port}")
 
     try:
         print(f"!STOP  -> {robot.stop()}")

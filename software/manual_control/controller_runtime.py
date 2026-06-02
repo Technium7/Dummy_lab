@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import math
 import sys
+import threading
 import time
 from pathlib import Path
-from typing import Iterable, List
+from typing import Iterable, List, Optional
 
 import pybullet as p
 import pybullet_data
@@ -13,6 +14,7 @@ from ik_core import compute_dls_joint_velocity, get_controllable_joints, is_key_
 from mapping import (
     HOME_JOINTS_DEG,
     deg_speed_to_ascii_speed,
+    home_stream_ascii_speed,
     sim_rad_to_transformed_deg,
     sim_vel_rad_to_transformed_deg_s,
     transformed_deg_to_sim_rad,
@@ -48,6 +50,7 @@ def launch_controller(
     baudrate: int,
     timeout: float,
     control_dt_ms: float,
+    home_use_firmware: bool = True,
 ) -> None:
     cid = p.connect(p.GUI)
     if cid < 0:
@@ -106,11 +109,14 @@ def launch_controller(
     damping = max(1e-6, ik_damping)
     control_dt_s = max(0.02, float(control_dt_ms) / 1000.0)
     next_robot_tick = time.perf_counter()
+    last_robot_send_s = time.perf_counter()
+    stream_pose_deg: Optional[List[float]] = None
+    home_stream_speed = home_stream_ascii_speed()
 
-    speed_scale = 0.14
-    speed_scale_min = 0.14
+    speed_scale = 0.4
+    speed_scale_min = 0.4
     speed_scale_max = 2.5
-    speed_scale_rise_per_sec = 1.8
+    speed_scale_rise_per_sec = 2.5
     hold_target_deg: List[float] | None = None
     home_latch_until_s = 0.0
     last_hand_open_s = 0.0
@@ -182,7 +188,18 @@ def launch_controller(
                 for local_idx, joint_idx in enumerate(joint_indices[:6]):
                     p.resetJointState(robot_id, joint_idx, targetValue=transformed_deg_to_sim_rad(local_idx, HOME_JOINTS_DEG[local_idx]), targetVelocity=0.0)
                 hold_target_deg = HOME_JOINTS_DEG[:]
-                home_latch_until_s = time.perf_counter() + 1.2
+                stream_pose_deg = None
+                home_latch_until_s = time.perf_counter() + 25.0
+                if home_use_firmware:
+
+                    def _firmware_home() -> None:
+                        try:
+                            resp = robot.home(wait_ms=500, extra_read_sec=20.0)
+                            print(f"[Robot] !HOME -> {resp}")
+                        except Exception as exc:
+                            print(f"[Robot] !HOME failed: {exc}")
+
+                    threading.Thread(target=_firmware_home, name="robot-home", daemon=True).start()
 
             all_joint_positions = [float(p.getJointState(robot_id, j)[0]) for j in all_joint_indices]
             transformed_joint_positions_deg = [sim_rad_to_transformed_deg(idx, pos) for idx, pos in enumerate(all_joint_positions)]
@@ -192,7 +209,10 @@ def launch_controller(
             elif moving_key_down:
                 hold_target_deg = None
                 robot_target_deg = transformed_joint_positions_deg[:6]
+                if stream_pose_deg is None:
+                    stream_pose_deg = list(transformed_joint_positions_deg[:6])
             else:
+                stream_pose_deg = None
                 if hold_target_deg is None:
                     hold_target_deg = transformed_joint_positions_deg[:6]
                 robot_target_deg = hold_target_deg
@@ -219,15 +239,27 @@ def launch_controller(
             speed_cmd = deg_speed_to_ascii_speed(transformed_vel_deg_s + [0.0] * max(0, 6 - len(transformed_vel_deg_s)))
             now = time.perf_counter()
             if now >= next_robot_tick and len(robot_target_deg) >= 6:
+                if moving_key_down and not home_latched and stream_pose_deg is not None:
+                    dt_send = max(1e-6, now - last_robot_send_s)
+                    for j in range(6):
+                        stream_pose_deg[j] += (
+                            sim_vel_rad_to_transformed_deg_s(j, commanded_velocity[j]) * dt_send
+                        )
+                    send_pose = stream_pose_deg
+                else:
+                    send_pose = robot_target_deg
+
+                send_speed = home_stream_speed if home_latched else speed_cmd
                 robot.send_trajectory_point_async(
-                    robot_target_deg[0],
-                    robot_target_deg[1],
-                    robot_target_deg[2],
-                    robot_target_deg[3],
-                    robot_target_deg[4],
-                    robot_target_deg[5],
-                    speed_cmd,
+                    send_pose[0],
+                    send_pose[1],
+                    send_pose[2],
+                    send_pose[3],
+                    send_pose[4],
+                    send_pose[5],
+                    send_speed,
                 )
+                last_robot_send_s = now
                 next_robot_tick = now + control_dt_s
 
             time.sleep(step_sleep)

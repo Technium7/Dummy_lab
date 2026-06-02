@@ -4,7 +4,7 @@ from typing import Tuple
 
 import numpy as np
 
-from .types import SegmentationConfig
+from .models import SegmentationConfig
 
 
 def _morph_close_open(mask: np.ndarray, kernel_px: int) -> np.ndarray:

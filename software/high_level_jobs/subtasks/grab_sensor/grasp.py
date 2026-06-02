@@ -6,7 +6,7 @@ from typing import Any
 import numpy as np
 
 from .transforms import compose_transforms, decompose_matrix, offset_in_local_frame, pose_to_matrix
-from .types import CameraToRobot, GrabSensorConfig, GraspTargets, TableObjectDetection
+from .models import CameraToRobot, GrabSensorConfig, GraspTargets, TableObjectDetection
 
 
 def camera_to_robot_matrix(mount: CameraToRobot) -> np.ndarray:
