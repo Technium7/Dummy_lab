@@ -1,0 +1,99 @@
+{
+  "centroid_cam_m": [
+    0.16873091460236897,
+    0.04015886874677425,
+    0.5260000249836594
+  ],
+  "object_rpy_cam_deg": [
+    0.0,
+    0.0,
+    0.0
+  ],
+  "object_yaw_cam_deg": 0.0,
+  "n_points": 33443,
+  "bbox_xy": [
+    406,
+    195,
+    204,
+    173
+  ],
+  "grasp_pos_robot_m": [
+    0.18126908539763095,
+    -0.5260000249836594,
+    0.3798411312532257
+  ],
+  "grasp_rpy_robot_deg": [
+    0.0,
+    90.0,
+    0.0
+  ],
+  "pre_grasp_pos_robot_m": [
+    0.10126908539763095,
+    -0.5260000249836594,
+    0.3798411312532257
+  ],
+  "pre_grasp_rpy_robot_deg": [
+    -0.0,
+    90.0,
+    0.0
+  ],
+  "grasp_orientation_mode": "fixed_robot",
+  "debug": {
+    "object_yaw_cam_deg": 0.0,
+    "grasp_orientation_mode": "fixed_robot",
+    "n_points": 33443,
+    "bbox_xy": [
+      406,
+      195,
+      204,
+      173
+    ],
+    "object_pos_robot_m": [
+      0.1813,
+      -0.526,
+      0.3798
+    ],
+    "grasp_pos_robot_m": [
+      0.1813,
+      -0.526,
+      0.3798
+    ],
+    "grasp_rpy_robot_deg": [
+      0.0,
+      90.0,
+      0.0
+    ],
+    "pre_grasp_rpy_deg": [
+      -0.0,
+      90.0,
+      0.0
+    ],
+    "vision_mode": "yolo_grasp",
+    "yolo_confidence": 0.969601571559906,
+    "yolo_class": "sensor",
+    "yolo_bbox_xy": [
+      406,
+      195,
+      204,
+      173
+    ],
+    "grasp_uv": [
+      510,
+      281
+    ],
+    "grasp_cam_m": [
+      0.1687,
+      0.0402,
+      0.526
+    ],
+    "crop_origin": [
+      390,
+      179
+    ],
+    "grasp_uv_crop": [
+      120,
+      102
+    ],
+    "grasp_source": "crop_rgbd"
+  }
+}
