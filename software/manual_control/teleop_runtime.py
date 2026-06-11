@@ -9,8 +9,15 @@ from typing import Callable, Iterable, Protocol
 import pybullet as p
 import pybullet_data
 
-from manual_control.ik_core import end_link_name, get_controllable_joints, get_end_link_pose, resolve_end_link
-from manual_control.mapping import sim_rad_to_transformed_deg, transformed_deg_to_sim_rad
+from manual_control.ik_core import (
+    abc_relative_to_semantic_home,
+    end_link_name,
+    get_controllable_joints,
+    get_end_link_pose_robot_frame,
+    measure_home_abc_reference,
+    resolve_end_link,
+)
+from manual_control.mapping import HOME_JOINTS_DEG, sim_rad_to_transformed_deg, transformed_deg_to_sim_rad
 from manual_control.robot_control_thread import RobotControlThread, ThreadSafeRobotProxy
 from manual_control.end_link_window import EndLinkPoseWindow
 from manual_control.sim_setup import configure_pybullet_gui, load_ground_plane, load_robot_urdf, refresh_pybullet_display
@@ -174,6 +181,9 @@ def run_teleop_session(
     )
     key_input = keys if keys is not None else PyBulletKeyInput()
     robot_for_hook = robot_control.proxy if hook is not None else None
+    home_abc_ref = measure_home_abc_reference(
+        robot_id, end_link_idx, joint_indices, HOME_JOINTS_DEG
+    )
 
     try:
         while p.isConnected():
@@ -210,12 +220,13 @@ def run_teleop_session(
                     joint_display,
                 )
                 if end_link_gui is not None:
-                    pos, rpy = get_end_link_pose(robot_id, end_link_idx)
+                    pos, abc = get_end_link_pose_robot_frame(robot_id, end_link_idx)
+                    abc = abc_relative_to_semantic_home(abc, home_abc_ref)
                     end_link_gui.update(
                         link_name=end_link_label,
                         link_index=end_link_idx,
                         position_m=pos,
-                        rpy_rad=rpy,
+                        abc_deg=abc,
                     )
             if hook is not None:
                 if not hook.after_tick(tick, robot=robot_for_hook, now=time.perf_counter(), events=events):

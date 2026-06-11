@@ -1,0 +1,4 @@
+# ST-Link/V2 programmer (STM32 flash)
+# Install: sudo cp hardware/99-stlink.rules /etc/udev/rules.d/
+#          sudo udevadm control --reload-rules && sudo udevadm trigger
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0483", ATTRS{idProduct}=="3748", MODE="0666", GROUP="plugdev"

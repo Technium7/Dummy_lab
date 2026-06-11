@@ -26,7 +26,7 @@ DummyRobot::DummyRobot(CAN_HandleTypeDef* _hcan) :
     motorJ[3] = new CtrlStepMotor(_hcan, 3, true, 50, 35, 180);
     motorJ[4] = new CtrlStepMotor(_hcan, 4, true, 50, -180, 180);
     motorJ[5] = new CtrlStepMotor(_hcan, 5, true, 50, -120, 120);
-    motorJ[6] = new CtrlStepMotor(_hcan, 6, true, 50, -180, 180);
+    motorJ[6] = new CtrlStepMotor(_hcan, 6, true, 30, -180, 180);
     hand2 = new StepHand(_hcan, 7);
 
     dof6Solver = new DOF6Kinematic(0.134f, 0.035f, 0.146f, 0.117f, 0.052f, 0.0625f);

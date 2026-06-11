@@ -1,0 +1,6 @@
+cd ~/Desktop/Dummy_lab/firmware/dummy-ref-core-fw
+rm -rf build && mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release -G "Unix Makefiles"
+cmake --build . -j$(nproc)
+st-flash write Core-STM32F4-fw.bin 0x08000000
+st-flash reset

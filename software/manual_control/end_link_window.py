@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import math
 import multiprocessing as mp
 from typing import Optional, Sequence
 
@@ -15,19 +14,19 @@ def end_link_gui_process_main(queue_obj) -> None:
         return
     root = tk.Tk()
     root.title("End Link Pose")
-    root.geometry("520x220")
+    root.geometry("540x240")
     frame = tk.Frame(root, padx=12, pady=12)
     frame.pack(fill="both", expand=True)
 
     title_var = tk.StringVar(value="End link: (waiting)")
-    pos_var = tk.StringVar(value="Position (m):  —")
-    rpy_deg_var = tk.StringVar(value="Rotation RPY (deg):  —")
-    rpy_rad_var = tk.StringVar(value="Rotation RPY (rad):  —")
+    pos_var = tk.StringVar(value="Position (robot frame, m):  —")
+    abc_var = tk.StringVar(value="Orientation A/B/C (deg):  —")
+    note_var = tk.StringVar(value="HOME → A=0, B=0, C=180 (#GETLPOS convention)")
 
     tk.Label(frame, textvariable=title_var, font=("Helvetica", 13, "bold"), anchor="w").pack(fill="x")
     tk.Label(frame, textvariable=pos_var, anchor="w", font=("Consolas", 12)).pack(fill="x", pady=(10, 4))
-    tk.Label(frame, textvariable=rpy_deg_var, anchor="w", font=("Consolas", 12)).pack(fill="x", pady=(2, 4))
-    tk.Label(frame, textvariable=rpy_rad_var, anchor="w", font=("Consolas", 10), fg="#444444").pack(fill="x")
+    tk.Label(frame, textvariable=abc_var, anchor="w", font=("Consolas", 12)).pack(fill="x", pady=(2, 4))
+    tk.Label(frame, textvariable=note_var, anchor="w", font=("Helvetica", 10), fg="#444444").pack(fill="x")
 
     def poll() -> None:
         while True:
@@ -45,8 +44,7 @@ def end_link_gui_process_main(queue_obj) -> None:
                 return
             title_var.set(str(msg.get("title", title_var.get())))
             pos_var.set(str(msg.get("position", pos_var.get())))
-            rpy_deg_var.set(str(msg.get("rotation_deg", rpy_deg_var.get())))
-            rpy_rad_var.set(str(msg.get("rotation_rad", rpy_rad_var.get())))
+            abc_var.set(str(msg.get("orientation_abc", abc_var.get())))
         root.after(50, poll)
 
     poll()
@@ -54,7 +52,7 @@ def end_link_gui_process_main(queue_obj) -> None:
 
 
 class EndLinkPoseWindow:
-    """Separate Tk window for end-effector position and orientation."""
+    """Separate Tk window for end-effector pose in robot-base / #GETLPOS convention."""
 
     def __init__(self) -> None:
         self._proc: Optional[mp.Process] = None
@@ -84,17 +82,16 @@ class EndLinkPoseWindow:
         link_name: str,
         link_index: int,
         position_m: Sequence[float],
-        rpy_rad: Sequence[float],
+        abc_deg: Sequence[float],
     ) -> None:
         if self._queue is None:
             return
         x, y, z = (float(position_m[i]) for i in range(3))
-        r, p, yaw = (float(rpy_rad[i]) for i in range(3))
+        a, b, c = (float(abc_deg[i]) for i in range(3))
         msg = {
             "title": f"End link [{link_index}] {link_name}",
-            "position": f"Position (m):  X={x:+.4f}  Y={y:+.4f}  Z={z:+.4f}",
-            "rotation_deg": f"Rotation RPY (deg):  R={math.degrees(r):+.2f}  P={math.degrees(p):+.2f}  Y={math.degrees(yaw):+.2f}",
-            "rotation_rad": f"Rotation RPY (rad):  ({r:+.4f}, {p:+.4f}, {yaw:+.4f})",
+            "position": f"Position (robot frame, m):  X={x:+.4f}  Y={y:+.4f}  Z={z:+.4f}",
+            "orientation_abc": f"Orientation A/B/C (deg):  A={a:+.2f}  B={b:+.2f}  C={c:+.2f}",
         }
         try:
             self._queue.put_nowait(msg)

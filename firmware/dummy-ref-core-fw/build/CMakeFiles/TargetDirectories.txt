@@ -1,3 +1,0 @@
-C:/Users/PQE_339_ThinkPad/Documents/Dummy_lab/firmware/dummy-ref-core-fw/build/CMakeFiles/Core-STM32F4-fw.elf.dir
-C:/Users/PQE_339_ThinkPad/Documents/Dummy_lab/firmware/dummy-ref-core-fw/build/CMakeFiles/edit_cache.dir
-C:/Users/PQE_339_ThinkPad/Documents/Dummy_lab/firmware/dummy-ref-core-fw/build/CMakeFiles/rebuild_cache.dir

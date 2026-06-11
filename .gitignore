@@ -1,11 +1,16 @@
 .DS_Store
 .venv/
 .conda/
+.tools/
 **/.idea/
 **/.vscode/
 **/__pycache__/
 **/*.pyc
 **/cmake-build-*/
+firmware/**/build/
+
+# Local calibration captures and run outputs
+software/camera/calibration/runs/
 
 # grab_sensor — local training data, weights, and debug captures
 # software/high_level_jobs/subtasks/grab_sensor/dataset/**/*

@@ -67,6 +67,85 @@ def get_end_link_pose(
     return pos, rpy
 
 
+def quat_to_rotmat_colmajor(quat: Sequence[float]) -> List[float]:
+    """Row-major PyBullet matrix → column-major flat 3×3 (matches firmware ``R06``)."""
+    rm = p.getMatrixFromQuaternion(quat)
+    return [rm[0], rm[3], rm[6], rm[1], rm[4], rm[7], rm[2], rm[5], rm[8]]
+
+
+def rotmat_colmajor_to_firmware_abc_deg(rot_colmajor: Sequence[float]) -> Tuple[float, float, float]:
+    """
+    Extract A/B/C (deg) using the same convention as firmware ``RotMatToEulerAngle`` + ``#GETLPOS``.
+
+    Note: firmware field names swap internal axes (``Pose6D.A`` ← internal C, etc.).
+    """
+    r = rot_colmajor
+    if abs(r[6]) >= 1.0 - 1e-4:
+        if r[6] < 0:
+            euler_a = 0.0
+            euler_b = math.pi / 2
+            euler_c = math.atan2(r[1], r[4])
+        else:
+            euler_a = 0.0
+            euler_b = -math.pi / 2
+            euler_c = -math.atan2(r[1], r[4])
+    else:
+        euler_b = math.atan2(-r[6], math.sqrt(r[0] * r[0] + r[3] * r[3]))
+        cb = math.cos(euler_b)
+        euler_a = math.atan2(r[3] / cb, r[0] / cb)
+        euler_c = math.atan2(r[7] / cb, r[8] / cb)
+    # Firmware Pose6D: A←euler[0], B←euler[1], C←euler[2] where euler[0]=C, euler[1]=B, euler[2]=A
+    return math.degrees(euler_c), math.degrees(euler_b), math.degrees(euler_a)
+
+
+def get_end_link_pose_robot_frame(
+    robot_id: int, end_link_idx: int
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    """Robot-base-frame position (m) and orientation A/B/C (deg, ``#GETLPOS`` convention)."""
+    base_pos, base_orn = p.getBasePositionAndOrientation(robot_id)
+    ee = p.getLinkState(robot_id, end_link_idx, computeForwardKinematics=True)
+    inv_pos, inv_orn = p.invertTransform(base_pos, base_orn)
+    rel_pos, rel_orn = p.multiplyTransforms(inv_pos, inv_orn, ee[4], ee[5])
+    abc = rotmat_colmajor_to_firmware_abc_deg(quat_to_rotmat_colmajor(rel_orn))
+    pos = tuple(float(v) for v in rel_pos)
+    return pos, abc
+
+
+def abc_relative_to_semantic_home(
+    abc_deg: Sequence[float], home_abc_ref: Sequence[float]
+) -> Tuple[float, float, float]:
+    """Shift so semantic HOME ``[0,0,90,0,0,0]`` reads A=0, B=0, C=180."""
+    a, b, c = (float(abc_deg[i]) for i in range(3))
+    ah, bh, ch = (float(home_abc_ref[i]) for i in range(3))
+    return (a - ah, b - bh, c - ch + 180.0)
+
+
+def measure_home_abc_reference(
+    robot_id: int,
+    end_link_idx: int,
+    joint_indices: Sequence[int],
+    home_joints_deg: Sequence[float],
+) -> Tuple[float, float, float]:
+    """FK reference A/B/C at ``home_joints_deg`` without leaving the sim in that pose."""
+    from manual_control.mapping import transformed_deg_to_sim_rad
+
+    saved: List[tuple[int, float, float]] = []
+    for joint_idx in joint_indices[:6]:
+        pos, vel, *_ = p.getJointState(robot_id, joint_idx)
+        saved.append((joint_idx, float(pos), float(vel)))
+    for local_idx, joint_idx in enumerate(joint_indices[:6]):
+        p.resetJointState(
+            robot_id,
+            joint_idx,
+            transformed_deg_to_sim_rad(local_idx, home_joints_deg[local_idx]),
+            targetVelocity=0.0,
+        )
+    _, abc = get_end_link_pose_robot_frame(robot_id, end_link_idx)
+    for joint_idx, pos, vel in saved:
+        p.resetJointState(robot_id, joint_idx, pos, targetVelocity=vel)
+    return abc
+
+
 def end_link_name(robot_id: int, end_link_idx: int) -> str:
     return p.getJointInfo(robot_id, end_link_idx)[12].decode("utf-8", errors="replace")
 
