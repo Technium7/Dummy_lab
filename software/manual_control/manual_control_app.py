@@ -5,9 +5,11 @@ import re
 import sys
 from pathlib import Path
 
-_SOFTWARE_DIR = Path(__file__).resolve().parent.parent
-if str(_SOFTWARE_DIR) not in sys.path:
-    sys.path.insert(0, str(_SOFTWARE_DIR))
+_MANUAL_CONTROL_DIR = Path(__file__).resolve().parent
+_SOFTWARE_DIR = _MANUAL_CONTROL_DIR.parent
+for _path in (_SOFTWARE_DIR, _MANUAL_CONTROL_DIR):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 from controller_runtime import launch_controller
 from robot_config import DEFAULT_ROBOT, default_robot_port, repo_root
@@ -21,32 +23,53 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--fixed-base", action="store_true", default=True)
     parser.add_argument("--floating-base", action="store_true")
     parser.add_argument("--end-link", type=str, default="")
-    parser.add_argument("--linear-speed", type=float, default=0.018)
-    parser.add_argument("--angular-speed-deg", type=float, default=12.0)
+    parser.add_argument("--linear-speed", type=float, default=0.015)
+    parser.add_argument("--angular-speed-deg", type=float, default=10.0)
     parser.add_argument("--joint-vel-limit", type=float, default=0.0)
-    parser.add_argument("--sim-hz", type=float, default=480.0)
+    parser.add_argument(
+        "--sim-hz",
+        type=float,
+        default=480.0,
+        help="PyBullet IK loop rate (default 480; more sim steps per robot waypoint).",
+    )
     parser.add_argument(
         "--speed-factor",
         type=float,
         default=1.0,
-        help="Sim time multiplier (>1 runs sim faster than real time; 1 keeps sim in sync with wall clock).",
+        help="Sim time vs wall clock (default 1 keeps preview in sync with robot).",
     )
     parser.add_argument("--rotation-weight", type=float, default=8.0)
     parser.add_argument("--joint-force", type=float, default=2000.0)
     parser.add_argument("--ik-damping", type=float, default=0.05)
     parser.add_argument("--port", type=str, default=default_robot_port())
     parser.add_argument("--baudrate", type=int, default=115200)
-    parser.add_argument("--timeout", type=float, default=0.4)
+    parser.add_argument("--timeout", type=float, default=1.0)
     parser.add_argument(
         "--control-dt-ms",
         type=float,
-        default=20.0,
-        help="Period between robot & waypoints in ms (lower = less lag; min 20).",
+        default=70.0,
+        help="Robot & waypoint period in ms (default 70).",
     )
     parser.add_argument(
-        "--no-home-firmware",
+        "--home-firmware",
         action="store_true",
-        help="T key only streams HOME joints; default also sends firmware !HOME in the background.",
+        help="T also sends firmware !HOME (blocks serial ~3s; default is stream-only home).",
+    )
+    parser.add_argument(
+        "--sim-only",
+        action="store_true",
+        help="PyBullet preview only; skip robot serial connection.",
+    )
+    parser.add_argument(
+        "--debug-serial",
+        action="store_true",
+        help="Log every serial command sent to and response drained from the robot.",
+    )
+    parser.add_argument(
+        "--joint-current-limit-a",
+        type=float,
+        default=0.0,
+        help="Set motor current limit (A) for J1-J6 at connect via #I_LIMIT_J (default 0=skip).",
     )
     return parser.parse_args()
 
@@ -84,7 +107,10 @@ def main() -> None:
             baudrate=args.baudrate,
             timeout=args.timeout,
             control_dt_ms=args.control_dt_ms,
-            home_use_firmware=not args.no_home_firmware,
+            home_use_firmware=args.home_firmware,
+            sim_only=args.sim_only,
+            debug_serial=args.debug_serial,
+            joint_current_limit_a=args.joint_current_limit_a,
         )
     finally:
         if temp_file and temp_file.exists():

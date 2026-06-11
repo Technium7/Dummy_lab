@@ -1,0 +1,8 @@
+# grab_sensor: RealSense capture, OpenCV, YOLO, grasp-point CNN
+# Install after requirements.txt when using vision workflows.
+
+opencv-python>=4.8
+matplotlib>=3.7
+torch>=2.0
+ultralytics>=8.0
+pyrealsense2>=2.54

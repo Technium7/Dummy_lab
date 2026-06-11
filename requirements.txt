@@ -1,0 +1,32 @@
+# Dummy_lab — cross-platform Python deps (Windows, macOS, Linux)
+# Python 3.11.x (see .python-version)
+#
+# Local conda env:
+#   conda create -p .conda python=3.11.15 -y
+#   conda activate ./.conda
+#   pip install -r requirements.txt
+#
+# Optional vision/ML stack (grab_sensor, RealSense, YOLO):
+#   pip install -r requirements-vision.txt
+
+# Robot simulation & planning
+numpy>=1.25.2,<3
+scipy>=1.11
+pybullet>=3.2.6
+jax[cpu]>=0.4.20
+xacro
+
+# Robot / USB comms
+pyserial>=3.5
+pyusb>=1.2.1
+libusb-package>=1.0.26.3
+
+# High-level jobs & configs
+PyYAML>=6.0
+Pillow>=10.0
+
+# Dev / packaging
+black>=23.7
+ipython>=8.0
+pip-tools>=7.5
+build>=1.4

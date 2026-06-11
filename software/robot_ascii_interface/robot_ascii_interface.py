@@ -17,11 +17,13 @@ from pathlib import Path
 _SOFTWARE_DIR = Path(__file__).resolve().parents[1]
 if str(_SOFTWARE_DIR) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_DIR))
+from manual_control.mapping import clamp_firmware_joints_deg
+from robot_ascii_interface.serial_session import SerialLineSession
 from robot_config import default_robot_port
 
 
 class RobotAsciiInterface:
-    def __init__(self, port: str | None = None, baudrate=115200, timeout=1.0):
+    def __init__(self, port: str | None = None, baudrate=115200, timeout=1.0, *, debug_serial: bool = False):
         """
         Initialize serial connection to robot.
         
@@ -29,12 +31,51 @@ class RobotAsciiInterface:
             port: Serial port name (default: platform-specific; see robot_config.default_robot_port)
             baudrate: Baud rate (default: 115200)
             timeout: Read timeout in seconds (default: 1.0)
+            debug_serial: Log every command sent and response/drained bytes received
         """
         self.port = port if port is not None else default_robot_port()
         self.baudrate = baudrate
         self.timeout = timeout
+        self.debug_serial = bool(debug_serial)
         self.ser = None
-        
+        self._stream_tx_count = 0
+        self._session: SerialLineSession | None = None
+
+    def _log_tx(self, cmd: str) -> None:
+        if not self.debug_serial:
+            return
+        if cmd.startswith("&"):
+            self._stream_tx_count += 1
+            print(f"[Serial TX stream #{self._stream_tx_count}] {cmd}")
+        else:
+            print(f"[Serial TX] {cmd}")
+
+    def _log_rx_text(self, text: str, *, source: str = "response") -> None:
+        if not self.debug_serial or not text:
+            return
+        for line in text.replace("\x00", "").splitlines():
+            cleaned = line.strip()
+            if cleaned:
+                print(f"[Serial RX {source}] {cleaned}")
+
+    def _log_drained(self, raw: bytes) -> None:
+        if not self.debug_serial or not raw:
+            return
+        try:
+            text = raw.decode("utf-8", errors="replace")
+        except Exception:
+            text = repr(raw)
+        self._log_rx_text(text, source=f"drain {len(raw)}B")
+
+    def drain_rx(self, max_bytes: int = 4096, *, max_time_s: float = 0.008) -> int:
+        """Discard unread stream ack lines (legacy API for callers outside teleop)."""
+        if self._session is None:
+            return 0
+        return self._session.discard_stream_acks(max_lines=max(1, max_bytes // 8))
+
+    def _log_rx_line(self, line: str, source: str) -> None:
+        self._log_rx_text(line, source=source)
+
     def connect(self):
         """Open serial connection."""
         try:
@@ -44,91 +85,76 @@ class RobotAsciiInterface:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=self.timeout
+                timeout=0.05,
+                rtscts=False,
+                dsrdtr=False,
             )
+            SerialLineSession.configure_linux_port(self.port, self.ser)
+            self._session = SerialLineSession(
+                self.ser,
+                debug_serial=self.debug_serial,
+                log_tx=self._log_tx,
+                log_rx=self._log_rx_line,
+            )
+            self._session.start()
             print(f"Connected to {self.port} at {self.baudrate} baud")
             return True
         except serial.SerialException as e:
             print(f"Error connecting to {self.port}: {e}")
             return False
-    
+
     def disconnect(self):
         """Close serial connection."""
+        if self._session is not None:
+            self._session.stop()
+            self._session = None
         if self.ser and self.ser.is_open:
             self.ser.close()
             print("Disconnected")
 
-    def _clear_stale_input(self):
-        """Clear unread serial bytes to avoid mixing old responses with new commands."""
-        if not self.ser or not self.ser.is_open:
-            return
-        try:
-            if self.ser.in_waiting > 0:
-                self.ser.reset_input_buffer()
-        except serial.SerialException:
-            pass
-    
-    def send_command(self, cmd, wait_ms=200, *, extra_read_sec: float = 0.0):
+    def _require_session(self) -> SerialLineSession:
+        if self._session is None:
+            raise serial.SerialException("Serial session not connected")
+        return self._session
+
+    def send_command_async(self, cmd: str) -> bool:
+        """Write a command without waiting for a response."""
+        if self._session is None:
+            return False
+        return self._session.send_fire_and_forget(cmd)
+
+    def send_command(self, cmd, wait_ms=200, *, extra_read_sec: float = 0.0, max_read_s: float | None = None):
         """
         Send a command and get response.
-        
-        Args:
-            cmd: Command string (e.g., "!START", "#GETJPOS", "&10,0,90,0,0,0,20")
-            wait_ms: Wait time before reading response (milliseconds)
-            extra_read_sec: Additional time to keep polling for a line after ``wait_ms``
-                (use for slow firmware paths such as ``!HOME``).
-            
-        Returns:
-            Response string or None if timeout
-            
-        Note:
-            After the pre-wait, the reader keeps polling for a ``wait_ms``-scaled horizon
-            plus ``extra_read_sec``, so slow replies are not missed.
         """
-        if not self.ser or not self.ser.is_open:
+        if self._session is None:
             print("Not connected")
             return None
-
-        self._clear_stale_input()
-        
-        # Send command with newline
-        self.ser.write((cmd + '\n').encode())
-        self.ser.flush()
-        
-        # Wait for response
-        time.sleep(wait_ms / 1000.0)
-        
         try:
-            responses = []
-            wait_s = wait_ms / 1000.0
-            read_window_s = (
-                max(3.0, self.timeout * 4.0, wait_s + self.timeout * 3.0) + extra_read_sec
+            return self._session.send_command(
+                cmd,
+                wait_ms=wait_ms,
+                extra_read_sec=extra_read_sec,
+                max_read_s=max_read_s,
             )
-            deadline = time.time() + read_window_s
-
-            while time.time() < deadline:
-                raw = self.ser.readline()
-                if not raw:
-                    if responses:
-                        break
-                    continue
-
-                response = raw.decode('utf-8', errors='ignore').strip().replace('\x00', '')
-                if response:
-                    responses.append(response)
-
-                # Handle commands that produce two quick lines, e.g. '&' => '15' then 'ok'
-                time.sleep(0.03)
-                if self.ser.in_waiting == 0 and responses:
-                    break
-
-            if not responses:
-                return None
-
-            return responses[-1]
         except (serial.SerialException, UnicodeDecodeError) as e:
             print(f"Error reading response: {e}")
             return None
+
+    def hold_stream_pose(
+        self, hold_joints: list[float] | tuple[float, ...], speed: float
+    ) -> list[float]:
+        """
+        Hold current pose after teleop keys release.
+
+        One hold waypoint at the last commanded pose — no ``!STOP``/``!START`` or ``#GETJPOS``.
+        """
+        if self._session is None:
+            return [float(v) for v in hold_joints[:6]]
+        j = clamp_firmware_joints_deg([float(v) for v in hold_joints[:6]])
+        self._session.discard_stream_acks(max_lines=512)
+        self.send_trajectory_point_async(j[0], j[1], j[2], j[3], j[4], j[5], speed)
+        return j
     
     # Control Commands
     def start(self):
@@ -138,13 +164,28 @@ class RobotAsciiInterface:
     
     def stop(self):
         """Emergency stop."""
-        resp = self.send_command('!STOP')
+        if self._session is not None:
+            self._session.flush_rx_queue()
+        resp = self.send_command("!STOP", wait_ms=120)
         return resp
     
-    def home(self, wait_ms: int = 1500, *, extra_read_sec: float = 30.0):
-        """Home all joints to (0, 0, 90, 0, 0, 0)."""
-        resp = self.send_command("!HOME", wait_ms=wait_ms, extra_read_sec=extra_read_sec)
-        return resp
+    def ensure_cmdmode_stream(self) -> None:
+        """Restore interruptible ``&`` streaming without ``!STOP``/``!START``."""
+        if self._session is not None:
+            self._session.discard_stream_acks(max_lines=512)
+        self.send_command("#CMDMODE 2", wait_ms=80, max_read_s=0.5)
+        if self._session is not None:
+            self._session.discard_stream_acks(max_lines=64)
+
+    def home(self, wait_ms: int = 200, *, extra_read_sec: float = 45.0, max_wait_s: float | None = None):
+        """Home all joints to (0, 0, 90, 0, 0, 0). Firmware blocks until motion completes."""
+        if self._session is None:
+            return None
+        timeout_s = max_wait_s if max_wait_s is not None else max(30.0, extra_read_sec + wait_ms / 1000.0)
+        try:
+            return self._session.send_home_command(max_wait_s=timeout_s)
+        except (serial.SerialException, UnicodeDecodeError):
+            return None
 
     def calibrate_home_offset(self, wait_ms: int = 8000):
         """
@@ -171,6 +212,28 @@ class RobotAsciiInterface:
             raise ValueError("joint must be in 1..7")
         return self.send_command(f'#OFFSET_J {j}', wait_ms=wait_ms)
 
+    def set_joint_current_limit(self, joint: int, current_a: float, wait_ms: int = 200):
+        """
+        Set a motor current limit in amps (firmware: ``#I_LIMIT_J``).
+
+        Args:
+            joint: Motor index 1..7 (1..6 are arm joints).
+            current_a: Current limit in amperes (typical stock value is 1.0 A).
+        """
+        j = int(joint)
+        if j < 1 or j > 7:
+            raise ValueError("joint must be in 1..7")
+        return self.send_command(f"#I_LIMIT_J {j} {float(current_a):g}", wait_ms=wait_ms)
+
+    def set_arm_current_limits(self, current_a: float, *, joints: range = range(1, 7), wait_ms: int = 200):
+        """Apply the same current limit (A) to arm joints J1..J6 (or custom range)."""
+        results = []
+        for j in joints:
+            resp = self.set_joint_current_limit(j, current_a, wait_ms=wait_ms)
+            results.append((j, resp))
+            time.sleep(0.05)
+        return results
+
     def reset(self):
         """Reset to rest position."""
         resp = self.send_command('!RESET', wait_ms=2000)
@@ -196,18 +259,12 @@ class RobotAsciiInterface:
     # Query Commands
     def get_joint_pos(self):
         """Get current joint positions (J1-J6 in degrees)."""
-        # Use a shorter wait for high-rate position polling.
-        resp = self.send_command('#GETJPOS', wait_ms=100)
-        if resp and resp.startswith('ok'):
-            try:
-                values = resp.split()[1:]  # Skip 'ok'
-                if len(values) < 6:
-                    return None
-                joints = [float(v) for v in values[:6]]
-                return joints
-            except (ValueError, IndexError):
-                return None
-        return None
+        if self._session is None:
+            return None
+        try:
+            return self._session.read_joint_pos(wait_ms=60, max_read_s=0.5)
+        except (serial.SerialException, UnicodeDecodeError):
+            return None
     
     def get_linear_pos(self):
         """Get current linear position (X, Y, Z, A, B, C)."""
@@ -235,50 +292,31 @@ class RobotAsciiInterface:
     
     # Motion Commands
     def send_trajectory_point_async(self, j1, j2, j3, j4, j5, j6, speed):
-        """
-        Send a single trajectory waypoint WITHOUT waiting for response.
-        Designed for continuous streaming to avoid braking between waypoints.
-
-        Returns:
-            True if sent successfully, False on error
-        """
-        if not self.ser or not self.ser.is_open:
+        """Send a single trajectory waypoint WITHOUT waiting for a response."""
+        if self._session is None:
             return False
 
-        try:
-            cmd = f'&{j1:.3f},{j2:.3f},{j3:.3f},{j4:.3f},{j5:.3f},{j6:.3f},{speed:.1f}'
-            self.ser.write((cmd + '\n').encode())
-            self.ser.flush()
-            return True
-        except serial.SerialException:
-            return False
+        cmd = f"&{j1:.3f},{j2:.3f},{j3:.3f},{j4:.3f},{j5:.3f},{j6:.3f},{speed:.1f}"
+        ok = self._session.send_stream_point(cmd)
+        if not ok and self.debug_serial:
+            print("[Serial TX stream write failed]")
+        return ok
 
     def send_trajectory_point(self, j1, j2, j3, j4, j5, j6, speed, timeout_sec=30):
         """
         Send a single trajectory waypoint and block until robot confirms 'ok'.
-        Designed for use inside run_trajectory - does NOT clear the input buffer
-        between waypoints so streaming stays tight.
-
-        Returns:
-            True if 'ok' received, False on timeout/error
         """
-        if not self.ser or not self.ser.is_open:
+        if self._session is None:
             return False
 
-        cmd = f'&{j1:.3f},{j2:.3f},{j3:.3f},{j4:.3f},{j5:.3f},{j6:.3f},{speed:.1f}'
-        self.ser.write((cmd + '\n').encode())
-        self.ser.flush()
+        cmd = f"&{j1:.3f},{j2:.3f},{j3:.3f},{j4:.3f},{j5:.3f},{j6:.3f},{speed:.1f}"
+        self._session.send_fire_and_forget(cmd)
 
         start = time.time()
         while time.time() - start < timeout_sec:
-            try:
-                raw = self.ser.readline()
-                if raw:
-                    line = raw.decode('utf-8', errors='ignore').strip()
-                    if 'ok' in line:
-                        return True
-            except serial.SerialException:
-                return False
+            line = self._session.wait_line(0.08)
+            if line and "ok" in line:
+                return True
         return False
 
     def run_trajectory(self, start_joints, end_joints,
@@ -460,6 +498,9 @@ Available Commands:
 
   Home offset (per motor, USB path):
     #OFFSET_J <1-7>     - Set current position as home for that joint motor
+
+  Motor tuning:
+    #I_LIMIT_J <1-7> <A> - Set motor current limit in amperes
 
   Query:
     #GETJPOS            - Get joint positions

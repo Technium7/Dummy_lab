@@ -49,35 +49,31 @@ Windows venv example:
 ## Important options
 
 - `--robot`: URDF/Xacro path
-- `--sim-hz`: simulation/control loop rate
-- `--control-dt-ms`: robot `&` waypoint period in ms (default **20**; lower = less lag, min 20)
-- `--speed-factor`: sim time vs wall clock (default **1**; was 2 — faster sim made the robot trail the preview)
+- `--sim-hz`: PyBullet IK loop rate (default **480**)
+- `--control-dt-ms`: robot `&` waypoint period in ms (default **20**; streams at ~10 ms while moving)
+- `--speed-factor`: sim time vs wall clock (default **1** — keeps preview in sync)
 - `--linear-speed`: base linear command speed
 - `--angular-speed-deg`: base angular command speed
 - `--joint-vel-limit`: optional joint velocity clamp
 - `--no-home-firmware`: `T` only streams HOME; default also runs `!HOME` in the background
 - `--port`, `--baudrate`, `--timeout`: robot serial settings
 
-### Reducing keyboard lag
+### Tuning
 
-Lag is mostly the robot stream running slower than the PyBullet preview. Defaults are tuned for tighter sync:
+Control logic matches the stable Windows `manual_control` (commit `64acdd4`): W/S = Y, A/D = X, sim joint snapshot streamed to the robot. Adjust `JOINT_SIGNS` in `mapping.py` only if a **joint angle** is inverted vs firmware — do not add separate sim/robot sign layers.
 
-1. **`--control-dt-ms 20`** (already default) — ~50 Hz waypoints; try `15` if serial keeps up.
-2. **`--speed-factor 1`** (already default) — do not run the sim faster than real time unless you accept more chase lag.
-3. **`--linear-speed` / `--angular-speed-deg`** — end-effector speeds; unchanged accuracy, only feel.
-
-Motion still ramps from 40% to 250% while keys are held (smoother start, less “crawl” on first press than before).
+Linux defaults already use `--control-dt-ms 20` and `--speed-factor 1`. For snappier response try `--control-dt-ms 15`.
 
 ## Controls
 
-- Linear: `W/S -> -Y/+Y`, `A/D -> -X/+X`, `Q/E -> +Z/-Z`
+- Linear: `W/S -> -Y/+Y`, `A/D -> +X/-X`, `Q/E -> +Z/-Z`
 - Angular: `H/K -> +Wy/-Wy`, `U/J -> +Wx/-Wx`
 - Home: `T` -> firmware `!HOME` + stream to `[0, 0, 90, 0, 0, 0]` at max speed (use `--no-home-firmware` for stream-only)
 
 ## Behavior notes
 
-- Motion speed scales from 40% to 250% while keys are held.
+- Motion speed scales from 40% to 250% while keys are held; first waypoint sends immediately on key press.
 - On key release, robot holds the last target position (prevents drift).
-- While moving, robot targets are integrated from IK velocities at the waypoint rate (not raw sim snapshots), so accuracy tracks commanded twist even when the preview runs ahead.
-- Pressing `T` latches HOME for ~25 s and streams at max speed; firmware homing runs in a background thread unless `--no-home-firmware`.
+- While moving, robot receives a sim joint target with one control-period velocity lookahead (larger per-waypoint delta so firmware does not crawl on tiny moves).
+- Pressing `T` latches HOME for ~1.2 s; optional firmware `!HOME` runs in background unless `--no-home-firmware`.
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 from typing import Sequence
 
-JOINT_SIGNS = [1.0, -1.0, 1.0, 1.0, 1.0, 1.0]
+JOINT_SIGNS = [-1.0, -1.0, 1.0, 1.0, 1.0, 1.0]
 JOINT_OFFSETS_DEG = [0.0, 75.0, 180.0, 0.0, 0.0, 0.0]
 HOME_JOINTS_DEG = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
 
@@ -33,6 +33,26 @@ def sim_vel_rad_to_transformed_deg_s(joint_idx: int, sim_vel_rad_s: float) -> fl
 
 def clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
+
+
+FIRMWARE_JOINT_LIMITS_DEG = [
+    (-180.0, 180.0),  # J1
+    (-75.0, 90.0),  # J2
+    (35.0, 180.0),  # J3
+    (-180.0, 180.0),  # J4
+    (-120.0, 120.0),  # J5
+    (-180.0, 180.0),  # J6
+]
+
+
+def clamp_firmware_joints_deg(joints: Sequence[float]) -> list[float]:
+    out: list[float] = []
+    for i in range(min(6, len(joints))):
+        lo, hi = FIRMWARE_JOINT_LIMITS_DEG[i]
+        out.append(clamp(float(joints[i]), lo, hi))
+    while len(out) < 6:
+        out.append(0.0)
+    return out
 
 
 def deg_speed_to_ascii_speed(v_deg_per_s_list: Sequence[float]) -> float:

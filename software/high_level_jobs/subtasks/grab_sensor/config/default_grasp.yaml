@@ -6,10 +6,10 @@
 
 # --- Fixed hardware calibration (set once) ---------------------------------
 # Camera optical frame -> robot base frame (same as PyBullet planner world).
-# Checkerboard / touch-teach / AprilTag on robot base. Placeholders below.
+# From eye-to-hand solve: software/camera/calibration/runs/run_20260608_233832/camera_to_robot.json
 camera_to_robot:
-  translation_m: [0.35, 0.0, 0.42]
-  rpy_deg: [-90.0, 0.0, 180.0]
+  translation_m: [0.02473759406925837, 0.34061158616990395, 0.3150136487329851]
+  rpy_deg: [102.40187601838566, -39.56813467465095, -1.9826286775152475]
 
 # --- Vision mode -----------------------------------------------------------
 # depth_segment  — depth band + blob + PCA (legacy)

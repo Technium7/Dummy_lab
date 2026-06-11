@@ -57,6 +57,20 @@ def resolve_end_link(robot_id: int, hint: str) -> int:
     return num_joints - 1
 
 
+def get_end_link_pose(
+    robot_id: int, end_link_idx: int
+) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    """World-frame end-link position (m) and orientation as roll-pitch-yaw (rad)."""
+    state = p.getLinkState(robot_id, end_link_idx, computeForwardKinematics=True)
+    pos = tuple(float(v) for v in state[4])
+    rpy = tuple(float(v) for v in p.getEulerFromQuaternion(state[5]))
+    return pos, rpy
+
+
+def end_link_name(robot_id: int, end_link_idx: int) -> str:
+    return p.getJointInfo(robot_id, end_link_idx)[12].decode("utf-8", errors="replace")
+
+
 def is_key_down(events: Dict[int, int], char: str) -> bool:
     lower = ord(char.lower())
     upper = ord(char.upper())

@@ -1,0 +1,4 @@
+# Dummy robot USB CDC (Robot Embedded Framework REF 1.0)
+# Install: sudo cp hardware/99-dummy-robot-serial.rules /etc/udev/rules.d/
+#          sudo udevadm control --reload-rules && sudo udevadm trigger
+SUBSYSTEM=="tty", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="0d32", MODE="0666", GROUP="dialout"
