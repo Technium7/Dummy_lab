@@ -96,7 +96,10 @@ class GrabSensorConfig:
     yolo: YoloConfig | None = None
     grasp_net: GraspNetConfig | None = None
     grasp_orientation_mode: GraspOrientationMode = "follow_object"
+    fixed_grasp_abc_semantic_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    grasp_c_from_xy: bool = True
     fixed_grasp_rpy_robot_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    load_environment: bool = False
     env_path: Path = field(default_factory=lambda: Path("physical_env/packaging_station_edit.obj"))
     mesh_scale: float = 1.0
     robot_name: str = DEFAULT_ROBOT_NAME
@@ -166,6 +169,15 @@ class GrabSensorConfig:
         fixed_rpy = tuple(
             float(v) for v in data.get("fixed_grasp_rpy_robot_deg", [0.0, 0.0, 0.0])[:3]
         )
+        fixed_abc = tuple(
+            float(v)
+            for v in data.get(
+                "fixed_grasp_abc_semantic_deg",
+                data.get("fixed_grasp_abc_deg", [0.0, 0.0, 0.0]),
+            )[:3]
+        )
+        grasp_c_from_xy = bool(data.get("grasp_c_from_xy", True))
+        load_environment = bool(data.get("load_environment", False))
 
         predict_on_raw = str(grasp_net_raw.get("predict_on", "full_frame")).strip().lower()
         if predict_on_raw not in ("full_frame", "crop"):
@@ -210,7 +222,10 @@ class GrabSensorConfig:
                 depth_max_m=float(grasp_net_raw.get("depth_max_m", 0.85)),
             ),
             grasp_orientation_mode=mode_raw,  # type: ignore[arg-type]
+            fixed_grasp_abc_semantic_deg=fixed_abc,  # type: ignore[arg-type]
+            grasp_c_from_xy=grasp_c_from_xy,
             fixed_grasp_rpy_robot_deg=fixed_rpy,  # type: ignore[arg-type]
+            load_environment=load_environment,
             env_path=env_path,
             mesh_scale=float(paths_raw.get("mesh_scale", 1.0)),
             robot_name=str(paths_raw.get("robot", DEFAULT_ROBOT_NAME)),

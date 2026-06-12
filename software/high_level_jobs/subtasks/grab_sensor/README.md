@@ -46,11 +46,19 @@ All commands from `software/`:
 # Live detection + debug overlay
 python -m high_level_jobs.subtasks.grab_sensor --detect-only --visualize
 
-# Full plan (add --execute --port COM3 to run on robot)
-python -m high_level_jobs.subtasks.grab_sensor --detect-only
+# Offline (no D415): last saved debug capture in grab_sensor/debug/
+python -m high_level_jobs.subtasks.grab_sensor --offline --detect-only --visualize
 
-# Via high_level_jobs job file
-python -m high_level_jobs run jobs/examples/grab_sensor.yaml --execute --robot-port COM3
+# Plan + PyBullet path playback (offline test capture, no robot motion)
+python -m high_level_jobs.subtasks.grab_sensor --offline --plan-gui --visualize
+
+# Or explicit files from a prior run
+python -m high_level_jobs.subtasks.grab_sensor --visualize \
+  --color-file high_level_jobs/subtasks/grab_sensor/debug/grab_sensor.color.png \
+  --depth-file high_level_jobs/subtasks/grab_sensor/debug/grab_sensor.depth.npy
+
+# Full plan (add --execute --port COM3 to run on robot)
+python -m high_level_jobs.subtasks.grab_sensor --offline --visualize
 ```
 
 Debug outputs (local only, not in git):
@@ -69,7 +77,8 @@ Primary file: `config/default_grasp.yaml`
 | `yolo.*` | YOLO weights, confidence, crop padding |
 | `grasp_net.*` | Grasp CNN weights, depth normalization band |
 | `grasp_orientation_mode` | `fixed_robot` or `follow_object` |
-| `fixed_grasp_rpy_robot_deg` | Gripper orientation when using `fixed_robot` |
+| `fixed_grasp_abc_semantic_deg` | GUI A/B/C template `[0,0,0]`; C += `atan2(Y,X)` when `grasp_c_from_xy` |
+| `load_environment` | `false` = robot-only PyBullet scene (default for grasp planning) |
 | `approach.*` | Pre-grasp offset, retreat after close |
 
 ## Data collection & training

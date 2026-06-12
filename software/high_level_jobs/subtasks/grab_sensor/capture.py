@@ -61,6 +61,62 @@ def _intrinsics_to_dict(intr: Any) -> dict[str, float | int]:
     }
 
 
+def _color_sensor(device: Any) -> Any | None:
+    try:
+        return device.first_color_sensor()
+    except Exception:
+        return None
+
+
+def lock_realsense_color_exposure(
+    color_sensor: Any,
+    *,
+    exposure_us: float | None = None,
+    lock_white_balance: bool = True,
+) -> dict[str, float]:
+    """Disable auto exposure (and optionally WB); return locked values."""
+    _require_realsense()
+    locked: dict[str, float] = {}
+    if color_sensor is None:
+        return locked
+
+    if color_sensor.supports(rs.option.enable_auto_exposure):
+        if exposure_us is None:
+            exposure_us = float(color_sensor.get_option(rs.option.exposure))
+        if color_sensor.supports(rs.option.gain):
+            locked["gain"] = float(color_sensor.get_option(rs.option.gain))
+        color_sensor.set_option(rs.option.enable_auto_exposure, 0.0)
+        if "gain" in locked:
+            color_sensor.set_option(rs.option.gain, locked["gain"])
+        color_sensor.set_option(rs.option.exposure, float(exposure_us))
+        locked["exposure_us"] = float(exposure_us)
+
+    if lock_white_balance and color_sensor.supports(rs.option.enable_auto_white_balance):
+        wb = float(color_sensor.get_option(rs.option.white_balance))
+        color_sensor.set_option(rs.option.enable_auto_white_balance, 0.0)
+        color_sensor.set_option(rs.option.white_balance, wb)
+        locked["white_balance"] = wb
+
+    return locked
+
+
+def restore_realsense_color_auto(color_sensor: Any | None) -> None:
+    """Re-enable RealSense color auto exposure and white balance."""
+    if color_sensor is None:
+        return
+    _require_realsense()
+    try:
+        if color_sensor.supports(rs.option.enable_auto_exposure):
+            color_sensor.set_option(rs.option.enable_auto_exposure, 1.0)
+    except Exception:
+        pass
+    try:
+        if color_sensor.supports(rs.option.enable_auto_white_balance):
+            color_sensor.set_option(rs.option.enable_auto_white_balance, 1.0)
+    except Exception:
+        pass
+
+
 class RealSenseStreamer:
     """Continuous RealSense capture with depth aligned to color."""
 
@@ -72,6 +128,9 @@ class RealSenseStreamer:
         fps: int = 30,
         serial: str = "",
         warmup: int = 15,
+        lock_exposure: bool = False,
+        exposure_us: float | None = None,
+        lock_white_balance: bool = True,
     ) -> None:
         _require_realsense()
         self.width = width
@@ -79,12 +138,17 @@ class RealSenseStreamer:
         self.fps = fps
         self.serial = serial
         self.warmup = warmup
+        self.lock_exposure = lock_exposure
+        self.exposure_us = exposure_us
+        self.lock_white_balance = lock_white_balance
         self._pipeline: Any = None
         self._align: Any = None
         self._depth_scale = 0.001
         self._device_name = ""
         self._device_serial = ""
         self._color_intrinsics: Any = None
+        self._color_sensor: Any = None
+        self.color_exposure_locked: dict[str, float] | None = None
 
     def start(self) -> None:
         self._pipeline = rs.pipeline()
@@ -103,6 +167,16 @@ class RealSenseStreamer:
         self._align = rs.align(rs.stream.color)
 
         for _ in range(max(0, self.warmup)):
+            self._pipeline.wait_for_frames()
+
+        self._color_sensor = _color_sensor(device)
+        if self.lock_exposure:
+            self.color_exposure_locked = lock_realsense_color_exposure(
+                self._color_sensor,
+                exposure_us=self.exposure_us,
+                lock_white_balance=self.lock_white_balance,
+            )
+            # One frame for the locked settings to settle.
             self._pipeline.wait_for_frames()
 
     def read(self) -> AlignedFrame:
@@ -136,6 +210,10 @@ class RealSenseStreamer:
             yield self.read()
 
     def stop(self) -> None:
+        if self._color_sensor is not None and self.color_exposure_locked:
+            restore_realsense_color_auto(self._color_sensor)
+        self._color_sensor = None
+        self.color_exposure_locked = None
         if self._pipeline is not None:
             try:
                 self._pipeline.stop()
@@ -169,12 +247,45 @@ def capture_realsense_frame(
         streamer.stop()
 
 
+def _dict_to_intrinsics(data: dict[str, float | int]) -> Any:
+    class _Intr:
+        pass
+
+    intr = _Intr()
+    intr.width = int(data["width"])
+    intr.height = int(data["height"])
+    intr.fx = float(data["fx"])
+    intr.fy = float(data["fy"])
+    intr.ppx = float(data["ppx"])
+    intr.ppy = float(data["ppy"])
+    return intr
+
+
+_DEFAULT_D415_INTRINSICS = {
+    "width": 640,
+    "height": 480,
+    "fx": 610.814697265625,
+    "fy": 610.5267944335938,
+    "ppx": 314.0621337890625,
+    "ppy": 234.38771057128906,
+}
+
+
 def load_capture_from_files(
     color_path: Path,
     depth_npy_path: Path | None = None,
     depth_scale: float = 0.001,
 ) -> CaptureResult:
     color_rgb = np.asarray(Image.open(color_path).convert("RGB"))
+    meta_path = color_path.parent / f"{color_path.name.split('.color')[0]}.meta.json"
+    if not meta_path.is_file():
+        meta_path = color_path.with_suffix(".meta.json")
+    if meta_path.is_file():
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        intr_data = meta.get("intrinsics", _DEFAULT_D415_INTRINSICS)
+    else:
+        intr_data = _DEFAULT_D415_INTRINSICS
+
     if depth_npy_path and depth_npy_path.is_file():
         depth_raw = np.load(depth_npy_path)
         if np.issubdtype(depth_raw.dtype, np.floating):
@@ -192,17 +303,14 @@ def load_capture_from_files(
         depth_raw = np.asarray(Image.open(depth_png))
         depth_m = depth_raw.astype(np.float64) * depth_scale
 
-    class _Intr:
-        fx = fy = 600.0
-        ppx = color_rgb.shape[1] / 2.0
-        ppy = color_rgb.shape[0] / 2.0
+    intr = _dict_to_intrinsics(intr_data)
 
     return CaptureResult(
         color_rgb=color_rgb,
         depth_m=depth_m,
         depth_scale=depth_scale,
-        color_intrinsics=_Intr(),
-        depth_intrinsics=_Intr(),
+        color_intrinsics=intr,
+        depth_intrinsics=intr,
         device_name="file",
         device_serial="file",
     )
@@ -214,6 +322,12 @@ def save_debug_capture(capture: CaptureResult, out_dir: Path, stem: str = "captu
     depth_mm = (capture.depth_m * 1000.0).astype(np.uint16)
     Image.fromarray(depth_mm, mode="I;16").save(out_dir / f"{stem}.depth.png")
     np.save(out_dir / f"{stem}.depth.npy", depth_mm)
+    meta = {
+        "intrinsics": _intrinsics_to_dict(capture.color_intrinsics),
+        "device_name": capture.device_name,
+        "device_serial": capture.device_serial,
+    }
+    (out_dir / f"{stem}.meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
 
 def save_labeled_sample(

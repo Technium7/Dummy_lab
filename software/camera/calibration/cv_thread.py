@@ -18,7 +18,7 @@ from high_level_jobs.subtasks.grab_sensor.capture import RealSenseStreamer
 from .card_config import CalibrationCardConfig
 from .chessboard import detect_board_pose
 from .convergence_plot import ConvergencePlotWindow, save_convergence_trend
-from .hand_eye import HandEyeCalibrator
+from .hand_eye import HandEyeCalibrator, CameraMountConstraint
 from .shared_state import SharedCalibrationBus
 
 
@@ -43,6 +43,7 @@ class CalibrationCvThread(threading.Thread):
         camera_width: int,
         camera_height: int,
         camera_fps: int,
+        camera_mount: CameraMountConstraint | None = None,
         detect_interval_s: float = 0.4,
         capture_min_interval_s: float = 0.35,
     ) -> None:
@@ -56,7 +57,7 @@ class CalibrationCvThread(threading.Thread):
         self._camera_fps = camera_fps
         self._detect_interval_s = detect_interval_s
         self._capture_min_interval_s = capture_min_interval_s
-        self._calibrator = HandEyeCalibrator(out_dir=out_dir)
+        self._calibrator = HandEyeCalibrator(out_dir=out_dir, mount=camera_mount, card_cfg=card_cfg)
         self._plot_gui = ConvergencePlotWindow()
         self._board_status = "waiting for first capture (press C)"
         self._estimate_text = "need 3 valid samples for solve"
@@ -97,7 +98,15 @@ class CalibrationCvThread(threading.Thread):
             serial=self._camera_serial,
             warmup=15,
         )
-        streamer.start()
+        try:
+            streamer.start()
+        except RuntimeError as exc:
+            if "No device connected" in str(exc):
+                raise RuntimeError(
+                    "RealSense camera not found. Connect the D415 and retry, or use "
+                    "--teleop-only to exercise manual_control teleop without capture."
+                ) from exc
+            raise
 
         cv2.namedWindow("Camera calibration", cv2.WINDOW_NORMAL)
         cv2.resizeWindow("Camera calibration", self._camera_width, self._camera_height)
@@ -259,11 +268,19 @@ class CalibrationCvThread(threading.Thread):
     def _update_estimate(self) -> None:
         estimate = self._calibrator.estimate()
         if estimate is not None:
-            self._estimate_text = (
-                f"cam dist {estimate.distance_m:.4f} m | "
-                f"rpy {estimate.rpy_deg[0]:+.1f} {estimate.rpy_deg[1]:+.1f} {estimate.rpy_deg[2]:+.1f} deg | "
-                f"spread {estimate.translation_spread_m * 1000:.1f} mm / {estimate.angle_spread_deg:.2f} deg"
-            )
+            if estimate.fitted_yaw_deg is not None:
+                self._estimate_text = (
+                    f"cam pos [{estimate.camera_origin_m[0]:+.3f}, "
+                    f"{estimate.camera_origin_m[1]:+.3f}, {estimate.camera_origin_m[2]:+.3f}] m | "
+                    f"yaw {estimate.fitted_yaw_deg:+.1f} deg (roll/pitch fixed) | "
+                    f"err {estimate.board_pose_error_m * 1000:.1f} mm"
+                )
+            else:
+                self._estimate_text = (
+                    f"cam dist {estimate.distance_m:.4f} m | "
+                    f"rpy {estimate.rpy_deg[0]:+.1f} {estimate.rpy_deg[1]:+.1f} {estimate.rpy_deg[2]:+.1f} deg | "
+                    f"spread {estimate.translation_spread_m * 1000:.1f} mm / {estimate.angle_spread_deg:.2f} deg"
+                )
             self._plot_gui.update([h.to_dict() for h in self._calibrator.history])
         else:
             need = self._calibrator.samples_needed()

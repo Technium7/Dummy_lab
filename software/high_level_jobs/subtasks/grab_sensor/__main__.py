@@ -11,6 +11,13 @@ if str(_SOFTWARE_DIR) not in sys.path:
 
 from high_level_jobs.subtasks.grab_sensor.config_loader import default_config_path, load_grab_sensor_config
 from high_level_jobs.subtasks.grab_sensor.pipeline import run_grab_sensor_pipeline
+
+_OFFLINE_COLOR = (
+    Path(__file__).resolve().parent / "debug" / "grab_sensor.color.png"
+)
+_OFFLINE_DEPTH = (
+    Path(__file__).resolve().parent / "debug" / "grab_sensor.depth.npy"
+)
 from robot_ascii_interface import RobotAsciiInterface
 from robot_config import default_robot_port
 
@@ -23,6 +30,11 @@ def main() -> int:
     p.add_argument("--baudrate", type=int, default=int(os.environ.get("ROBOT_BAUDRATE", "115200")))
     p.add_argument("--color-file", type=Path, default=None, help="Offline test from saved capture")
     p.add_argument("--depth-file", type=Path, default=None)
+    p.add_argument(
+        "--offline",
+        action="store_true",
+        help=f"Use saved debug capture ({_OFFLINE_COLOR.name}) instead of live D415",
+    )
     p.add_argument("--detect-only", action="store_true", help="Vision + print targets; no planning")
     p.add_argument(
         "--visualize",
@@ -30,15 +42,32 @@ def main() -> int:
         help="Save grasp_overlay.png with grasp target highlighted on the image",
     )
     p.add_argument("--visualize-out", type=Path, default=None, help="Output path for overlay PNG")
+    p.add_argument(
+        "--plan-gui",
+        action="store_true",
+        help="After planning, open PyBullet GUI and play back the arm path",
+    )
     args = p.parse_args()
+
+    color_file = args.color_file
+    depth_file = args.depth_file
+    if args.offline:
+        if color_file is None:
+            color_file = _OFFLINE_COLOR
+        if depth_file is None:
+            depth_file = _OFFLINE_DEPTH
+        if not color_file.is_file():
+            print(f"Offline color capture not found: {color_file}", file=sys.stderr)
+            return 1
 
     cfg = load_grab_sensor_config(args.config)
     params = {
         "execute": args.execute,
-        "color_file": str(args.color_file) if args.color_file else None,
-        "depth_file": str(args.depth_file) if args.depth_file else None,
+        "color_file": str(color_file) if color_file else None,
+        "depth_file": str(depth_file) if depth_file else None,
         "visualize": args.visualize or args.detect_only,
         "visualize_out": str(args.visualize_out) if args.visualize_out else None,
+        "plan_gui": args.plan_gui,
     }
 
     robot = None

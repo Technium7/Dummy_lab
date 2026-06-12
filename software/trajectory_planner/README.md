@@ -36,6 +36,13 @@ Plan joint trajectories from **HOME** to a target end-link pose in the packaging
 | Joint angles (default) | — | `goal_joints_deg` from teleop, or IK fallback |
 | Pose → IK joints | `--goal-pose` | IK/refine `target_end_link`, plan tracks those joints |
 
+**Target pose in `plan_targets.json`** uses the same convention as `manual_control` End Link GUI:
+- `position_robot_m` — robot base frame (m)
+- `orientation_abc_deg` — semantic A/B/C (deg); HOME → `A=0, B=0, C=180`
+- `orientation_c_from_xy: true` — sets `C = atan2(Y, X)` from `position_robot_m`
+
+Legacy `position_m` + `orientation_rpy_rad` (world frame) still load if ABC fields are absent.
+
 ## Collision model
 
 | API | Meaning |

@@ -129,13 +129,19 @@ def run_grab_sensor_pipeline(
     start_joints_deg: list[float] | None = None,
 ) -> dict[str, Any]:
     _, targets = run_detection(cfg, params)[:2]
+    from manual_control.pose_conventions import world_pos_to_robot_frame
+
+    grasp_pos_robot = world_pos_to_robot_frame(targets.grasp_pos_m)
     print(
         f"[grab_sensor] object yaw (cam) ~{targets.debug.get('object_yaw_cam_deg', 0):.1f} deg  "
-        f"mode={targets.debug.get('grasp_orientation_mode')}  "
-        f"grasp rpy (robot) deg={targets.debug.get('grasp_rpy_robot_deg')}"
+        f"mode={targets.debug.get('grasp_orientation_mode')}"
     )
-    print(f"[grab_sensor] grasp position (robot m)={targets.grasp_pos_m.round(4).tolist()}")
-    print(f"[grab_sensor] pre-grasp (robot m)={targets.pre_grasp_pos_m.round(4).tolist()}")
+    print(
+        f"[grab_sensor] grasp position (planner world m)={targets.grasp_pos_m.round(4).tolist()}  "
+        f"(robot GUI frame m)={[round(float(v), 4) for v in grasp_pos_robot]}"
+    )
+    if cfg.grasp_orientation_mode == "fixed_robot":
+        print("[grab_sensor] grasp A/B/C (GUI deg) resolved during motion planning from fixed_grasp_abc_semantic_deg")
 
     if start_joints_deg is None:
         from manual_control.mapping import HOME_JOINTS_DEG
@@ -154,7 +160,13 @@ def run_grab_sensor_pipeline(
         targets,
         use_gui=bool(params.get("plan_gui", False)),
     )
+    print(f"[grab_sensor] pre-grasp (robot m)={targets.pre_grasp_pos_m.round(4).tolist()}")
     print(f"[grab_sensor] planned {plan_meta['n_total']} waypoints.")
+
+    if bool(params.get("plan_gui", False)):
+        from .plan_motion import playback_grasp_plan_in_gui
+
+        playback_grasp_plan_in_gui(cfg, trajectory, targets)
 
     result: dict[str, Any] = {
         "targets": targets,

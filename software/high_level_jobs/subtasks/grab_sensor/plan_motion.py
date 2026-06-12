@@ -30,6 +30,9 @@ from trajectory_planner.scene import (  # noqa: E402
 from trajectory_planner.trajectory_utils import compress_duplicate_waypoints, resample_trajectory  # noqa: E402
 
 from .models import GrabSensorConfig, GraspTargets
+from .grasp import apply_semantic_grasp_orientation
+from manual_control.pose_conventions import measure_home_abc_ref_for_scene
+from manual_control.mapping import HOME_JOINTS_DEG
 
 
 def _repo_root() -> Path:
@@ -50,7 +53,7 @@ def build_scene(cfg: GrabSensorConfig, *, use_gui: bool = False):
     urdf_path, temp_file, search_paths = _resolve_urdf(cfg)
     scene = build_planning_scene(
         urdf_path=urdf_path,
-        env_path=cfg.env_path,
+        env_path=cfg.env_path if cfg.load_environment else None,
         mesh_scale=cfg.mesh_scale,
         fixed_base=True,
         extra_search_paths=search_paths,
@@ -86,6 +89,77 @@ def plan_segment(
         enable_collision_penalty=enable_collision,
     )
     return traj, goal_q
+
+
+def _position_error_mm(scene, target_pos: Sequence[float], q: Sequence[float]) -> float:
+    set_joint_positions(scene, q)
+    pos, _ = get_end_link_pose(scene)
+    return float(np.linalg.norm(np.asarray(pos, dtype=np.float64) - np.asarray(target_pos, dtype=np.float64))) * 1000.0
+
+
+def solve_goal_position_first(
+    scene,
+    target_pos: Sequence[float],
+    start_q: Sequence[float],
+    *,
+    pos_tol_m: float = 0.05,
+    max_pos_err_m: float = 0.08,
+) -> Optional[List[float]]:
+    """Reach ``target_pos`` in Cartesian space; orientation comes from FK at the solution."""
+    q = _refine_to_position(scene, target_pos, start_q, pos_tol_m=pos_tol_m)
+    if not is_state_valid(scene, q):
+        return None
+    pos_err_m = _position_error_mm(scene, target_pos, q) * 1e-3
+    if pos_err_m <= pos_tol_m:
+        print(f"Position-first IK: pos_err={pos_err_m * 1000:.3f} mm")
+        return q
+    print(
+        f"Position-first IK (best effort): pos_err={pos_err_m * 1000:.3f} mm "
+        f"(limit {max_pos_err_m * 1000:.0f} mm)"
+    )
+    if pos_err_m <= max_pos_err_m:
+        return q
+    return None
+
+
+def plan_pre_grasp_segment(
+    scene,
+    start_q: Sequence[float],
+    targets: GraspTargets,
+    *,
+    enable_collision: bool,
+) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
+    pre_traj, pre_goal_q = plan_segment(
+        scene,
+        start_q,
+        targets.pre_grasp_pos_m,
+        targets.pre_grasp_rpy_rad,
+        enable_collision=enable_collision,
+    )
+    if pre_traj is not None and pre_goal_q is not None:
+        return pre_traj, pre_goal_q
+
+    print(
+        "[grab_sensor] Full-pose pre-grasp IK failed; "
+        "retrying with position-first goal (orientation from FK)."
+    )
+    pre_goal_q = solve_goal_position_first(scene, targets.pre_grasp_pos_m, start_q)
+    if pre_goal_q is None:
+        return None, None
+
+    set_joint_positions(scene, pre_goal_q)
+    _, fk_rpy = get_end_link_pose(scene)
+    pre_traj = plan_joint_trajectory(
+        scene,
+        start_q,
+        pre_goal_q,
+        targets.pre_grasp_pos_m,
+        fk_rpy,
+        enable_collision_penalty=enable_collision,
+    )
+    if pre_traj is None:
+        return None, None
+    return pre_traj, pre_goal_q
 
 
 def _refine_to_position(
@@ -236,6 +310,67 @@ def plan_grasp_segment(
     )
 
 
+def _draw_grasp_target_axes(targets: GraspTargets) -> None:
+    import pybullet as p
+
+    for pos, color in (
+        (targets.pre_grasp_pos_m, [0.0, 0.85, 1.0]),
+        (targets.grasp_pos_m, [1.0, 0.2, 0.2]),
+    ):
+        p.addUserDebugLine(
+            pos,
+            [pos[0] + 0.04, pos[1], pos[2]],
+            color,
+            3,
+            0,
+        )
+        p.addUserDebugLine(
+            pos,
+            [pos[0], pos[1] + 0.04, pos[2]],
+            color,
+            3,
+            0,
+        )
+        p.addUserDebugLine(
+            pos,
+            [pos[0], pos[1], pos[2] + 0.04],
+            color,
+            3,
+            0,
+        )
+
+
+def playback_grasp_plan_in_gui(
+    cfg: GrabSensorConfig,
+    trajectory: np.ndarray,
+    targets: GraspTargets,
+) -> None:
+    """Open PyBullet GUI and animate a planned grasp trajectory (cyan=pre-grasp, red=grasp)."""
+    import pybullet as p
+
+    from trajectory_planner.playback import playback_trajectory
+    from trajectory_planner.scene import frame_camera_on_scene, set_joint_positions
+
+    scene, temp_file = build_scene(cfg, use_gui=True)
+    try:
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
+        frame_camera_on_scene(scene)
+        _draw_grasp_target_axes(targets)
+        set_joint_positions(scene, trajectory[0])
+        print("[grab_sensor] PyBullet GUI: playing planned path (close window to exit).")
+        playback_trajectory(
+            scene,
+            trajectory,
+            targets.grasp_pos_m,
+            targets.grasp_rpy_rad,
+            None,
+        )
+    finally:
+        disconnect_planning_scene(scene)
+        if temp_file and temp_file.exists():
+            temp_file.unlink(missing_ok=True)
+
+
 def plan_approach_and_grasp(
     cfg: GrabSensorConfig,
     start_joints_deg: Sequence[float],
@@ -243,16 +378,27 @@ def plan_approach_and_grasp(
     *,
     use_gui: bool = False,
 ) -> Tuple[np.ndarray, dict]:
-    scene, temp_file = build_scene(cfg, use_gui=use_gui)
+    del use_gui  # planning always runs DIRECT; use playback_grasp_plan_in_gui for GUI
+    scene, temp_file = build_scene(cfg, use_gui=False)
     meta: dict = {}
     try:
         start_q = start_q_from_robot_joints_deg(scene, start_joints_deg)
 
-        pre_traj, pre_goal_q = plan_segment(
+        home_abc_ref = measure_home_abc_ref_for_scene(
+            scene.robot_id,
+            scene.end_link_idx,
+            scene.joint_indices,
+            HOME_JOINTS_DEG,
+        )
+        apply_semantic_grasp_orientation(cfg, targets, home_abc_ref)
+        abc = targets.debug.get("grasp_abc_semantic_deg")
+        if abc is not None:
+            print(f"[grab_sensor] grasp A/B/C semantic (GUI deg): {[round(float(v), 2) for v in abc]}")
+
+        pre_traj, pre_goal_q = plan_pre_grasp_segment(
             scene,
             start_q,
-            targets.pre_grasp_pos_m,
-            targets.pre_grasp_rpy_rad,
+            targets,
             enable_collision=cfg.enable_collision,
         )
         if pre_traj is None or pre_goal_q is None:

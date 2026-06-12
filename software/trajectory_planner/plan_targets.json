@@ -1,9 +1,10 @@
 {
-  "comment": "World-frame targets from env_robot_control_sim (base at origin, robot rotated 180 deg about Z). goal_joints_deg from teleop status window.",
+  "comment": "Grasp teach point. Position and orientation match manual_control End Link GUI: robot-base frame (m) and semantic A/B/C (deg) where HOME [0,0,90,0,0,0] reads A=0, B=0, C=180. With orientation_c_from_xy, C = atan2(Y, X) from position_robot_m (sensor/table XY). Paste position_robot_m from the GUI after a physical teach; add goal_joints_deg from the status window for reliable planning.",
   "start_joints_deg": [0.0, 0.0, 90.0, 0.0, 0.0, 0.0],
-  "goal_joints_deg": [0.6169, 47.5317, 79.3893, 0.0202, 8.5579, 0.0178],
+  "goal_joints_deg": null,
   "target_end_link": {
-    "position_m": [0.0044, 0.3108, 0.1633],
-    "orientation_rpy_rad": [0.5320, -0.0001, 3.1308]
+    "position_robot_m": [-0.2235, 0.3035, 0.3407],
+    "orientation_abc_deg": [0.0, 0.0, 0.0],
+    "orientation_c_from_xy": true
   }
 }

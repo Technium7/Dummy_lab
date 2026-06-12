@@ -13,7 +13,8 @@ from manual_control.teleop_runtime import TeleopLaunchConfig, run_teleop_session
 from manual_control.teleop_tick import TeleopTickResult
 from manual_control.robot_control_thread import ThreadSafeRobotProxy
 
-from .fk import base_to_board_matrix
+from .card_config import CalibrationCardConfig
+from .fk import base_to_board_from_card, set_robot_joints_deg
 from .keyboard_input import DualWindowKeyboard
 from .shared_state import CaptureSnapshot, SharedCalibrationBus
 
@@ -23,12 +24,12 @@ class _CalibrationTeleopHook:
         self,
         bus: SharedCalibrationBus,
         *,
-        gripper_to_board,
+        card_cfg: CalibrationCardConfig,
         robot_id_holder: list[int | None],
         end_link_idx_holder: list[int | None],
     ) -> None:
         self._bus = bus
-        self._gripper_to_board = gripper_to_board
+        self._card_cfg = card_cfg
         self._robot_id_holder = robot_id_holder
         self._end_link_idx_holder = end_link_idx_holder
         self._keys = DualWindowKeyboard()
@@ -88,7 +89,8 @@ class _CalibrationTeleopHook:
             if physical_joints is not None:
                 joints_deg = physical_joints
 
-        t_base_target = base_to_board_matrix(robot_id, end_link_idx, self._gripper_to_board)
+        set_robot_joints_deg(robot_id, joints_deg)
+        t_base_target = base_to_board_from_card(robot_id, end_link_idx, self._card_cfg)
         self._bus.capture_snapshots.put(
             CaptureSnapshot(
                 joints_deg=[float(v) for v in joints_deg[:6]],
@@ -126,7 +128,9 @@ class CalibrationControlThread(threading.Thread):
         control_dt_ms: float,
         home_use_firmware: bool,
         sim_only: bool,
-        gripper_to_board,
+        debug_serial: bool,
+        joint_current_limit_a: float,
+        card_cfg: CalibrationCardConfig,
     ) -> None:
         super().__init__(name="calibration-control", daemon=True)
         self._bus = bus
@@ -149,8 +153,10 @@ class CalibrationControlThread(threading.Thread):
             control_dt_ms=control_dt_ms,
             home_use_firmware=home_use_firmware,
             sim_only=sim_only,
+            debug_serial=debug_serial,
+            joint_current_limit_a=joint_current_limit_a,
         )
-        self._gripper_to_board = gripper_to_board
+        self._card_cfg = card_cfg
         self._robot_id_holder: list[int | None] = [None]
         self._end_link_idx_holder: list[int | None] = [None]
         self._error: BaseException | None = None
@@ -162,7 +168,7 @@ class CalibrationControlThread(threading.Thread):
     def run(self) -> None:
         hook = _CalibrationTeleopHook(
             self._bus,
-            gripper_to_board=self._gripper_to_board,
+            card_cfg=self._card_cfg,
             robot_id_holder=self._robot_id_holder,
             end_link_idx_holder=self._end_link_idx_holder,
         )

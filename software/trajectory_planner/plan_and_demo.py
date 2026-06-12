@@ -64,8 +64,9 @@ from trajectory_planner.scene import (  # noqa: E402
 )
 from trajectory_planner.targets import (  # noqa: E402
     load_plan_cache,
-    load_plan_targets,
+    load_plan_targets_raw,
     plan_cache_path,
+    resolve_plan_targets_from_scene,
     save_plan_cache,
     targets_path,
 )
@@ -73,6 +74,11 @@ from trajectory_planner.trajectory_utils import (  # noqa: E402
     assert_trajectory_endpoints,
     compress_duplicate_waypoints,
     prepare_playback_trajectory,
+)
+from manual_control.pose_conventions import (
+    measure_home_abc_ref_for_scene,
+    world_pos_to_robot_frame,
+    world_rpy_rad_to_semantic_abc_deg,
 )
 from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 
@@ -206,11 +212,14 @@ def main() -> None:
         run_compare_status_window()
         return
 
-    start_deg, target_pos, target_rpy, goal_joints_deg = load_plan_targets(args.targets.resolve())
+    targets_data = load_plan_targets_raw(args.targets.resolve())
+    start_deg = [float(v) for v in targets_data.get("start_joints_deg", [0.0, 0.0, 90.0, 0.0, 0.0, 0.0])]
+    goal_joints_deg_raw = targets_data.get("goal_joints_deg")
+    goal_joints_deg = [float(v) for v in goal_joints_deg_raw] if goal_joints_deg_raw else None
+    target_pos: tuple[float, float, float] | None = None
+    target_rpy: tuple[float, float, float] | None = None
     print(f"Targets file: {args.targets}")
     print(f"Start (deg): {start_deg}")
-    print(f"Target end pos (m): {target_pos}")
-    print(f"Target end rpy (rad): {target_rpy}")
     if goal_joints_deg is not None:
         print(f"Goal joints (deg, from teleop): {goal_joints_deg}")
 
@@ -256,6 +265,22 @@ def main() -> None:
             set_joint_positions(scene, start_q)
             if not is_state_valid(scene, start_q):
                 raise SystemExit("Start configuration is in collision.")
+
+            start_deg, target_pos, target_rpy, goal_joints_deg = resolve_plan_targets_from_scene(
+                scene, args.targets.resolve()
+            )
+            home_abc_ref = measure_home_abc_ref_for_scene(
+                scene.robot_id,
+                scene.end_link_idx,
+                scene.joint_indices,
+                start_deg,
+            )
+            abc_gui = world_rpy_rad_to_semantic_abc_deg(target_rpy, home_abc_ref)
+            pos_robot = world_pos_to_robot_frame(target_pos)
+            print(f"Target end pos (robot frame m, GUI): {[round(v, 4) for v in pos_robot]}")
+            print(f"Target end pos (world m): {target_pos}")
+            print(f"Target A/B/C semantic (GUI deg): {[round(v, 2) for v in abc_gui]}")
+            print(f"Target end rpy (world rad): {target_rpy}")
 
             if args.verify_coordinates:
                 verify_coordinate_alignment(scene, target_pos, target_rpy, start_q, goal_joints_deg)

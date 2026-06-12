@@ -52,19 +52,23 @@ grasp_on_object:
   rpy_deg: [0.0, 15.0, 0.0]       # e.g. 15 deg wrist tilt about object Y
   approach_offset_mm: 5.0
 
-# Used when grasp_orientation_mode: fixed_robot (location from camera, angle fixed)
-fixed_grasp_rpy_robot_deg: [0.0, 90.0, 0.0]
+# Used when grasp_orientation_mode: fixed_robot
+# Same convention as manual_control End Link GUI (semantic A/B/C deg; HOME → 0,0,180).
+# With grasp_c_from_xy, C += atan2(Y, X) from the vision grasp point in robot frame.
+fixed_grasp_abc_semantic_deg: [0.0, 0.0, 0.0]
+grasp_c_from_xy: true
 
 approach:
   pre_grasp_offset_mm: 80.0
   retreat_after_close_mm: 40.0
 
 paths:
-  env: physical_env/packaging_station_edit.obj
-  mesh_scale: 1.0
   robot: Dummy_ros2_gripper
   end_link: ""
   save_debug_dir: software/high_level_jobs/subtasks/grab_sensor/debug
+
+# Robot-only planning scene (no packaging-station mesh).
+load_environment: false
 
 enable_collision: false
 plan_seed: 42

@@ -56,6 +56,8 @@ def _arm_link_indices(robot_id: int) -> range:
 
 
 def _max_penetration_env_at_pose(scene: PlanningScene) -> float:
+    if scene.env_id < 0:
+        return 0.0
     worst = 0.0
     for contact in p.getContactPoints(bodyA=scene.robot_id, bodyB=scene.env_id):
         if _SKIP_ENV_BASE_LINK and int(contact[3]) < 0:
@@ -87,6 +89,8 @@ def _env_clearance_at_pose(
 ) -> float:
     """Minimum arm-link vs environment separation at the current pose."""
     del exact  # reserved; fast and exact both use per-arm-link env queries
+    if scene.env_id < 0:
+        return float("inf")
     min_d = float("inf")
     for link_a in _arm_link_indices(scene.robot_id):
         for pt in p.getClosestPoints(

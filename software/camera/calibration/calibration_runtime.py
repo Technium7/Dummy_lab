@@ -12,6 +12,7 @@ if str(_SOFTWARE_DIR) not in sys.path:
 from .card_config import CalibrationCardConfig
 from .control_thread import CalibrationControlThread
 from .cv_thread import CalibrationCvThread
+from .hand_eye import CameraMountConstraint
 from .shared_state import SharedCalibrationBus
 
 
@@ -34,6 +35,10 @@ def launch_calibration_session(
     control_dt_ms: float,
     home_use_firmware: bool,
     sim_only: bool,
+    debug_serial: bool,
+    joint_current_limit_a: float,
+    teleop_only: bool,
+    camera_mount: CameraMountConstraint,
     *,
     card_cfg: CalibrationCardConfig,
     out_dir: Path,
@@ -43,7 +48,6 @@ def launch_calibration_session(
     camera_fps: int,
 ) -> None:
     bus = SharedCalibrationBus()
-    gripper_to_board = card_cfg.gripper_to_board_matrix()
 
     control = CalibrationControlThread(
         bus,
@@ -65,8 +69,28 @@ def launch_calibration_session(
         control_dt_ms=control_dt_ms,
         home_use_firmware=home_use_firmware,
         sim_only=sim_only,
-        gripper_to_board=gripper_to_board,
+        debug_serial=debug_serial,
+        joint_current_limit_a=joint_current_limit_a,
+        card_cfg=card_cfg,
     )
+
+    if teleop_only:
+        print("[Calibration] Teleop-only mode (manual_control stack, no RealSense).")
+        control.start()
+        try:
+            while control.is_alive() and not bus.stop.is_set():
+                if control.error is not None:
+                    raise control.error
+                time.sleep(0.05)
+        except KeyboardInterrupt:
+            bus.stop.set()
+        finally:
+            bus.stop.set()
+            control.join(timeout=2.0)
+            if control.error is not None:
+                raise control.error
+        return
+
     cv = CalibrationCvThread(
         bus,
         card_cfg=card_cfg,
@@ -75,6 +99,7 @@ def launch_calibration_session(
         camera_width=camera_width,
         camera_height=camera_height,
         camera_fps=camera_fps,
+        camera_mount=camera_mount,
     )
 
     print(

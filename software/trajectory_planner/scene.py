@@ -62,7 +62,7 @@ def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
 
 def build_planning_scene(
     urdf_path: Path,
-    env_path: Path,
+    env_path: Path | None,
     mesh_scale: float,
     fixed_base: bool,
     extra_search_paths: Iterable[Path],
@@ -91,7 +91,10 @@ def build_planning_scene(
             except Exception:
                 pass
 
-    env_id = load_static_obj_mesh(env_path, mesh_scale)
+    if env_path is not None:
+        env_id = load_static_obj_mesh(env_path, mesh_scale)
+    else:
+        env_id = -1
     robot_id = p.loadURDF(
         str(urdf_path),
         basePosition=[0.0, 0.0, 0.0],
@@ -132,7 +135,9 @@ def get_end_link_pose(scene: PlanningScene) -> Tuple[Tuple[float, float, float],
 
 
 def frame_camera_on_scene(scene: PlanningScene) -> None:
-    boxes = [p.getAABB(scene.robot_id, -1), p.getAABB(scene.env_id, -1)]
+    boxes = [p.getAABB(scene.robot_id, -1)]
+    if scene.env_id >= 0:
+        boxes.append(p.getAABB(scene.env_id, -1))
     mins = [b[0] for b in boxes]
     maxs = [b[1] for b in boxes]
     aabb_min = (min(v[0] for v in mins), min(v[1] for v in mins), min(v[2] for v in mins))
