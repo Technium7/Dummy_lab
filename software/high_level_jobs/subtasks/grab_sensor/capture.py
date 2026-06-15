@@ -18,6 +18,36 @@ else:
     _RS_IMPORT_ERROR = None
 
 
+def validate_color_image_file(color_path: Path) -> None:
+    """Raise ``OSError`` if ``color_path`` is missing or not a readable RGB image."""
+    path = color_path.resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Color capture not found: {path}")
+    if path.stat().st_size < 1024:
+        raise OSError(f"Color capture looks truncated ({path.stat().st_size} bytes): {path}")
+    try:
+        with Image.open(path) as im:
+            im.load()
+            if im.size[0] < 32 or im.size[1] < 32:
+                raise OSError(f"Color capture has invalid size {im.size}: {path}")
+    except OSError:
+        raise
+    except Exception as exc:
+        raise OSError(f"Color capture is not a valid image: {path}") from exc
+
+
+def _atomic_save_image(path: Path, image: Image.Image, *, format: str = "PNG") -> None:
+    """Write image atomically so readers never see a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.stem}.tmp{path.suffix}")
+    try:
+        image.save(tmp, format=format)
+        tmp.replace(path)
+    finally:
+        if tmp.exists():
+            tmp.unlink(missing_ok=True)
+
+
 @dataclass
 class CaptureResult:
     color_rgb: np.ndarray
@@ -100,6 +130,42 @@ def lock_realsense_color_exposure(
     return locked
 
 
+def _list_realsense_devices() -> list[str]:
+    _require_realsense()
+    ctx = rs.context()
+    serials: list[str] = []
+    for device in ctx.query_devices():
+        try:
+            serials.append(device.get_info(rs.camera_info.serial_number))
+        except Exception:
+            continue
+    return serials
+
+
+def _wait_for_frames(
+    pipeline: Any,
+    *,
+    timeout_ms: int = 10000,
+    retries: int = 3,
+    context: str = "frame",
+) -> Any:
+    last_exc: Exception | None = None
+    for attempt in range(max(1, retries)):
+        try:
+            return pipeline.wait_for_frames(timeout_ms=timeout_ms)
+        except RuntimeError as exc:
+            last_exc = exc
+            if attempt + 1 < retries:
+                time.sleep(0.25 * (attempt + 1))
+    devices = _list_realsense_devices()
+    hint = f" Connected serials: {devices}." if devices else " No RealSense devices found."
+    raise RuntimeError(
+        f"RealSense {context} did not arrive within {timeout_ms} ms after {retries} tries.{hint} "
+        "Another process may hold the camera (e.g. label_base). "
+        "Stop it and retry, or run with --offline to use saved debug/grab_sensor.color.png."
+    ) from last_exc
+
+
 def restore_realsense_color_auto(color_sensor: Any | None) -> None:
     """Re-enable RealSense color auto exposure and white balance."""
     if color_sensor is None:
@@ -141,6 +207,8 @@ class RealSenseStreamer:
         self.lock_exposure = lock_exposure
         self.exposure_us = exposure_us
         self.lock_white_balance = lock_white_balance
+        self.frame_timeout_ms = 10000
+        self.frame_retries = 3
         self._pipeline: Any = None
         self._align: Any = None
         self._depth_scale = 0.001
@@ -167,7 +235,12 @@ class RealSenseStreamer:
         self._align = rs.align(rs.stream.color)
 
         for _ in range(max(0, self.warmup)):
-            self._pipeline.wait_for_frames()
+            _wait_for_frames(
+                self._pipeline,
+                timeout_ms=self.frame_timeout_ms,
+                retries=self.frame_retries,
+                context="warmup frame",
+            )
 
         self._color_sensor = _color_sensor(device)
         if self.lock_exposure:
@@ -176,13 +249,22 @@ class RealSenseStreamer:
                 exposure_us=self.exposure_us,
                 lock_white_balance=self.lock_white_balance,
             )
-            # One frame for the locked settings to settle.
-            self._pipeline.wait_for_frames()
+            _wait_for_frames(
+                self._pipeline,
+                timeout_ms=self.frame_timeout_ms,
+                retries=self.frame_retries,
+                context="exposure-settle frame",
+            )
 
     def read(self) -> AlignedFrame:
         if self._pipeline is None:
             raise RuntimeError("RealSenseStreamer not started")
-        frames = self._pipeline.wait_for_frames()
+        frames = _wait_for_frames(
+            self._pipeline,
+            timeout_ms=self.frame_timeout_ms,
+            retries=self.frame_retries,
+            context="aligned frame",
+        )
         aligned = self._align.process(frames)
         depth_frame = aligned.get_depth_frame()
         color_frame = aligned.get_color_frame()
@@ -229,22 +311,40 @@ def capture_realsense_frame(
     fps: int = 30,
     warmup: int = 15,
     serial: str = "",
+    frame_timeout_ms: int = 10000,
+    start_retries: int = 2,
 ) -> CaptureResult:
-    streamer = RealSenseStreamer(width=width, height=height, fps=fps, serial=serial, warmup=warmup)
-    streamer.start()
-    try:
-        frame = streamer.read()
-        return CaptureResult(
-            color_rgb=frame.color_rgb,
-            depth_m=frame.depth_m,
-            depth_scale=frame.depth_scale,
-            color_intrinsics=frame.color_intrinsics,
-            depth_intrinsics=frame.color_intrinsics,
-            device_name=frame.device_name,
-            device_serial=frame.device_serial,
+    last_exc: Exception | None = None
+    for attempt in range(max(1, start_retries)):
+        streamer = RealSenseStreamer(
+            width=width,
+            height=height,
+            fps=fps,
+            serial=serial,
+            warmup=warmup,
         )
-    finally:
-        streamer.stop()
+        streamer.frame_timeout_ms = frame_timeout_ms
+        try:
+            streamer.start()
+            try:
+                frame = streamer.read()
+                return CaptureResult(
+                    color_rgb=frame.color_rgb,
+                    depth_m=frame.depth_m,
+                    depth_scale=frame.depth_scale,
+                    color_intrinsics=frame.color_intrinsics,
+                    depth_intrinsics=frame.color_intrinsics,
+                    device_name=frame.device_name,
+                    device_serial=frame.device_serial,
+                )
+            finally:
+                streamer.stop()
+        except RuntimeError as exc:
+            last_exc = exc
+            streamer.stop()
+            if attempt + 1 < start_retries:
+                time.sleep(0.5 * (attempt + 1))
+    raise last_exc  # type: ignore[misc]
 
 
 def _dict_to_intrinsics(data: dict[str, float | int]) -> Any:
@@ -276,6 +376,7 @@ def load_capture_from_files(
     depth_npy_path: Path | None = None,
     depth_scale: float = 0.001,
 ) -> CaptureResult:
+    validate_color_image_file(color_path)
     color_rgb = np.asarray(Image.open(color_path).convert("RGB"))
     meta_path = color_path.parent / f"{color_path.name.split('.color')[0]}.meta.json"
     if not meta_path.is_file():
@@ -318,9 +419,9 @@ def load_capture_from_files(
 
 def save_debug_capture(capture: CaptureResult, out_dir: Path, stem: str = "capture") -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
-    Image.fromarray(capture.color_rgb).save(out_dir / f"{stem}.color.png")
+    _atomic_save_image(out_dir / f"{stem}.color.png", Image.fromarray(capture.color_rgb))
     depth_mm = (capture.depth_m * 1000.0).astype(np.uint16)
-    Image.fromarray(depth_mm, mode="I;16").save(out_dir / f"{stem}.depth.png")
+    _atomic_save_image(out_dir / f"{stem}.depth.png", Image.fromarray(depth_mm, mode="I;16"), format="PNG")
     np.save(out_dir / f"{stem}.depth.npy", depth_mm)
     meta = {
         "intrinsics": _intrinsics_to_dict(capture.color_intrinsics),
@@ -336,6 +437,7 @@ def save_labeled_sample(
     frame: AlignedFrame,
     grasp_uv: tuple[int, int],
     *,
+    base_uv: tuple[int, int] | None = None,
     note: str = "",
 ) -> Path:
     """Save RGB, aligned depth, and grasp pixel label for NN training."""
@@ -379,17 +481,96 @@ def save_labeled_sample(
             "depth": str(depth_path.relative_to(out_dir)).replace("\\", "/"),
         },
     }
+    if base_uv is not None:
+        bu, bv = int(base_uv[0]), int(base_uv[1])
+        depth_at_base = float(frame.depth_m[bv, bu]) if 0 <= bv < h and 0 <= bu < w else 0.0
+        valid_base_depth = depth_at_base > 1e-4
+        label.update(
+            {
+                "base_u": bu,
+                "base_v": bv,
+                "base_uv": [bu, bv],
+                "depth_m_at_base": depth_at_base if valid_base_depth else None,
+                "valid_base_depth": valid_base_depth,
+            }
+        )
     label_path.write_text(json.dumps(label, indent=2), encoding="utf-8")
 
     manifest = out_dir / "manifest.jsonl"
     with manifest.open("a", encoding="utf-8") as f:
         f.write(json.dumps(label, separators=(",", ":")) + "\n")
 
-    _save_preview(preview_path, frame.color_rgb, grasp_uv, sample_id)
+    _save_preview(preview_path, frame.color_rgb, grasp_uv, sample_id, base_uv=base_uv)
     return label_path
 
 
-def _save_preview(path: Path, color_rgb: np.ndarray, grasp_uv: tuple[int, int], sample_id: str) -> None:
+def update_sample_base_label(
+    label_path: Path,
+    base_uv: tuple[int, int],
+    *,
+    data_dir: Path | None = None,
+) -> Path:
+    """Add or update sensor-base pixel on an existing grasp label JSON."""
+    label_path = label_path.resolve()
+    data = json.loads(label_path.read_text(encoding="utf-8"))
+    out_dir = (data_dir or label_path.parent.parent).resolve()
+
+    bu, bv = int(base_uv[0]), int(base_uv[1])
+    h = int(data.get("height", 480))
+    w = int(data.get("width", 640))
+
+    depth_at_base: float | None = None
+    valid_base_depth = False
+    depth_rel = data.get("files", {}).get("depth")
+    if depth_rel:
+        depth_path = out_dir / str(depth_rel)
+        if depth_path.is_file():
+            depth_m = np.load(depth_path)
+            if np.issubdtype(depth_m.dtype, np.integer):
+                depth_m = depth_m.astype(np.float32) * 0.001
+            else:
+                depth_m = depth_m.astype(np.float32)
+            if 0 <= bv < depth_m.shape[0] and 0 <= bu < depth_m.shape[1]:
+                depth_at_base = float(depth_m[bv, bu])
+                valid_base_depth = depth_at_base > 1e-4
+
+    data["base_u"] = bu
+    data["base_v"] = bv
+    data["base_uv"] = [bu, bv]
+    data["depth_m_at_base"] = depth_at_base if valid_base_depth else None
+    data["valid_base_depth"] = valid_base_depth
+    label_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    image_rel = data.get("files", {}).get("image")
+    if image_rel:
+        image_path = out_dir / str(image_rel)
+        if image_path.is_file():
+            color_rgb = np.asarray(Image.open(image_path).convert("RGB"))
+            grasp_uv = (
+                int(data.get("grasp_u", data.get("grasp_uv", [0, 0])[0])),
+                int(data.get("grasp_v", data.get("grasp_uv", [0, 0])[1])),
+            )
+            preview_path = out_dir / "previews" / f"{data.get('id', label_path.stem)}.png"
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            _save_preview(
+                preview_path,
+                color_rgb,
+                grasp_uv,
+                str(data.get("id", label_path.stem)),
+                base_uv=(bu, bv),
+            )
+
+    return label_path
+
+
+def _save_preview(
+    path: Path,
+    color_rgb: np.ndarray,
+    grasp_uv: tuple[int, int],
+    sample_id: str,
+    *,
+    base_uv: tuple[int, int] | None = None,
+) -> None:
     try:
         import cv2
     except ImportError:
@@ -400,6 +581,12 @@ def _save_preview(path: Path, color_rgb: np.ndarray, grasp_uv: tuple[int, int], 
     u, v = grasp_uv
     cv2.drawMarker(bgr, (u, v), (0, 0, 255), cv2.MARKER_CROSS, 24, 2)
     cv2.circle(bgr, (u, v), 10, (0, 0, 255), 2)
+    cv2.putText(bgr, "grasp", (u + 12, v - 8), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 1)
+    if base_uv is not None:
+        bu, bv = base_uv
+        cv2.drawMarker(bgr, (bu, bv), (0, 255, 0), cv2.MARKER_TILTED_CROSS, 24, 2)
+        cv2.circle(bgr, (bu, bv), 10, (0, 255, 0), 2)
+        cv2.putText(bgr, "base", (bu + 12, bv + 18), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
     cv2.putText(bgr, sample_id, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2)
     cv2.imwrite(str(path), bgr)
 

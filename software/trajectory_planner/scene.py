@@ -27,6 +27,28 @@ class PlanningScene:
     end_link_idx: int
     end_link_name: str
     client_id: int = 0
+    tcp_link_idx: int | None = None
+    tcp_link_name: str | None = None
+
+
+def try_resolve_link(robot_id: int, hint: str, *, client_id: int = 0) -> int | None:
+    """Resolve a link/joint name to PyBullet link index, or ``None`` if not found."""
+    if not hint:
+        return None
+    num_joints = p.getNumJoints(robot_id, physicsClientId=client_id)
+    if num_joints <= 0:
+        return None
+    if hint.isdigit() or (hint.startswith("-") and hint[1:].isdigit()):
+        idx = int(hint)
+        return idx if -1 <= idx < num_joints else None
+    lookup = hint.lower()
+    for i in range(num_joints):
+        info = p.getJointInfo(robot_id, i, physicsClientId=client_id)
+        child_name = info[12].decode("utf-8", errors="replace").lower()
+        joint_name = info[1].decode("utf-8", errors="replace").lower()
+        if lookup == child_name or lookup == joint_name:
+            return i
+    return None
 
 
 def disconnect_planning_scene(scene: PlanningScene) -> None:
@@ -69,6 +91,7 @@ def build_planning_scene(
     load_plane: bool,
     end_link_hint: str,
     use_gui: bool,
+    tcp_link_hint: str = "",
 ) -> PlanningScene:
     mode = p.GUI if use_gui else p.DIRECT
     cid = p.connect(mode)
@@ -106,8 +129,14 @@ def build_planning_scene(
     joint_indices, lowers, uppers, _, names = get_controllable_joints(robot_id)
     if not joint_indices:
         raise RuntimeError("No controllable joints on robot")
-    end_link_idx = resolve_end_link(robot_id, end_link_hint)
+    wrist_hint = end_link_hint or "link6_1"
+    end_link_idx = resolve_end_link(robot_id, wrist_hint)
     end_link_name = p.getJointInfo(robot_id, end_link_idx)[12].decode("utf-8", errors="replace")
+    tcp_hint = tcp_link_hint or "grasp_tcp_link"
+    tcp_link_idx = try_resolve_link(robot_id, tcp_hint, client_id=cid)
+    tcp_link_name = None
+    if tcp_link_idx is not None:
+        tcp_link_name = p.getJointInfo(robot_id, tcp_link_idx)[12].decode("utf-8", errors="replace")
 
     return PlanningScene(
         robot_id=robot_id,
@@ -119,16 +148,30 @@ def build_planning_scene(
         end_link_idx=end_link_idx,
         end_link_name=end_link_name,
         client_id=cid,
+        tcp_link_idx=tcp_link_idx,
+        tcp_link_name=tcp_link_name,
     )
 
 
 def set_joint_positions(scene: PlanningScene, q: Sequence[float]) -> None:
+    cid = scene.client_id
     for j_idx, value in zip(scene.joint_indices, q):
-        p.resetJointState(scene.robot_id, j_idx, float(value), targetVelocity=0.0)
+        p.resetJointState(
+            scene.robot_id,
+            j_idx,
+            float(value),
+            targetVelocity=0.0,
+            physicsClientId=cid,
+        )
 
 
 def get_end_link_pose(scene: PlanningScene) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
-    state = p.getLinkState(scene.robot_id, scene.end_link_idx, computeForwardKinematics=True)
+    state = p.getLinkState(
+        scene.robot_id,
+        scene.end_link_idx,
+        computeForwardKinematics=True,
+        physicsClientId=scene.client_id,
+    )
     pos = tuple(float(v) for v in state[4])
     rpy = tuple(float(v) for v in p.getEulerFromQuaternion(state[5]))
     return pos, rpy

@@ -10,6 +10,21 @@ INCH_TO_M = 0.0254
 DEFAULT_HOLE_MODEL = Path(__file__).resolve().parent / "models" / "hole_patch.pt"
 
 
+def table_xy_from_grid(grid_col: int, grid_row: int, pitch_m: float) -> tuple[float, float]:
+    """Table XY (m): +X = +col, +Y = -row (matches robot base +Y after grid grow)."""
+    return (float(grid_col) * pitch_m, -float(grid_row) * pitch_m)
+
+
+def table_frame_grid_indices(grid_col: int, grid_row: int) -> tuple[int, int]:
+    """Table-frame grid indices for overlay labels: (col, table_y_index) with table_y = -row."""
+    return int(grid_col), -int(grid_row)
+
+
+def format_table_grid_label(grid_col: int, grid_row: int) -> str:
+    tx, ty = table_frame_grid_indices(grid_col, grid_row)
+    return f"{tx},{ty}"
+
+
 @dataclass(frozen=True)
 class TableGridConfig:
     """Optical table hole grid geometry and detection tuning."""

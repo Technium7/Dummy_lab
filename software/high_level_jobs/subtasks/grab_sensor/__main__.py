@@ -37,17 +37,39 @@ def main() -> int:
     )
     p.add_argument("--detect-only", action="store_true", help="Vision + print targets; no planning")
     p.add_argument(
+        "--no-fallback-offline",
+        action="store_true",
+        help="Do not use saved debug/grab_sensor.color.png if live camera fails",
+    )
+    p.add_argument(
         "--visualize",
         action="store_true",
-        help="Save grasp_overlay.png with grasp target highlighted on the image",
+        help="Save grasp_overlay.png (camera image with grasp/base markers; not PyBullet)",
     )
     p.add_argument("--visualize-out", type=Path, default=None, help="Output path for overlay PNG")
     p.add_argument(
         "--plan-gui",
+        "--gui",
         action="store_true",
+        dest="plan_gui",
         help="After planning, open PyBullet GUI and play back the arm path",
     )
+    p.add_argument(
+        "--ik-gui",
+        action="store_true",
+        help="Step 1: show IK goal only — arm at final joints, two yellow crosses, print positions",
+    )
+    p.add_argument(
+        "--rpy-viz",
+        action="store_true",
+        help="Interactive world RPY sliders (PyBullet); see rpy_world_viz module",
+    )
     args = p.parse_args()
+
+    if args.rpy_viz:
+        from high_level_jobs.subtasks.grab_sensor.rpy_world_viz import main as rpy_viz_main
+
+        return rpy_viz_main()
 
     color_file = args.color_file
     depth_file = args.depth_file
@@ -59,6 +81,17 @@ def main() -> int:
         if not color_file.is_file():
             print(f"Offline color capture not found: {color_file}", file=sys.stderr)
             return 1
+        try:
+            from high_level_jobs.subtasks.grab_sensor.capture import validate_color_image_file
+
+            validate_color_image_file(color_file)
+        except OSError as exc:
+            print(f"Offline color capture is unreadable: {exc}", file=sys.stderr)
+            print(
+                "Restore from git (git checkout -- <path>) or recapture with a live run.",
+                file=sys.stderr,
+            )
+            return 1
 
     cfg = load_grab_sensor_config(args.config)
     params = {
@@ -68,6 +101,8 @@ def main() -> int:
         "visualize": args.visualize or args.detect_only,
         "visualize_out": str(args.visualize_out) if args.visualize_out else None,
         "plan_gui": args.plan_gui,
+        "ik_gui": args.ik_gui,
+        "allow_offline_fallback": not args.no_fallback_offline,
     }
 
     robot = None
@@ -81,7 +116,7 @@ def main() -> int:
         from high_level_jobs.subtasks.grab_sensor.pipeline import run_detection
 
         _, targets, _, _ = run_detection(cfg, params)
-        print("Grasp position (robot m):", targets.grasp_pos_m.round(4).tolist())
+        print("Grasp target (robot m):", targets.grasp_pos_m.round(4).tolist())
         print("Grasp rpy (robot deg):", targets.debug.get("grasp_rpy_robot_deg"))
         return 0
 

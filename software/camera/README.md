@@ -33,4 +33,4 @@ When table calib gives `T_table_cam` and you know robot base pose in the table f
 T_robot_cam = inv(T_table_robot) @ T_table_cam
 ```
 
-Hand-eye gives `T_robot_cam` directly as `camera_to_robot` in `default_grasp.yaml` format.
+Table +X/+Y match robot base +X/+Y (grid column/row index direction). Hand-eye gives `T_robot_cam` directly as `camera_to_robot` in `default_grasp.yaml` format.

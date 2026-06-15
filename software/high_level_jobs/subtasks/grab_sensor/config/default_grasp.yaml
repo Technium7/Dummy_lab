@@ -30,6 +30,31 @@ grasp_net:
   depth_min_m: 0.25
   depth_max_m: 0.85
 
+# Optional: optical-table calibration for sensor-base -> table XYZ (from calibration_table)
+# table_calib_path: software/camera/calibration_table/runs/run_20260612_225443/table_calib.json
+
+# Grasp XYZ from detected base on table (same X/Y, fixed height above surface)
+grasp_position_from_table_base: true
+
+# Motion planning: tip height on sensor; TCP offset is in the grasp URDF (``grasp_tcp_link``)
+motion_planning:
+  grasp_height_above_table_mm: 65.0
+
+# Used when grasp_orientation_mode: fixed_robot
+# Planner world RPY (deg). With grasp_c_from_xy: yaw += sign * atan2(Y, X) only.
+fixed_grasp_rpy_world_deg: [-20, 0.0, 180.0]
+grasp_c_from_xy: true
+grasp_xy_yaw_sign: -1.0   # +1 add atan2, -1 subtract
+
+grasp_orientation_tol_deg: 50.0
+grasp_position_tol_mm: 20.0
+
+# Robot base pose in optical table frame (inches, same convention as view_table_calibration)
+# Grasp robot GUI ≈ (-robot_x_in * 1in + table_x, -robot_y_in * 1in + table_y, table_z - robot_z_in)
+robot_in_table_frame:
+  translation_in: [-6, -5, 0.5]
+  rpy_deg: [0, 0, 0]
+
 # --- Legacy depth segmentation (used when vision_mode: depth_segment) ------
 segmentation:
   # Depth band over the table surface where the object appears
@@ -42,29 +67,27 @@ segmentation:
 # How to build the grasp pose after the camera locates the object:
 #
 #   follow_object  — vision gives object pose (PCA); grasp_on_object adds tilt/offset
-#   fixed_robot    — vision gives grasp XYZ only; orientation from fixed_grasp_rpy_robot_deg
+#   fixed_robot    — vision gives grasp XYZ only; orientation from fixed_grasp_rpy_world_deg
 grasp_orientation_mode: fixed_robot
 
 # Taught offset from detected object frame to gripper target (not the camera).
 # Object frame from PCA: X = long edge, Z = face normal pointing up from table.
 grasp_on_object:
   position_mm: [0.0, 0.0, 0.0]
-  rpy_deg: [0.0, 15.0, 0.0]       # e.g. 15 deg wrist tilt about object Y
+  rpy_deg: [0.0, 0.0, 180.0]       # e.g. 15 deg wrist tilt about object Y
   approach_offset_mm: 5.0
 
-# Used when grasp_orientation_mode: fixed_robot
-# Same convention as manual_control End Link GUI (semantic A/B/C deg; HOME → 0,0,180).
-# With grasp_c_from_xy, C += atan2(Y, X) from the vision grasp point in robot frame.
-fixed_grasp_abc_semantic_deg: [0.0, 0.0, 0.0]
-grasp_c_from_xy: true
-
 approach:
-  pre_grasp_offset_mm: 80.0
+  plan_pre_grasp: false   # if false: HOME -> grasp only (no pre-grasp waypoint)
+  pre_grasp_offset_mm: 40.0
+  pre_grasp_along_xy: true   # retreat toward robot along XY (false = world +Z)
   retreat_after_close_mm: 40.0
 
 paths:
-  robot: Dummy_ros2_gripper
-  end_link: ""
+  # Grasp URDF: base xacro + ``grasp_tcp_fixed`` on link6_1 (edit offset in URDF by hand).
+  robot: robot_design/Dummy_ros2_gripper_description/urdf/Dummy_ros2_gripper_grasp.urdf
+  end_link: link6_1
+  tcp_link: grasp_tcp_link
   save_debug_dir: software/high_level_jobs/subtasks/grab_sensor/debug
 
 # Robot-only planning scene (no packaging-station mesh).

@@ -117,13 +117,17 @@ Each save writes under `software/camera/calibration_table/runs/run_*/`:
 
 ## Coordinate frames
 
-**Table frame** (defined by the hole grid, not by the camera):
+**Table frame** (aligned with robot base XY):
 
 ```text
-  +X → increasing grid column
-  +Y → decreasing grid row (image row down → physical +Y up-image)
+  +X → increasing grid column (East on grow overlay)
+  +Y → decreasing internal grow row (North on grow overlay; opposite image row down)
   +Z → up from table surface
 ```
+
+Green overlay labels show table-frame indices `(col, row)` where `row = -grow_row`.
+Hole one inch north of origin is labeled `(0, 1)`; one inch east is `(1, 0)`.
+Internal grow uses `grow_row` (+ = image down / South) only for detection; saved JSON uses table-frame indices.
 
 **OpenCV / RealSense optical frame** (fixed by the sensor):
 

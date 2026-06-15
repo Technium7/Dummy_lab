@@ -25,5 +25,13 @@
   "files": {
     "image": "images/000015.png",
     "depth": "depth/000015.npy"
-  }
+  },
+  "base_u": 540,
+  "base_v": 267,
+  "base_uv": [
+    540,
+    267
+  ],
+  "depth_m_at_base": 0.5590000152587891,
+  "valid_base_depth": true
 }

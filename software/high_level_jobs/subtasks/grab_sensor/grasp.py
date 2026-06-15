@@ -9,50 +9,140 @@ from .transforms import compose_transforms, decompose_matrix, offset_in_local_fr
 from .models import CameraToRobot, GrabSensorConfig, GraspTargets, TableObjectDetection
 
 
-def semantic_grasp_abc_deg(
-    cfg: GrabSensorConfig,
-    grasp_pos_world_m: np.ndarray,
-) -> tuple[float, float, float]:
+def _tip_pre_grasp_pos_m(
+    tip_pos_m: np.ndarray,
+    approach_offset_mm: float,
+    *,
+    along_xy: bool = True,
+    robot_origin_m: tuple[float, float, float] = (0.0, 0.0, 0.0),
+) -> np.ndarray:
     """
-    Grasp orientation in manual_control End Link GUI convention (semantic A/B/C deg).
+    Tip pose before final grasp.
 
-    Default template ``[0, 0, 0]`` with ``grasp_c_from_xy: true`` adds
-    ``C = atan2(Y, X)`` from the grasp point in robot base frame.
+    Default: retreat toward the robot along the base→grasp XY direction (Z unchanged).
+    ``along_xy=False``: legacy offset along world +Z.
     """
-    from manual_control.pose_conventions import grasp_c_deg_from_robot_xy, world_pos_to_robot_frame
+    offset_m = float(approach_offset_mm) * 1e-3
+    if offset_m <= 0.0:
+        return np.asarray(tip_pos_m, dtype=np.float64)[:3].copy()
 
-    pos_robot = world_pos_to_robot_frame(grasp_pos_world_m)
-    abc = [float(v) for v in cfg.fixed_grasp_abc_semantic_deg]
+    tip = np.asarray(tip_pos_m, dtype=np.float64)[:3].copy()
+    if not along_xy:
+        tip[2] += offset_m
+        return tip
+
+    origin = np.asarray(robot_origin_m, dtype=np.float64)[:3]
+    xy = tip[:2] - origin[:2]
+    dist_xy = float(np.linalg.norm(xy))
+    if dist_xy < 1e-9:
+        return tip
+    unit_xy = xy / dist_xy
+    tip[0] -= unit_xy[0] * offset_m
+    tip[1] -= unit_xy[1] * offset_m
+    return tip
+
+
+def _pre_grasp_pos_m(
+    grasp_pos_m: np.ndarray,
+    approach_offset_mm: float,
+    *,
+    along_xy: bool = True,
+) -> np.ndarray:
+    """Pre-grasp tip pose (vision path, before end-link offset in planning)."""
+    return _tip_pre_grasp_pos_m(grasp_pos_m, approach_offset_mm, along_xy=along_xy)
+
+
+def record_grasp_tcp_targets(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
+    """Annotate targets: positions are TCP (``grasp_tcp_link`` in URDF)."""
+    tip = np.asarray(targets.grasp_pos_m, dtype=np.float64)
+    rpy = np.asarray(targets.grasp_rpy_rad, dtype=np.float64)
+
+    targets.debug["grasp_tip_pos_m"] = tip.round(4).tolist()
+    targets.debug["tcp_link"] = cfg.tcp_link
+
+    tip_pre = _tip_pre_grasp_pos_m(
+        tip,
+        cfg.approach.pre_grasp_offset_mm,
+        along_xy=cfg.approach.pre_grasp_along_xy,
+    )
+    targets.debug["pre_grasp_tip_pos_m"] = tip_pre.round(4).tolist()
+    targets.pre_grasp_pos_m = tip_pre
+    targets.pre_grasp_rpy_rad = rpy.copy()
+
+
+def _normalize_yaw_rad(yaw_rad: float) -> float:
+    yaw_deg = (math.degrees(yaw_rad) + 180.0) % 360.0 - 180.0
+    return math.radians(yaw_deg)
+
+
+def fixed_grasp_rpy_world_rad(cfg: GrabSensorConfig, grasp_pos_m: np.ndarray) -> np.ndarray:
+    """Planner world RPY: config template + optional ``sign * atan2(Y,X)`` on yaw only."""
+    from manual_control.pose_conventions import grasp_c_deg_from_robot_xy
+
+    rpy = np.radians(np.asarray(cfg.fixed_grasp_rpy_world_deg, dtype=np.float64))
     if cfg.grasp_c_from_xy:
-        abc[2] += grasp_c_deg_from_robot_xy(pos_robot[0], pos_robot[1])
-    return (abc[0], abc[1], abc[2])
+        pos = np.asarray(grasp_pos_m, dtype=np.float64)[:3]
+        heading_deg = grasp_c_deg_from_robot_xy(float(pos[0]), float(pos[1]))
+        rpy = rpy.copy()
+        rpy[2] = _normalize_yaw_rad(rpy[2] + math.radians(cfg.grasp_xy_yaw_sign * heading_deg))
+    return rpy
 
 
-def apply_semantic_grasp_orientation(
-    cfg: GrabSensorConfig,
-    targets: GraspTargets,
-    home_abc_ref: tuple[float, float, float] | list[float],
-) -> None:
-    """Resolve ``fixed_robot`` grasp orientation using GUI A/B/C convention."""
+def apply_fixed_grasp_orientation(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
+    """Set grasp/pre-grasp world RPY for fixed_robot mode (called before planning)."""
     if cfg.grasp_orientation_mode != "fixed_robot":
         return
 
-    from manual_control.pose_conventions import semantic_abc_deg_to_world_rpy_rad
+    from manual_control.pose_conventions import grasp_c_deg_from_robot_xy
 
-    abc = semantic_grasp_abc_deg(cfg, targets.grasp_pos_m)
-    grasp_rpy = np.asarray(semantic_abc_deg_to_world_rpy_rad(abc, home_abc_ref), dtype=np.float64)
+    template_deg = [float(v) for v in cfg.fixed_grasp_rpy_world_deg]
+    if cfg.grasp_c_from_xy:
+        pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
+        targets.debug["grasp_heading_deg"] = float(
+            grasp_c_deg_from_robot_xy(float(pos[0]), float(pos[1]))
+        )
 
-    t_robot_grasp = pose_to_matrix(targets.grasp_pos_m, grasp_rpy)
-    pre_offset_m = cfg.approach.pre_grasp_offset_mm * 1e-3
-    t_robot_pre = offset_in_local_frame(t_robot_grasp, (0.0, 0.0, -pre_offset_m))
-    pre_pos, pre_rpy = decompose_matrix(t_robot_pre)
+    grasp_rpy = fixed_grasp_rpy_world_rad(cfg, targets.grasp_pos_m)
+    targets.grasp_rpy_rad = np.asarray(grasp_rpy, dtype=np.float64)
+    targets.debug["grasp_rpy_template_world_deg"] = template_deg
+    targets.debug["grasp_xy_yaw_sign"] = float(cfg.grasp_xy_yaw_sign)
+    targets.debug["grasp_rpy_world_deg"] = [float(math.degrees(v)) for v in grasp_rpy]
 
-    targets.grasp_rpy_rad = grasp_rpy
-    targets.pre_grasp_pos_m = pre_pos
-    targets.pre_grasp_rpy_rad = pre_rpy
-    targets.debug["grasp_abc_semantic_deg"] = [float(v) for v in abc]
-    targets.debug["grasp_rpy_robot_deg"] = [float(math.degrees(v)) for v in grasp_rpy]
-    targets.debug["pre_grasp_rpy_deg"] = [float(math.degrees(v)) for v in pre_rpy]
+
+def apply_table_base_grasp_position(
+    cfg: GrabSensorConfig,
+    targets: GraspTargets,
+    vision_debug: dict[str, Any],
+) -> bool:
+    """Set grasp XYZ from detected base table X/Y and fixed height above the surface."""
+    if not cfg.grasp_position_from_table_base:
+        return False
+
+    base_xyz = vision_debug.get("base_table_xyz_m")
+    if not base_xyz or len(base_xyz) < 2:
+        raise RuntimeError(
+            "grasp_position_from_table_base requires base_table_xyz_m from vision "
+            "(label sensor bases and train the 4-output grasp net)."
+        )
+
+    from .table_position import table_grasp_frame_summary, table_point_to_robot_gui_m
+
+    height_m = float(cfg.grasp_motion.grasp_height_above_table_mm) * 1e-3
+    grasp_table = (float(base_xyz[0]), float(base_xyz[1]), height_m)
+    grasp_pos = table_point_to_robot_gui_m(grasp_table, cfg.robot_in_table_frame)
+
+    targets.grasp_pos_m = np.asarray(grasp_pos, dtype=np.float64)
+    targets.debug.update(
+        {
+            "grasp_position_source": "table_base_xy_height",
+            "grasp_table_xyz_m": [round(v, 4) for v in grasp_table],
+            "grasp_tip_pos_robot_m": grasp_pos.round(4).tolist(),
+            "grasp_height_above_table_mm": float(cfg.grasp_motion.grasp_height_above_table_mm),
+            "robot_in_table_in": list(cfg.robot_in_table_frame.translation_in),
+            "grasp_frame_summary": table_grasp_frame_summary(grasp_table, cfg.robot_in_table_frame),
+        }
+    )
+    return True
 
 
 def camera_to_robot_matrix(mount: CameraToRobot) -> np.ndarray:
@@ -98,19 +188,12 @@ def _grasp_pose_fixed_robot(
     detection: TableObjectDetection,
     t_robot_cam: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Vision supplies grasp LOCATION (x,y,z); gripper orientation comes from config.
-
-    Position = robot-frame object centroid + optional mm offset from grasp_on_object
-    (applied in robot frame after transforming the offset vector).
-    """
+    """Vision supplies grasp XYZ; orientation resolved later from config."""
     t_robot_object = object_pose_robot(detection, t_robot_cam)
     object_pos, object_rpy = decompose_matrix(t_robot_object)
 
     offset_m = cfg.grasp_on_object.position_m()
     grasp_pos = object_pos + t_robot_object[:3, :3] @ offset_m
-
-    # Placeholder RPY until plan_motion applies semantic A/B/C with measured HOME ref.
     grasp_rpy = np.zeros(3, dtype=np.float64)
     return grasp_pos, grasp_rpy, object_pos, object_rpy
 
@@ -127,10 +210,12 @@ def compute_grasp_targets(cfg: GrabSensorConfig, detection: TableObjectDetection
             cfg, detection, t_robot_cam
         )
 
-    t_robot_grasp = pose_to_matrix(grasp_pos, grasp_rpy)
-    pre_offset_m = cfg.approach.pre_grasp_offset_mm * 1e-3
-    t_robot_pre = offset_in_local_frame(t_robot_grasp, (0.0, 0.0, -pre_offset_m))
-    pre_pos, pre_rpy = decompose_matrix(t_robot_pre)
+    grasp_pos_m = np.asarray(grasp_pos, dtype=np.float64)
+    pre_grasp_pos_m = _pre_grasp_pos_m(
+        grasp_pos_m,
+        cfg.approach.pre_grasp_offset_mm,
+        along_xy=cfg.approach.pre_grasp_along_xy,
+    )
 
     debug: dict[str, Any] = {
         "object_yaw_cam_deg": float(math.degrees(detection.yaw_rad)),
@@ -138,15 +223,15 @@ def compute_grasp_targets(cfg: GrabSensorConfig, detection: TableObjectDetection
         "n_points": detection.n_points,
         "bbox_xy": detection.bbox_xy,
         "object_pos_robot_m": object_pos.round(4).tolist(),
-        "grasp_pos_robot_m": grasp_pos.round(4).tolist(),
+        "grasp_pos_robot_m": grasp_pos_m.round(4).tolist(),
         "grasp_rpy_robot_deg": [float(math.degrees(v)) for v in grasp_rpy],
-        "pre_grasp_rpy_deg": [float(math.degrees(v)) for v in pre_rpy],
+        "pre_grasp_rpy_deg": [float(math.degrees(v)) for v in grasp_rpy],
     }
 
     return GraspTargets(
-        pre_grasp_pos_m=pre_pos,
-        pre_grasp_rpy_rad=pre_rpy,
-        grasp_pos_m=grasp_pos,
+        pre_grasp_pos_m=pre_grasp_pos_m,
+        pre_grasp_rpy_rad=grasp_rpy,
+        grasp_pos_m=grasp_pos_m,
         grasp_rpy_rad=grasp_rpy,
         object_pos_m=object_pos,
         object_rpy_rad=object_rpy,

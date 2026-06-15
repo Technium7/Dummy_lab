@@ -29,10 +29,21 @@ def solve_goal_from_pose(
     target_rpy: Sequence[float],
     start_q: Sequence[float],
     pos_tol_m: float = 1e-4,
+    ik_ori_tol_rad: float = 0.35,
+    refine_ori_tol_rad: float = 0.02,
+    ik_pos_tol_m: float | None = None,
 ) -> Optional[List[float]]:
     """IK + refinement for ``target_end_link``; ignores teleop ``goal_joints_deg``."""
     return solve_goal_configuration(
-        scene, target_pos, target_rpy, start_q, goal_joints_deg=None, pos_tol_m=pos_tol_m
+        scene,
+        target_pos,
+        target_rpy,
+        start_q,
+        goal_joints_deg=None,
+        pos_tol_m=pos_tol_m,
+        ik_ori_tol_rad=ik_ori_tol_rad,
+        refine_ori_tol_rad=refine_ori_tol_rad,
+        ik_pos_tol_m=ik_pos_tol_m,
     )
 
 
@@ -43,6 +54,9 @@ def solve_goal_configuration(
     start_q: Sequence[float],
     goal_joints_deg: Optional[Sequence[float]] = None,
     pos_tol_m: float = 1e-4,
+    ik_ori_tol_rad: float = 0.35,
+    refine_ori_tol_rad: float = 0.02,
+    ik_pos_tol_m: float | None = None,
 ) -> Optional[List[float]]:
     """Prefer teleop ``goal_joints_deg``; otherwise Cartesian IK + refinement."""
     if goal_joints_deg is not None and len(goal_joints_deg) >= len(scene.joint_indices):
@@ -57,7 +71,16 @@ def solve_goal_configuration(
             )
             return q_goal
 
-    return _solve_ik_goal_configuration(scene, target_pos, target_rpy, start_q, pos_tol_m)
+    return _solve_ik_goal_configuration(
+        scene,
+        target_pos,
+        target_rpy,
+        start_q,
+        pos_tol_m,
+        ik_ori_tol_rad=ik_ori_tol_rad,
+        refine_ori_tol_rad=refine_ori_tol_rad,
+        ik_pos_tol_m=ik_pos_tol_m,
+    )
 
 
 def _solve_ik_goal_configuration(
@@ -66,7 +89,12 @@ def _solve_ik_goal_configuration(
     target_rpy: Sequence[float],
     start_q: Sequence[float],
     pos_tol_m: float,
+    *,
+    ik_ori_tol_rad: float = 0.35,
+    refine_ori_tol_rad: float = 0.02,
+    ik_pos_tol_m: float | None = None,
 ) -> Optional[List[float]]:
+    best_pos_tol_m = pos_tol_m * 1.5 if ik_pos_tol_m is None else float(ik_pos_tol_m)
     target_orn = p.getQuaternionFromEuler(list(target_rpy))
     rest_candidates: List[List[float]] = [list(start_q)]
     rng = np.random.default_rng(_IK_REST_SEED)
@@ -81,7 +109,12 @@ def _solve_ik_goal_configuration(
         try:
             q_seed = solve_ik(scene, target_pos, target_orn, rest_candidates[-1])
             q_goal = refine_joint_config_to_pose(
-                scene, target_pos, target_rpy, q_seed, pos_tol_m=pos_tol_m
+                scene,
+                target_pos,
+                target_rpy,
+                q_seed,
+                pos_tol_m=pos_tol_m,
+                ori_tol_rad=refine_ori_tol_rad,
             )
         except Exception:
             continue
@@ -93,7 +126,7 @@ def _solve_ik_goal_configuration(
         if pos_err < best_pos_err:
             best_pos_err = pos_err
             best_q = q_goal
-        if pos_err <= pos_tol_m and ori_err < 0.35:
+        if pos_err <= pos_tol_m and ori_err <= ik_ori_tol_rad:
             print(f"Goal IK: pos_err={pos_err*1000:.3f} mm, ori_err={np.degrees(ori_err):.2f} deg")
             return q_goal
 
@@ -105,6 +138,6 @@ def _solve_ik_goal_configuration(
             f"Goal IK (best effort): pos_err={pos_err*1000:.3f} mm, "
             f"ori_err={np.degrees(ori_err):.2f} deg"
         )
-        if pos_err <= pos_tol_m * 1.5:
+        if pos_err <= best_pos_tol_m and ori_err <= ik_ori_tol_rad:
             return best_q
     return None

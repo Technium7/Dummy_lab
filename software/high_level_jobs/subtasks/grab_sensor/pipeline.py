@@ -7,7 +7,7 @@ from typing import Any, Mapping
 import numpy as np
 from PIL import Image
 
-from .capture import capture_realsense_frame, load_capture_from_files, save_debug_capture
+from .capture import capture_realsense_frame, load_capture_from_files, save_debug_capture, validate_color_image_file
 from .config_loader import load_grab_sensor_config
 from .execute import execute_on_robot
 from .grasp import compute_grasp_targets
@@ -47,6 +47,31 @@ def _run_vision(
     return mask, detection, extra
 
 
+_PKG_DIR = Path(__file__).resolve().parent
+_DEFAULT_DEBUG_DIR = _PKG_DIR / "debug"
+_DEFAULT_OFFLINE_COLOR = _DEFAULT_DEBUG_DIR / "grab_sensor.color.png"
+_DEFAULT_OFFLINE_DEPTH = _DEFAULT_DEBUG_DIR / "grab_sensor.depth.npy"
+
+
+def _offline_capture_paths(cfg: GrabSensorConfig) -> tuple[Path | None, Path | None]:
+    candidates: list[Path] = []
+    if cfg.save_debug_dir is not None:
+        candidates.append(cfg.save_debug_dir)
+    candidates.append(_DEFAULT_DEBUG_DIR)
+    for directory in candidates:
+        color = directory / "grab_sensor.color.png"
+        if not color.is_file():
+            continue
+        try:
+            validate_color_image_file(color)
+        except OSError as exc:
+            print(f"[grab_sensor] Skipping corrupt offline color capture: {exc}")
+            continue
+        depth = directory / "grab_sensor.depth.npy"
+        return color, depth if depth.is_file() else None
+    return None, None
+
+
 def run_detection(
     cfg: GrabSensorConfig,
     params: Mapping[str, Any],
@@ -61,13 +86,31 @@ def run_detection(
             depth_scale=float(params.get("depth_scale", 0.001)),
         )
     else:
-        capture = capture_realsense_frame(
-            width=int(params.get("width", 640)),
-            height=int(params.get("height", 480)),
-            fps=int(params.get("fps", 30)),
-            warmup=int(params.get("warmup", 15)),
-            serial=str(params.get("camera_serial", "")),
-        )
+        try:
+            capture = capture_realsense_frame(
+                width=int(params.get("width", 640)),
+                height=int(params.get("height", 480)),
+                fps=int(params.get("fps", 30)),
+                warmup=int(params.get("warmup", 15)),
+                serial=str(params.get("camera_serial", "")),
+                frame_timeout_ms=int(params.get("frame_timeout_ms", 10000)),
+                start_retries=int(params.get("camera_start_retries", 2)),
+            )
+        except (ImportError, RuntimeError) as exc:
+            if not bool(params.get("allow_offline_fallback", True)):
+                raise
+            fallback_color, fallback_depth = _offline_capture_paths(cfg)
+            if fallback_color is None:
+                raise
+            print(
+                f"[grab_sensor] Live RealSense capture failed ({exc}). "
+                f"Falling back to saved capture: {fallback_color}"
+            )
+            capture = load_capture_from_files(
+                fallback_color,
+                fallback_depth,
+                depth_scale=float(params.get("depth_scale", 0.001)),
+            )
 
     if cfg.save_debug_dir is not None:
         save_debug_capture(capture, cfg.save_debug_dir, stem="grab_sensor")
@@ -75,6 +118,10 @@ def run_detection(
     mask, detection, vision_debug = _run_vision(cfg, capture, params)
     targets = compute_grasp_targets(cfg, detection)
     targets.debug.update(vision_debug)
+    if cfg.grasp_position_from_table_base:
+        from .grasp import apply_table_base_grasp_position
+
+        apply_table_base_grasp_position(cfg, targets, targets.debug)
 
     if cfg.save_debug_dir is not None:
         _save_detection_debug(cfg, capture, mask, detection, targets)
@@ -129,19 +176,22 @@ def run_grab_sensor_pipeline(
     start_joints_deg: list[float] | None = None,
 ) -> dict[str, Any]:
     _, targets = run_detection(cfg, params)[:2]
-    from manual_control.pose_conventions import world_pos_to_robot_frame
 
-    grasp_pos_robot = world_pos_to_robot_frame(targets.grasp_pos_m)
     print(
         f"[grab_sensor] object yaw (cam) ~{targets.debug.get('object_yaw_cam_deg', 0):.1f} deg  "
         f"mode={targets.debug.get('grasp_orientation_mode')}"
     )
     print(
-        f"[grab_sensor] grasp position (planner world m)={targets.grasp_pos_m.round(4).tolist()}  "
-        f"(robot GUI frame m)={[round(float(v), 4) for v in grasp_pos_robot]}"
+        f"[grab_sensor] grasp target (robot m)={targets.grasp_pos_m.round(4).tolist()}"
     )
-    if cfg.grasp_orientation_mode == "fixed_robot":
-        print("[grab_sensor] grasp A/B/C (GUI deg) resolved during motion planning from fixed_grasp_abc_semantic_deg")
+    if cfg.grasp_position_from_table_base:
+        summary = targets.debug.get("grasp_frame_summary")
+        if summary:
+            print(
+                f"[grab_sensor] table (mm)={summary['table_xyz_mm']}  "
+                f"tip robot GUI (mm)={summary['robot_gui_mm']}  "
+                f"TCP={cfg.tcp_link} (URDF offset)"
+            )
 
     if start_joints_deg is None:
         from manual_control.mapping import HOME_JOINTS_DEG
@@ -160,13 +210,30 @@ def run_grab_sensor_pipeline(
         targets,
         use_gui=bool(params.get("plan_gui", False)),
     )
-    print(f"[grab_sensor] pre-grasp (robot m)={targets.pre_grasp_pos_m.round(4).tolist()}")
+    print(f"[grab_sensor] tip target (robot m)={targets.grasp_pos_m.round(4).tolist()}")
+    if (tip := targets.debug.get("grasp_tip_pos_m")) is not None:
+        print(f"[grab_sensor] tip TARGET (robot m)={tip}")
+    if cfg.approach.plan_pre_grasp:
+        print(f"[grab_sensor] pre-grasp (robot m)={targets.pre_grasp_pos_m.round(4).tolist()}")
     print(f"[grab_sensor] planned {plan_meta['n_total']} waypoints.")
 
-    if bool(params.get("plan_gui", False)):
-        from .plan_motion import playback_grasp_plan_in_gui
+    if bool(params.get("ik_gui", False)):
+        from .ik_debug import show_ik_goal_debug_gui
+
+        goal_q = plan_meta.get("grasp_goal_q")
+        if goal_q is None:
+            raise RuntimeError("plan_meta missing grasp_goal_q")
+        show_ik_goal_debug_gui(cfg, targets, goal_q)
+    elif bool(params.get("plan_gui", False)):
+        from .ik_debug import playback_grasp_plan_in_gui
 
         playback_grasp_plan_in_gui(cfg, trajectory, targets)
+    else:
+        print(
+            "[grab_sensor] No PyBullet window (--visualize is camera overlay only). "
+            "Add --ik-gui for IK goal yellow-cross check, --plan-gui to play the path, or run "
+            "python -m high_level_jobs.subtasks.grab_sensor.view_grasp_table for table/robot/camera/grasp."
+        )
 
     result: dict[str, Any] = {
         "targets": targets,

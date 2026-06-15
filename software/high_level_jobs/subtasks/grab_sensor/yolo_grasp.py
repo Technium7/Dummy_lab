@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import numpy as np
 
 from .capture import CaptureResult
-from .grasp_point_net import crop_region, load_grasp_model, predict_grasp_uv
+from .grasp_point_net import crop_region, load_grasp_model, predict_grasp_and_base_uv
 from .pose import backproject_mask_to_points_cam, estimate_object_pose_pca
 from .models import GrabSensorConfig, TableObjectDetection
 from .yolo_detect import YoloDetection, detect_sensor_bbox
@@ -22,6 +23,7 @@ class YoloGraspResult:
     yolo: YoloDetection
     crop_origin: tuple[int, int]
     debug: dict[str, Any]
+    base_uv: tuple[int, int] | None = None
 
 
 def pixel_to_cam_m(
@@ -134,7 +136,7 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
     grasp_model, model_meta = load_grasp_model(cfg.grasp_net.model_path)
     img_h, img_w = capture.color_rgb.shape[:2]
 
-    grasp_uv_crop = predict_grasp_uv(
+    grasp_uv_crop, base_uv_crop = predict_grasp_and_base_uv(
         grasp_model,
         crop_rgb,
         crop_depth,
@@ -143,6 +145,11 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
         depth_max_m=cfg.grasp_net.depth_max_m,
     )
     grasp_uv = map_crop_uv_to_full(grasp_uv_crop, crop_origin, (img_h, img_w))
+    base_uv = (
+        map_crop_uv_to_full(base_uv_crop, crop_origin, (img_h, img_w))
+        if base_uv_crop is not None
+        else None
+    )
     grasp_source = "crop_rgbd"
 
     grasp_cam_m = pixel_to_cam_m(
@@ -181,6 +188,41 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
         "grasp_uv_crop": list(grasp_uv_crop),
         "grasp_source": grasp_source,
     }
+    if base_uv is not None:
+        try:
+            base_cam_m = pixel_to_cam_m(
+                base_uv[0],
+                base_uv[1],
+                capture.depth_m,
+                capture.color_intrinsics,
+                patch_radius_px=cfg.grasp_net.depth_patch_radius_px,
+            )
+            debug["base_uv"] = list(base_uv)
+            debug["base_uv_crop"] = list(base_uv_crop) if base_uv_crop else None
+            debug["base_cam_m"] = base_cam_m.round(4).tolist()
+            from .table_position import (
+                infer_base_table_pose,
+                infer_cam_point_table_pose,
+                resolve_table_calib_path,
+                table_pose_offset_mm,
+            )
+
+            table_calib = resolve_table_calib_path(cfg.table_calib_path)
+            if table_calib is not None:
+                pose = infer_base_table_pose(base_cam_m, table_calib)
+                debug["base_table_xyz_m"] = [round(v, 4) for v in pose["table_xyz_m"]]
+                debug["base_table_xy_mm"] = [round(v, 2) for v in pose["table_xy_mm"]]
+                debug["table_calib_path"] = pose["table_calib_path"]
+                grasp_pose = infer_cam_point_table_pose(grasp_cam_m, table_calib)
+                offset = table_pose_offset_mm(pose, grasp_pose)
+                debug["grasp_table_xyz_m"] = [round(v, 4) for v in grasp_pose["table_xyz_m"]]
+                debug["grasp_table_xy_mm"] = [round(v, 2) for v in grasp_pose["table_xy_mm"]]
+                debug["grasp_offset_from_base_mm"] = {
+                    k: round(v, 2) for k, v in offset.items()
+                }
+        except RuntimeError:
+            debug["base_uv"] = list(base_uv)
+            debug["base_uv_crop"] = list(base_uv_crop) if base_uv_crop else None
     return YoloGraspResult(
         mask=mask,
         detection=detection,
@@ -188,6 +230,7 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
         yolo=yolo,
         crop_origin=crop_origin,
         debug=debug,
+        base_uv=base_uv,
     )
 
 

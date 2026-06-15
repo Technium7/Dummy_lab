@@ -20,6 +20,8 @@ IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 DEFAULT_DEPTH_MIN_M = 0.25
 DEFAULT_DEPTH_MAX_M = 0.85
+NUM_OUTPUTS_GRASP_ONLY = 2
+NUM_OUTPUTS_GRASP_BASE = 4
 
 
 @dataclass(frozen=True)
@@ -37,13 +39,16 @@ class TrainResult:
     train_samples: int
     val_samples: int
     best_val_px_error: float
+    best_val_base_px_error: float | None
     epochs_run: int
+    num_outputs: int
 
 
 class GraspPointNet(nn.Module):
-    def __init__(self, in_channels: int = 4) -> None:
+    def __init__(self, in_channels: int = 4, num_outputs: int = NUM_OUTPUTS_GRASP_BASE) -> None:
         super().__init__()
         self.in_channels = int(in_channels)
+        self.num_outputs = int(num_outputs)
         self.features = nn.Sequential(
             nn.Conv2d(self.in_channels, 16, 3, padding=1),
             nn.ReLU(inplace=True),
@@ -63,7 +68,7 @@ class GraspPointNet(nn.Module):
             nn.Linear(128 * 4 * 4, 128),
             nn.ReLU(inplace=True),
             nn.Dropout(0.2),
-            nn.Linear(128, 2),
+            nn.Linear(128, self.num_outputs),
             nn.Sigmoid(),
         )
 
@@ -217,7 +222,11 @@ def preprocess_input(
     return tensor, meta
 
 
-def list_labeled_samples(data_dir: Path) -> list[dict[str, Any]]:
+def list_labeled_samples(
+    data_dir: Path,
+    *,
+    require_base: bool = False,
+) -> list[dict[str, Any]]:
     labels_dir = data_dir / "labels"
     if not labels_dir.is_dir():
         return []
@@ -236,12 +245,24 @@ def list_labeled_samples(data_dir: Path) -> list[dict[str, Any]]:
         v = int(data.get("grasp_v", data.get("grasp_uv", [0, 0])[1]))
         w = int(data.get("width", 640))
         h = int(data.get("height", 480))
+
+        base_uv: tuple[int, int] | None = None
+        if "base_u" in data and "base_v" in data:
+            base_uv = (int(data["base_u"]), int(data["base_v"]))
+        elif "base_uv" in data and len(data["base_uv"]) >= 2:
+            base_uv = (int(data["base_uv"][0]), int(data["base_uv"][1]))
+
+        if require_base and base_uv is None:
+            continue
+
         samples.append(
             {
                 "id": data.get("id", label_path.stem),
+                "label_path": label_path,
                 "image_path": image_path,
                 "depth_path": depth_path,
                 "grasp_uv": (u, v),
+                "base_uv": base_uv,
                 "width": w,
                 "height": h,
             }
@@ -312,6 +333,7 @@ class GraspPointCropDataset(Dataset):
         *,
         augment: bool = False,
         use_depth: bool = True,
+        predict_base: bool = True,
         yolo_model_path: Path | None = None,
         yolo_class: str = "sensor",
         yolo_confidence: float = 0.25,
@@ -324,6 +346,7 @@ class GraspPointCropDataset(Dataset):
         self.samples = samples
         self.augment = augment
         self.use_depth = use_depth
+        self.predict_base = predict_base
         self.yolo_model_path = yolo_model_path
         self.yolo_class = yolo_class
         self.yolo_confidence = yolo_confidence
@@ -342,6 +365,9 @@ class GraspPointCropDataset(Dataset):
         rgb = _load_rgb(sample["image_path"])
         depth_m = _load_depth_m(sample["depth_path"])
         grasp_uv = sample["grasp_uv"]
+        base_uv = sample.get("base_uv")
+        if self.predict_base and base_uv is None:
+            raise ValueError(f"Sample {sample.get('id')} missing base_uv label")
 
         bbox = _resolve_training_bbox(
             rgb,
@@ -361,10 +387,19 @@ class GraspPointCropDataset(Dataset):
         u_crop = int(np.clip(u_crop, 0, crop_w - 1))
         v_crop = int(np.clip(v_crop, 0, crop_h - 1))
 
+        bu_crop = bv_crop = 0
+        if self.predict_base and base_uv is not None:
+            bu_crop = int(base_uv[0]) - origin[0]
+            bv_crop = int(base_uv[1]) - origin[1]
+            bu_crop = int(np.clip(bu_crop, 0, crop_w - 1))
+            bv_crop = int(np.clip(bv_crop, 0, crop_h - 1))
+
         if self.augment and random.random() < 0.5:
             crop_rgb = np.ascontiguousarray(crop_rgb[:, ::-1, :])
             crop_depth = np.ascontiguousarray(crop_depth[:, ::-1])
             u_crop = crop_w - 1 - u_crop
+            if self.predict_base:
+                bu_crop = crop_w - 1 - bu_crop
 
         tensor, meta = preprocess_input(
             crop_rgb,
@@ -373,7 +408,12 @@ class GraspPointCropDataset(Dataset):
             depth_min_m=self.depth_min_m,
             depth_max_m=self.depth_max_m,
         )
-        target = np.array(uv_to_norm_letterbox((u_crop, v_crop), meta), dtype=np.float32)
+        grasp_target = np.array(uv_to_norm_letterbox((u_crop, v_crop), meta), dtype=np.float32)
+        if self.predict_base and base_uv is not None:
+            base_target = np.array(uv_to_norm_letterbox((bu_crop, bv_crop), meta), dtype=np.float32)
+            target = np.concatenate([grasp_target, base_target])
+        else:
+            target = grasp_target
         return torch.from_numpy(tensor), torch.from_numpy(target), (crop_w, crop_h)
 
 
@@ -420,11 +460,17 @@ def _split_samples(samples: list[dict[str, Any]], val_frac: float, seed: int) ->
     return shuffled[val_count:], shuffled[:val_count]
 
 
-def _eval_px_error_crop(model: GraspPointNet, loader: DataLoader, device: torch.device) -> float:
+def _eval_px_error_crop(
+    model: GraspPointNet,
+    loader: DataLoader,
+    device: torch.device,
+) -> tuple[float, float | None]:
     if len(loader.dataset) == 0:
-        return float("nan")
+        return float("nan"), None
     model.eval()
-    errors: list[float] = []
+    grasp_errors: list[float] = []
+    base_errors: list[float] = []
+    predict_base = model.num_outputs >= NUM_OUTPUTS_GRASP_BASE
     with torch.no_grad():
         for batch_x, batch_y, dims in loader:
             batch_x = batch_x.to(device)
@@ -434,14 +480,24 @@ def _eval_px_error_crop(model: GraspPointNet, loader: DataLoader, device: torch.
             crop_w = dims[0].numpy()
             crop_h = dims[1].numpy()
             for i in range(diff.shape[0]):
-                px_err = float(
+                grasp_err = float(
                     np.hypot(
                         diff[i, 0] * max(crop_w[i] - 1, 1),
                         diff[i, 1] * max(crop_h[i] - 1, 1),
                     )
                 )
-                errors.append(px_err)
-    return float(np.mean(errors)) if errors else float("nan")
+                grasp_errors.append(grasp_err)
+                if predict_base and diff.shape[1] >= 4:
+                    base_err = float(
+                        np.hypot(
+                            diff[i, 2] * max(crop_w[i] - 1, 1),
+                            diff[i, 3] * max(crop_h[i] - 1, 1),
+                        )
+                    )
+                    base_errors.append(base_err)
+    grasp_mean = float(np.mean(grasp_errors)) if grasp_errors else float("nan")
+    base_mean = float(np.mean(base_errors)) if base_errors else None
+    return grasp_mean, base_mean
 
 
 def _eval_px_error_full(model: GraspPointNet, loader: DataLoader, device: torch.device) -> float:
@@ -473,6 +529,7 @@ def train_grasp_model(
     device: str | None = None,
     crop_mode: bool = True,
     use_depth: bool = True,
+    predict_base: bool = True,
     yolo_model_path: Path | None = None,
     yolo_class: str = "sensor",
     yolo_confidence: float = 0.25,
@@ -486,18 +543,27 @@ def train_grasp_model(
     model_path = (model_path or default_model_path(data_dir)).resolve()
     model_path.parent.mkdir(parents=True, exist_ok=True)
 
-    samples = list_labeled_samples(data_dir)
+    samples = list_labeled_samples(data_dir, require_base=predict_base)
     if len(samples) < 2:
+        if predict_base:
+            total = len(list_labeled_samples(data_dir))
+            raise ValueError(
+                f"Need at least 2 samples with base labels in {data_dir}, "
+                f"found {len(samples)} ({total} total grasp labels). "
+                "Label sensor bases first: python -m high_level_jobs.subtasks.grab_sensor.label_base"
+            )
         raise ValueError(f"Need at least 2 labeled samples in {data_dir}, found {len(samples)}")
 
     train_samples, val_samples = _split_samples(samples, val_frac, seed)
     in_channels = 4 if use_depth else 3
+    num_outputs = NUM_OUTPUTS_GRASP_BASE if predict_base else NUM_OUTPUTS_GRASP_ONLY
 
     if crop_mode:
         train_ds = GraspPointCropDataset(
             train_samples,
             augment=True,
             use_depth=use_depth,
+            predict_base=predict_base,
             yolo_model_path=yolo_model_path,
             yolo_class=yolo_class,
             yolo_confidence=yolo_confidence,
@@ -512,6 +578,7 @@ def train_grasp_model(
                 val_samples,
                 augment=False,
                 use_depth=use_depth,
+                predict_base=predict_base,
                 yolo_model_path=yolo_model_path,
                 yolo_class=yolo_class,
                 yolo_confidence=yolo_confidence,
@@ -535,11 +602,13 @@ def train_grasp_model(
         eval_fn = _eval_px_error_full
 
     torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
-    model = GraspPointNet(in_channels=in_channels).to(torch_device)
+    model = GraspPointNet(in_channels=in_channels, num_outputs=num_outputs).to(torch_device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     loss_fn = nn.MSELoss()
 
     best_val = float("inf")
+    best_val_grasp = float("inf")
+    best_val_base: float | None = None
     best_state: dict[str, Any] | None = None
     epochs_run = 0
 
@@ -557,9 +626,18 @@ def train_grasp_model(
             optimizer.step()
 
         if val_loader is not None:
-            val_err = eval_fn(model, val_loader, torch_device)
-            if val_err < best_val:
-                best_val = val_err
+            eval_result = eval_fn(model, val_loader, torch_device)
+            if isinstance(eval_result, tuple):
+                val_grasp_err, val_base_err = eval_result
+            else:
+                val_grasp_err, val_base_err = float(eval_result), None
+            val_score = val_grasp_err
+            if predict_base and val_base_err is not None:
+                val_score = (val_grasp_err + val_base_err) / 2.0
+            if val_score < best_val:
+                best_val = val_score
+                best_val_grasp = val_grasp_err
+                best_val_base = val_base_err
                 best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
         elif best_state is None:
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
@@ -571,14 +649,18 @@ def train_grasp_model(
         "input_w": INPUT_W,
         "input_h": INPUT_H,
         "in_channels": in_channels,
+        "num_outputs": num_outputs,
         "use_depth": use_depth,
         "crop_mode": crop_mode,
+        "predict_base": predict_base,
         "depth_min_m": depth_min_m,
         "depth_max_m": depth_max_m,
         "crop_padding_px": crop_padding_px,
         "train_samples": len(train_samples),
         "val_samples": len(val_samples),
-        "best_val_px_error": None if best_val == float("inf") else best_val,
+        "best_val_px_error": None if best_val_grasp == float("inf") else best_val_grasp,
+        "best_val_grasp_px_error": None if best_val_grasp == float("inf") else best_val_grasp,
+        "best_val_base_px_error": best_val_base,
         "epochs": epochs_run,
     }
     torch.save({"state_dict": model.state_dict(), "meta": meta}, model_path)
@@ -588,8 +670,21 @@ def train_grasp_model(
         train_samples=len(train_samples),
         val_samples=len(val_samples),
         best_val_px_error=meta["best_val_px_error"] or float("nan"),
+        best_val_base_px_error=best_val_base,
         epochs_run=epochs_run,
+        num_outputs=num_outputs,
     )
+
+
+def _infer_num_outputs(meta: dict[str, Any], state_dict: dict[str, Any]) -> int:
+    if "num_outputs" in meta:
+        return int(meta["num_outputs"])
+    if "predict_base" in meta:
+        return NUM_OUTPUTS_GRASP_BASE if meta["predict_base"] else NUM_OUTPUTS_GRASP_ONLY
+    weight = state_dict.get("head.4.weight")
+    if weight is not None:
+        return int(weight.shape[0])
+    return NUM_OUTPUTS_GRASP_ONLY
 
 
 def load_grasp_model(model_path: Path, *, device: str | None = None) -> tuple[GraspPointNet, dict[str, Any]]:
@@ -599,11 +694,36 @@ def load_grasp_model(model_path: Path, *, device: str | None = None) -> tuple[Gr
     torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     payload = torch.load(model_path, map_location=torch_device, weights_only=False)
     meta = payload.get("meta", {})
+    state_dict = payload["state_dict"]
     in_channels = int(meta.get("in_channels", 3 if not meta.get("use_depth") else 4))
-    model = GraspPointNet(in_channels=in_channels).to(torch_device)
-    model.load_state_dict(payload["state_dict"])
+    num_outputs = _infer_num_outputs(meta, state_dict)
+    model = GraspPointNet(in_channels=in_channels, num_outputs=num_outputs).to(torch_device)
+    model.load_state_dict(state_dict)
+    meta["num_outputs"] = num_outputs
+    meta["predict_base"] = num_outputs >= NUM_OUTPUTS_GRASP_BASE
     model.eval()
     return model, meta
+
+
+def _predict_norm(model: GraspPointNet, color_rgb: np.ndarray, depth_m: np.ndarray | None, **kwargs) -> np.ndarray:
+    torch_device = torch.device(kwargs.get("device") or next(model.parameters()).device)
+    model = model.to(torch_device)
+    model.eval()
+
+    meta_cfg = kwargs.get("model_meta") or {}
+    use_depth = bool(meta_cfg.get("use_depth", depth_m is not None))
+    if depth_m is None:
+        depth_m = np.zeros(color_rgb.shape[:2], dtype=np.float32)
+
+    tensor, _letterbox = preprocess_input(
+        color_rgb,
+        depth_m,
+        use_depth=use_depth,
+        depth_min_m=float(meta_cfg.get("depth_min_m", kwargs.get("depth_min_m", DEFAULT_DEPTH_MIN_M))),
+        depth_max_m=float(meta_cfg.get("depth_max_m", kwargs.get("depth_max_m", DEFAULT_DEPTH_MAX_M))),
+    )
+    x = torch.from_numpy(tensor).unsqueeze(0).to(torch_device)
+    return model(x)[0].cpu().numpy(), _letterbox
 
 
 @torch.no_grad()
@@ -617,22 +737,40 @@ def predict_grasp_uv(
     depth_min_m: float = DEFAULT_DEPTH_MIN_M,
     depth_max_m: float = DEFAULT_DEPTH_MAX_M,
 ) -> tuple[int, int]:
-    torch_device = torch.device(device or next(model.parameters()).device)
-    model = model.to(torch_device)
-    model.eval()
-
-    meta_cfg = model_meta or {}
-    use_depth = bool(meta_cfg.get("use_depth", depth_m is not None))
-    if depth_m is None:
-        depth_m = np.zeros(color_rgb.shape[:2], dtype=np.float32)
-
-    tensor, letterbox = preprocess_input(
+    pred, letterbox = _predict_norm(
+        model,
         color_rgb,
         depth_m,
-        use_depth=use_depth,
-        depth_min_m=float(meta_cfg.get("depth_min_m", depth_min_m)),
-        depth_max_m=float(meta_cfg.get("depth_max_m", depth_max_m)),
+        model_meta=model_meta,
+        device=device,
+        depth_min_m=depth_min_m,
+        depth_max_m=depth_max_m,
     )
-    x = torch.from_numpy(tensor).unsqueeze(0).to(torch_device)
-    pred = model(x)[0].cpu().numpy()
     return norm_to_uv_letterbox((float(pred[0]), float(pred[1])), letterbox)
+
+
+@torch.no_grad()
+def predict_grasp_and_base_uv(
+    model: GraspPointNet,
+    color_rgb: np.ndarray,
+    depth_m: np.ndarray | None = None,
+    *,
+    model_meta: dict[str, Any] | None = None,
+    device: str | None = None,
+    depth_min_m: float = DEFAULT_DEPTH_MIN_M,
+    depth_max_m: float = DEFAULT_DEPTH_MAX_M,
+) -> tuple[tuple[int, int], tuple[int, int] | None]:
+    pred, letterbox = _predict_norm(
+        model,
+        color_rgb,
+        depth_m,
+        model_meta=model_meta,
+        device=device,
+        depth_min_m=depth_min_m,
+        depth_max_m=depth_max_m,
+    )
+    grasp_uv = norm_to_uv_letterbox((float(pred[0]), float(pred[1])), letterbox)
+    base_uv = None
+    if len(pred) >= NUM_OUTPUTS_GRASP_BASE:
+        base_uv = norm_to_uv_letterbox((float(pred[2]), float(pred[3])), letterbox)
+    return grasp_uv, base_uv

@@ -7,7 +7,7 @@ from typing import Any
 
 import numpy as np
 
-from .grid_config import TableGridConfig
+from .grid_config import TableGridConfig, format_table_grid_label, table_xy_from_grid
 from .grid_extend import (
     GridModel,
     anchor_model_to_origin,
@@ -125,11 +125,10 @@ def _reindex_relative_to_origin(holes: list[DetectedHole], origin: DetectedHole)
 
 
 def _object_points_for_holes(holes: list[DetectedHole], pitch_m: float) -> np.ndarray:
-    """Table frame: +X = grid column, +Y = -grid row (Z-up right-handed), Z = 0 on surface."""
+    """Table frame: +X = grid column, +Y = grid row (robot-aligned), Z = 0 on surface."""
     pts = np.zeros((len(holes), 3), dtype=np.float64)
     for i, hole in enumerate(holes):
-        x = hole.grid_col * pitch_m
-        y = -hole.grid_row * pitch_m
+        x, y = table_xy_from_grid(hole.grid_col, hole.grid_row, pitch_m)
         hole.table_xy_m = (x, y)
         pts[i, 0] = x
         pts[i, 1] = y
@@ -157,21 +156,45 @@ def invert_transform(transform: np.ndarray) -> np.ndarray:
 def _enforce_table_z_up(
     rvec: np.ndarray,
     tvec: np.ndarray,
+    *,
+    objp: np.ndarray | None = None,
+    imgp: np.ndarray | None = None,
+    cam_mat: np.ndarray | None = None,
+    dist: np.ndarray | None = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """
-    Safety net if planar PnP still returns camera below the table (+Z is up from surface).
+    Safety net if planar PnP returns camera below the table (+Z is up from surface).
     Uses a 180° flip about table X (proper rotation, valid rvec/tvec).
+    Skips the flip when it would blow up reprojection error.
     """
+    cv2 = _require_cv2()
+    rvec = np.asarray(rvec, dtype=np.float64).reshape(3)
+    tvec = np.asarray(tvec, dtype=np.float64).reshape(3)
     transform_cam_table = rvec_tvec_to_matrix(rvec, tvec)
     transform_table_cam = invert_transform(transform_cam_table)
     if transform_table_cam[2, 3] >= 0.0:
-        return rvec.reshape(3), tvec.reshape(3)
+        return rvec, tvec
 
     flip_x = np.diag([1.0, -1.0, -1.0, 1.0])
-    transform_table_cam = flip_x @ transform_table_cam
-    transform_cam_table = invert_transform(transform_table_cam)
-    rvec_out, _ = _require_cv2().Rodrigues(transform_cam_table[:3, :3])
-    return rvec_out.reshape(3), transform_cam_table[:3, 3].copy()
+    transform_table_cam_flip = flip_x @ transform_table_cam
+    transform_cam_table_flip = invert_transform(transform_table_cam_flip)
+    rvec_flip, _ = cv2.Rodrigues(transform_cam_table_flip[:3, :3])
+    tvec_flip = transform_cam_table_flip[:3, 3].copy()
+
+    if (
+        objp is not None
+        and imgp is not None
+        and cam_mat is not None
+        and dist is not None
+    ):
+        def _reproj_err(rv: np.ndarray, tv: np.ndarray) -> float:
+            projected, _ = cv2.projectPoints(objp, rv, tv, cam_mat, dist)
+            return float(np.linalg.norm(projected.reshape(-1, 2) - imgp.reshape(-1, 2), axis=1).mean())
+
+        if _reproj_err(rvec_flip, tvec_flip) > _reproj_err(rvec, tvec) * 2.0:
+            return rvec, tvec
+
+    return rvec_flip.reshape(3), tvec_flip
 
 
 def _slots_from_holes(holes: list[DetectedHole]) -> list[GridSlot]:
@@ -299,7 +322,14 @@ def _solve_pnp_for_holes(
         ok, rvec, tvec = cv2.solvePnP(objp, imgp, cam_mat, dist, flags=flags)
         if not ok:
             return None, None, float("inf")
-        rvec, tvec = _enforce_table_z_up(rvec.reshape(3), tvec.reshape(3))
+        rvec, tvec = _enforce_table_z_up(
+            rvec.reshape(3),
+            tvec.reshape(3),
+            objp=objp,
+            imgp=imgp,
+            cam_mat=cam_mat,
+            dist=dist,
+        )
     except cv2.error:
         return None, None, float("inf")
 
@@ -876,7 +906,7 @@ def set_calibration_origin(
         cv2.circle(annotated, (int(round(pt[0])), int(round(pt[1]))), 2, (255, 0, 255), -1)
 
     msg = (
-        f"origin ({origin.grid_col},{origin.grid_row})  {len(holes)} holes, "
+        f"origin ({format_table_grid_label(origin.grid_col, origin.grid_row)})  {len(holes)} holes, "
         f"reproj {err:.2f}px"
     )
     cv2.putText(annotated, msg, (12, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 0), 2)

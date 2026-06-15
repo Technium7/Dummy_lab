@@ -108,7 +108,11 @@ def world_pos_to_robot_frame(pos_world_m: Sequence[float]) -> Tuple[float, float
 
 
 def grasp_c_deg_from_robot_xy(x_robot_m: float, y_robot_m: float) -> float:
-    """Heading C (deg) from sensor/grasp XY in robot frame (matches taught down-grasp sweep)."""
+    """Heading compensation (deg) for semantic C from grasp XY in robot base frame.
+
+    ``atan2(y, x)`` — azimuth in the table plane (world Z up). Added to template C when
+    ``grasp_c_from_xy`` is enabled in grab_sensor config.
+    """
     return float(math.degrees(math.atan2(y_robot_m, x_robot_m)))
 
 
@@ -123,6 +127,33 @@ def semantic_abc_deg_to_world_rpy_rad(
     _, world_quat = p.multiplyTransforms([0.0, 0.0, 0.0], _BASE_ORIENTATION_Z_180, [0.0, 0.0, 0.0], quat_robot)
     rpy = p.getEulerFromQuaternion(world_quat)
     return tuple(float(v) for v in rpy)
+
+
+def semantic_abc_deg_to_world_rpy_rad_with_xy_heading(
+    semantic_abc_deg: Sequence[float],
+    home_abc_ref: Sequence[float],
+    *,
+    xy_heading_deg: float | None = None,
+) -> Tuple[float, float, float]:
+    """Template semantic A/B/C → world RPY, then optional yaw about **world Z**.
+
+    XY heading must be composed in world frame. Adding degrees to semantic C instead
+    couples into world roll/pitch because firmware A/B/C are not world Euler angles.
+
+    ``xy_heading_deg`` is ``atan2(Y, X)`` in the robot base frame. Planner world
+  frame applies ``Rz(-heading)`` after the template so roll/pitch stay fixed (the
+    robot base is flipped 180° about Z in world; +heading was unreachable at grasp).
+    """
+    base_rpy = semantic_abc_deg_to_world_rpy_rad(semantic_abc_deg, home_abc_ref)
+    if xy_heading_deg is None or abs(float(xy_heading_deg)) < 1e-12:
+        return base_rpy
+    heading_rad = math.radians(-float(xy_heading_deg))
+    z_quat = p.getQuaternionFromEuler([0.0, 0.0, heading_rad])
+    base_quat = p.getQuaternionFromEuler(base_rpy)
+    _, world_quat = p.multiplyTransforms(
+        [0.0, 0.0, 0.0], z_quat, [0.0, 0.0, 0.0], base_quat
+    )
+    return tuple(float(v) for v in p.getEulerFromQuaternion(world_quat))
 
 
 def world_rpy_rad_to_semantic_abc_deg(
@@ -166,9 +197,12 @@ def resolve_target_end_link(
     abc_raw = target.get("orientation_abc_deg")
     if abc_raw is not None:
         abc = [float(v) for v in abc_raw[:3]]
+        heading_deg = None
         if bool(target.get("orientation_c_from_xy", False)):
-            abc[2] = grasp_c_deg_from_robot_xy(pos_robot[0], pos_robot[1]) + abc[2]
-        rpy = semantic_abc_deg_to_world_rpy_rad(abc, home_abc_ref)
+            heading_deg = grasp_c_deg_from_robot_xy(pos_robot[0], pos_robot[1])
+        rpy = semantic_abc_deg_to_world_rpy_rad_with_xy_heading(
+            abc, home_abc_ref, xy_heading_deg=heading_deg
+        )
         return pos_world, rpy
 
     if "orientation_rpy_rad" in target:

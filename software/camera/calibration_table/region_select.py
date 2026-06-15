@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from .grid_config import format_table_grid_label
 from .grid_types import DetectedHole
 
 
@@ -129,7 +130,7 @@ def draw_region_filtered_grid(
         cv2.circle(annotated, (ix, iy), r, (100, 100, 100), 1)
         cv2.putText(
             annotated,
-            f"{hole.grid_col},{hole.grid_row}",
+            format_table_grid_label(hole.grid_col, hole.grid_row),
             (ix + 4, iy - 4),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.32,
@@ -146,7 +147,7 @@ def draw_region_filtered_grid(
         cv2.circle(annotated, (ix, iy), r, color, thickness)
         cv2.putText(
             annotated,
-            f"{hole.grid_col},{hole.grid_row}",
+            format_table_grid_label(hole.grid_col, hole.grid_row),
             (ix + 5, iy - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.35,

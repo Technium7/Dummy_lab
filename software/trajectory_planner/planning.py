@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence
 
 import numpy as np
 
@@ -33,6 +33,8 @@ def plan_joint_trajectory(
     exact_clearance: bool = False,
     collision_stride: int = DEFAULT_PLANNER_COLLISION_STRIDE,
     scp_constraint_weight: float = DEFAULT_SCP_CONSTRAINT_WEIGHT,
+    tcp_position_error_m: Callable[[PlanningScene, Sequence[float], Sequence[float]], float]
+    | None = None,
 ) -> Optional[np.ndarray]:
     start_arr = np.asarray(start_q, dtype=np.float64)
     goal_arr = np.asarray(goal_q, dtype=np.float64)
@@ -75,12 +77,21 @@ def plan_joint_trajectory(
             print(f"Warning: resampled trajectory has {collisions} colliding samples.")
 
     set_joint_positions(scene, dense[-1])
-    pos, rpy = get_end_link_pose(scene)
-    pos_err, ori_err = pose_error_rad(pos, rpy, target_pos, target_rpy)
-    print(
-        f"Planned goal FK: pos_err={pos_err*1000:.3f} mm, "
-        f"ori_err={np.degrees(ori_err):.2f} deg"
-    )
+    if tcp_position_error_m is not None:
+        pos_err = float(tcp_position_error_m(scene, dense[-1], target_pos))
+        _, rpy = get_end_link_pose(scene)
+        _, ori_err = pose_error_rad([0.0, 0.0, 0.0], rpy, [0.0, 0.0, 0.0], target_rpy)
+        print(
+            f"Planned goal TCP FK: tip_err={pos_err * 1000:.3f} mm, "
+            f"ori_err={np.degrees(ori_err):.2f} deg"
+        )
+    else:
+        pos, rpy = get_end_link_pose(scene)
+        pos_err, ori_err = pose_error_rad(pos, rpy, target_pos, target_rpy)
+        print(
+            f"Planned goal FK: pos_err={pos_err * 1000:.3f} mm, "
+            f"ori_err={np.degrees(ori_err):.2f} deg"
+        )
     print(f"Final trajectory: {len(dense)} samples")
     return dense
 

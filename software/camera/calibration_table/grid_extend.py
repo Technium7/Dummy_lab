@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .grid_config import TableGridConfig
+from .grid_config import TableGridConfig, format_table_grid_label
 from .grid_types import DetectedHole, GridSlot
 from .hole_detect import RawHoleCandidate, filter_raw_candidates
 
@@ -667,7 +667,7 @@ def draw_simple_overlay(
         cv2.circle(annotated, (ix, iy), r, color, thickness)
         cv2.putText(
             annotated,
-            f"{hole.grid_col},{hole.grid_row}",
+            format_table_grid_label(hole.grid_col, hole.grid_row),
             (ix + 5, iy - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.35,
@@ -769,7 +769,7 @@ def draw_extended_grid(
         else:
             continue
 
-        label = f"{slot.grid_col},{slot.grid_row}"
+        label = format_table_grid_label(slot.grid_col, slot.grid_row)
         cv2.putText(
             annotated,
             label,

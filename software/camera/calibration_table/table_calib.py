@@ -11,7 +11,7 @@ from typing import Any
 
 import numpy as np
 
-from .grid_config import TableGridConfig
+from .grid_config import TableGridConfig, table_frame_grid_indices
 from .grid_detect import GridObservation, invert_transform, rvec_tvec_to_matrix
 
 
@@ -30,6 +30,18 @@ def _matrix_to_rpy_deg(rot: np.ndarray) -> np.ndarray:
 
 def _decompose_transform(transform: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return transform[:3, 3].copy(), _matrix_to_rpy_deg(transform[:3, :3])
+
+
+def _hole_to_dict(hole) -> dict[str, Any]:
+    table_col, table_row = table_frame_grid_indices(hole.grid_col, hole.grid_row)
+    return {
+        "grid_col": table_col,
+        "grid_row": table_row,
+        "image_px": list(hole.center_px),
+        "radius_px": hole.radius_px,
+        "table_xy_m": list(hole.table_xy_m),
+        "is_origin": hole.is_origin,
+    }
 
 
 @dataclass
@@ -51,7 +63,8 @@ class TableCalibrationResult:
             "method": method,
             "description": (
                 "Camera extrinsics relative to optical table grid. "
-                "Table origin is the chosen hole (0,0); +X/+Y follow grid columns/rows; +Z is up from the table. "
+                "Table origin is the chosen hole (0,0); +X/+Y follow grid column/row "
+                "(same sense as robot base XY); +Z is up from the table. "
                 "Use transform_table_cam / transform_cam_table for geometry; rpy_deg is XYZ Euler decomposition only."
             ),
             "captured_utc": self.captured_utc,
@@ -75,17 +88,7 @@ class TableCalibrationResult:
                 "rpy_deg": self.camera_in_table_rpy_deg.tolist(),
                 "transform_table_cam": self.transform_table_cam.tolist(),
             },
-            "holes": [
-                {
-                    "grid_col": h.grid_col,
-                    "grid_row": h.grid_row,
-                    "image_px": list(h.center_px),
-                    "radius_px": h.radius_px,
-                    "table_xy_m": list(h.table_xy_m),
-                    "is_origin": h.is_origin,
-                }
-                for h in self.observation.holes
-            ],
+            "holes": [_hole_to_dict(h) for h in self.observation.holes],
         }
         if self.multi_shot is not None:
             out["multi_shot"] = self.multi_shot

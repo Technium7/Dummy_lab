@@ -7,7 +7,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .grid_config import TableGridConfig
+from .grid_config import TableGridConfig, format_table_grid_label
 from .grid_types import DetectedHole
 from .hole_detect import RawHoleCandidate, estimate_pitch_px
 
@@ -792,7 +792,7 @@ def draw_grown_grid(
         cv2.circle(annotated, (ix, iy), r, color, thickness)
         cv2.putText(
             annotated,
-            f"{hole.grid_col},{hole.grid_row}",
+            format_table_grid_label(hole.grid_col, hole.grid_row),
             (ix + 5, iy - 5),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.35,

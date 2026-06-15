@@ -37,6 +37,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--depth-min-m", type=float, default=0.25)
     p.add_argument("--depth-max-m", type=float, default=0.85)
     p.add_argument(
+        "--grasp-only",
+        action="store_true",
+        help="Train grasp point only (legacy 2-output model, no base labels required)",
+    )
+    p.add_argument(
         "--review",
         action="store_true",
         help="Open live review GUI after training (confirm / reset loop)",
@@ -51,13 +56,20 @@ def main(argv: list[str] | None = None) -> int:
     model_path = (args.model_path or default_model_path(data_dir)).resolve()
     yolo_model = args.yolo_model.resolve() if args.crop and args.yolo_model.is_file() else None
 
-    count = len(list_labeled_samples(data_dir))
+    count = len(list_labeled_samples(data_dir, require_base=not args.grasp_only))
+    total = len(list_labeled_samples(data_dir))
     if count < 2:
-        print(f"Need at least 2 labeled samples in {data_dir}, found {count}.")
-        print("Collect data first: python -m high_level_jobs.subtasks.grab_sensor.label_grasp")
+        if args.grasp_only:
+            print(f"Need at least 2 labeled samples in {data_dir}, found {count}.")
+            print("Collect data first: python -m high_level_jobs.subtasks.grab_sensor.label_grasp")
+        else:
+            print(f"Need at least 2 samples with base labels in {data_dir}, found {count} ({total} grasp labels).")
+            print("Label sensor bases first: python -m high_level_jobs.subtasks.grab_sensor.label_base")
         return 1
 
-    mode = "crop+RGBD" if args.crop and args.depth else ("crop" if args.crop else "full RGB")
+    mode = "crop+RGBD+base" if args.crop and args.depth and not args.grasp_only else (
+        "crop+RGBD" if args.crop and args.depth else ("crop" if args.crop else "full RGB")
+    )
     print(f"Training ({mode}) on {count} samples from {data_dir}")
     if args.crop and yolo_model:
         print(f"  YOLO crop model: {yolo_model}")
@@ -72,16 +84,21 @@ def main(argv: list[str] | None = None) -> int:
         seed=args.seed,
         crop_mode=args.crop,
         use_depth=args.depth,
+        predict_base=not args.grasp_only,
         yolo_model_path=yolo_model,
         crop_padding_px=args.crop_padding,
         depth_min_m=args.depth_min_m,
         depth_max_m=args.depth_max_m,
     )
     print(f"Saved model to {result.model_path}")
-    print(
+    err_msg = (
         f"Train={result.train_samples}  Val={result.val_samples}  "
-        f"Val crop error ~ {result.best_val_px_error:.1f}px  Epochs={result.epochs_run}"
+        f"Val grasp err ~ {result.best_val_px_error:.1f}px"
     )
+    if result.best_val_base_px_error is not None:
+        err_msg += f"  base err ~ {result.best_val_base_px_error:.1f}px"
+    err_msg += f"  Epochs={result.epochs_run}"
+    print(err_msg)
 
     if args.review:
         from .review_grasp import run_review_gui
