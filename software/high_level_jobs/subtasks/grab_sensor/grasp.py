@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import math
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
 
@@ -70,22 +70,50 @@ def record_grasp_tcp_targets(cfg: GrabSensorConfig, targets: GraspTargets) -> No
     targets.pre_grasp_rpy_rad = rpy.copy()
 
 
-def _normalize_yaw_rad(yaw_rad: float) -> float:
-    yaw_deg = (math.degrees(yaw_rad) + 180.0) % 360.0 - 180.0
-    return math.radians(yaw_deg)
+def _normalize_yaw_deg(yaw_deg: float) -> float:
+    return (float(yaw_deg) + 180.0) % 360.0 - 180.0
 
 
-def fixed_grasp_rpy_world_rad(cfg: GrabSensorConfig, grasp_pos_m: np.ndarray) -> np.ndarray:
-    """Planner world RPY: config template + optional ``sign * atan2(Y,X)`` on yaw only."""
-    from manual_control.pose_conventions import grasp_c_deg_from_robot_xy
+def _grasp_xy_heading_deg(x_m: float, y_m: float) -> float:
+    """Heading term (deg) for world yaw: ``atan2(x, y)`` in robot base XY."""
+    return float(math.degrees(math.atan2(x_m, y_m)))
 
-    rpy = np.radians(np.asarray(cfg.fixed_grasp_rpy_world_deg, dtype=np.float64))
-    if cfg.grasp_c_from_xy:
+
+def grasp_abc_input_to_world_rpy_deg(
+    abc_input_deg: Sequence[float],
+    grasp_pos_m: np.ndarray | Sequence[float] | None,
+    *,
+    grasp_c_from_xy: bool = True,
+    roll_offset_deg: float = 15.0,
+    yaw_base_deg: float = 180.0,
+) -> tuple[float, float, float]:
+    """Map taught input ``[a, b, c]`` (deg) to planner world RPY (deg).
+
+    ``world = [-a + roll_offset, -b, yaw_base + c - atan2(x, y)]`` when ``grasp_c_from_xy``.
+    """
+    a, b, c = (float(abc_input_deg[i]) for i in range(3))
+    roll = -a + float(roll_offset_deg)
+    pitch = -b
+    yaw = float(yaw_base_deg) + c
+    if grasp_c_from_xy and grasp_pos_m is not None:
         pos = np.asarray(grasp_pos_m, dtype=np.float64)[:3]
-        heading_deg = grasp_c_deg_from_robot_xy(float(pos[0]), float(pos[1]))
-        rpy = rpy.copy()
-        rpy[2] = _normalize_yaw_rad(rpy[2] + math.radians(cfg.grasp_xy_yaw_sign * heading_deg))
-    return rpy
+        yaw -= _grasp_xy_heading_deg(float(pos[0]), float(pos[1]))
+    return roll, pitch, _normalize_yaw_deg(yaw)
+
+
+def grasp_abc_to_world_rpy_deg(
+    cfg: GrabSensorConfig,
+    abc_input_deg: Sequence[float],
+    grasp_pos_m: np.ndarray | Sequence[float] | None,
+) -> tuple[float, float, float]:
+    """``grasp_abc_input_to_world_rpy_deg`` using ``GrabSensorConfig`` orientation fields."""
+    return grasp_abc_input_to_world_rpy_deg(
+        abc_input_deg,
+        grasp_pos_m,
+        grasp_c_from_xy=cfg.grasp_c_from_xy,
+        roll_offset_deg=cfg.grasp_rpy_roll_offset_deg,
+        yaw_base_deg=cfg.grasp_rpy_yaw_base_deg,
+    )
 
 
 def apply_fixed_grasp_orientation(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
@@ -93,20 +121,52 @@ def apply_fixed_grasp_orientation(cfg: GrabSensorConfig, targets: GraspTargets) 
     if cfg.grasp_orientation_mode != "fixed_robot":
         return
 
-    from manual_control.pose_conventions import grasp_c_deg_from_robot_xy
-
-    template_deg = [float(v) for v in cfg.fixed_grasp_rpy_world_deg]
+    abc = [float(v) for v in cfg.fixed_grasp_abc_input_deg]
+    pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
+    world_deg = grasp_abc_to_world_rpy_deg(cfg, abc, pos)
     if cfg.grasp_c_from_xy:
-        pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
-        targets.debug["grasp_heading_deg"] = float(
-            grasp_c_deg_from_robot_xy(float(pos[0]), float(pos[1]))
-        )
+        targets.debug["grasp_heading_deg"] = _grasp_xy_heading_deg(float(pos[0]), float(pos[1]))
+    targets.grasp_rpy_rad = np.radians(np.asarray(world_deg, dtype=np.float64))
+    targets.debug["grasp_abc_input_deg"] = abc
+    targets.debug["grasp_rpy_world_deg"] = [float(v) for v in world_deg]
 
-    grasp_rpy = fixed_grasp_rpy_world_rad(cfg, targets.grasp_pos_m)
-    targets.grasp_rpy_rad = np.asarray(grasp_rpy, dtype=np.float64)
-    targets.debug["grasp_rpy_template_world_deg"] = template_deg
-    targets.debug["grasp_xy_yaw_sign"] = float(cfg.grasp_xy_yaw_sign)
-    targets.debug["grasp_rpy_world_deg"] = [float(math.degrees(v)) for v in grasp_rpy]
+
+def prepare_fixed_robot_grasp_targets(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
+    """Apply fixed orientation and TCP target annotations (shared by viz and ik-gui)."""
+    apply_fixed_grasp_orientation(cfg, targets)
+    record_grasp_tcp_targets(cfg, targets)
+
+
+def load_grasp_targets_from_vision(
+    cfg: GrabSensorConfig,
+    *,
+    offline: bool = True,
+    grasp_pos_m: np.ndarray | Sequence[float] | None = None,
+) -> GraspTargets:
+    """Vision grasp XYZ + fixed_robot orientation (same inputs for viz and ik-gui)."""
+    if grasp_pos_m is not None:
+        pos = np.asarray(grasp_pos_m, dtype=np.float64)[:3]
+        targets = GraspTargets(
+            pre_grasp_pos_m=pos.copy(),
+            pre_grasp_rpy_rad=np.zeros(3),
+            grasp_pos_m=pos,
+            grasp_rpy_rad=np.zeros(3),
+            object_pos_m=pos.copy(),
+            object_rpy_rad=np.zeros(3),
+            debug={},
+        )
+    else:
+        from .pipeline import run_detection
+
+        _, targets, _, _ = run_detection(
+            cfg,
+            {
+                "offline": offline,
+                "allow_offline_fallback": not offline,
+            },
+        )
+    prepare_fixed_robot_grasp_targets(cfg, targets)
+    return targets
 
 
 def apply_table_base_grasp_position(

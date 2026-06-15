@@ -10,7 +10,8 @@ from PIL import Image
 from .capture import capture_realsense_frame, load_capture_from_files, save_debug_capture, validate_color_image_file
 from .config_loader import load_grab_sensor_config
 from .execute import execute_on_robot
-from .grasp import compute_grasp_targets
+from .grasp import compute_grasp_targets, prepare_fixed_robot_grasp_targets
+from .ik_debug import show_ik_goal_debug_gui
 from .plan_motion import plan_approach_and_grasp
 from .pose import detect_table_object
 from .segment import segment_table_object
@@ -78,6 +79,17 @@ def run_detection(
 ) -> tuple[Any, GraspTargets, Any, Any]:
     color_file = params.get("color_file")
     depth_file = params.get("depth_file")
+    offline = bool(params.get("offline", False))
+
+    if color_file is None and offline:
+        fallback_color, fallback_depth = _offline_capture_paths(cfg)
+        if fallback_color is None:
+            raise FileNotFoundError(
+                "offline mode requires saved debug capture "
+                f"(grab_sensor.color.png under {cfg.save_debug_dir or _DEFAULT_DEBUG_DIR})"
+            )
+        color_file = fallback_color
+        depth_file = fallback_depth
 
     if color_file:
         capture = load_capture_from_files(
@@ -204,6 +216,16 @@ def run_grab_sensor_pipeline(
             if current is not None:
                 start_joints_deg = current
 
+    if bool(params.get("ik_gui", False)):
+        prepare_fixed_robot_grasp_targets(cfg, targets)
+        show_ik_goal_debug_gui(cfg, targets)
+        return {
+            "targets": targets,
+            "trajectory_rad": None,
+            "plan_meta": {},
+            "start_joints_deg": start_joints_deg,
+        }
+
     trajectory, plan_meta = plan_approach_and_grasp(
         cfg,
         start_joints_deg,
@@ -217,21 +239,14 @@ def run_grab_sensor_pipeline(
         print(f"[grab_sensor] pre-grasp (robot m)={targets.pre_grasp_pos_m.round(4).tolist()}")
     print(f"[grab_sensor] planned {plan_meta['n_total']} waypoints.")
 
-    if bool(params.get("ik_gui", False)):
-        from .ik_debug import show_ik_goal_debug_gui
-
-        goal_q = plan_meta.get("grasp_goal_q")
-        if goal_q is None:
-            raise RuntimeError("plan_meta missing grasp_goal_q")
-        show_ik_goal_debug_gui(cfg, targets, goal_q)
-    elif bool(params.get("plan_gui", False)):
+    if bool(params.get("plan_gui", False)):
         from .ik_debug import playback_grasp_plan_in_gui
 
         playback_grasp_plan_in_gui(cfg, trajectory, targets)
     else:
         print(
             "[grab_sensor] No PyBullet window (--visualize is camera overlay only). "
-            "Add --ik-gui for IK goal yellow-cross check, --plan-gui to play the path, or run "
+            "Add --ik-gui for viz-style grasp IK check, --plan-gui to play the path, or run "
             "python -m high_level_jobs.subtasks.grab_sensor.view_grasp_table for table/robot/camera/grasp."
         )
 

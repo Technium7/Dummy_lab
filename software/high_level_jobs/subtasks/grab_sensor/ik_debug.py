@@ -7,6 +7,7 @@ from typing import Sequence
 
 import numpy as np
 
+from manual_control.mapping import HOME_JOINTS_DEG
 from trajectory_planner.scene import (
     disconnect_planning_scene,
     frame_camera_on_scene,
@@ -14,23 +15,18 @@ from trajectory_planner.scene import (
 )
 
 from .models import GrabSensorConfig, GraspTargets
+from .plan_motion import build_scene, start_q_from_robot_joints_deg
 from .tcp_ik import (
     TcpOffset,
     fk_grasp_points,
+    grasp_ik_goal_from_home,
     link_pose_from_q,
-    measure_target_pose_error,
+    print_grasp_ik_debug,
     tcp_error_mm,
     wrist_tcp_distance_mm,
 )
 
 _CROSS_HALF_M = 0.012
-
-
-def _planner_tip_target(cfg: GrabSensorConfig, targets: GraspTargets) -> np.ndarray | None:
-    tip_raw = targets.debug.get("grasp_tip_pos_m")
-    if tip_raw is not None:
-        return np.asarray(tip_raw, dtype=np.float64)
-    return np.asarray(targets.grasp_pos_m, dtype=np.float64)
 
 
 def _sync_scene_kinematics(scene, q: Sequence[float]) -> None:
@@ -104,56 +100,29 @@ def _draw_world_rpy_axes(
         p.addUserDebugLine(origin, end, [c[0] * scale, c[1] * scale, c[2] * scale], 2.5, 0)
 
 
-def _print_ik_goal_summary(
-    cfg: GrabSensorConfig,
-    targets: GraspTargets,
-    goal_q: Sequence[float],
-    scene,
-) -> float:
-    tcp = TcpOffset()
-    _sync_scene_kinematics(scene, goal_q)
-    planned = _planner_tip_target(cfg, targets)
-    tip_world = tcp.tip_world(scene)
-    wrist_world = tcp.wrist_world(scene)
-    gap_mm = (
-        float(np.linalg.norm(tip_world - planned)) * 1000.0 if planned is not None else float("nan")
-    )
-    tcp_name = scene.tcp_link_name or "offset"
-    _, ori_err = measure_target_pose_error(
-        scene, targets.grasp_pos_m, targets.grasp_rpy_rad, goal_q, tcp
-    )
-
-    print("[grab_sensor] IK goal (robot world m, sim rad joints):")
-    print(f"  planned:   {planned.round(6).tolist() if planned is not None else None}")
-    print(f"  TCP FK:    {tip_world.round(6).tolist()}  ({tcp_name})")
-    print(f"  wrist:     {wrist_world.round(6).tolist()}  (link6_1)")
-    print(f"  TCP err:   {gap_mm:.3f} mm")
-    print(f"  ori err:   {np.degrees(ori_err):.2f} deg")
-    return gap_mm
-
-
-def show_ik_goal_debug_gui(
-    cfg: GrabSensorConfig,
-    targets: GraspTargets,
-    goal_q: Sequence[float],
-) -> None:
-    """Arm at IK goal: planned target (world) vs TCP on ``grasp_tcp_link``."""
+def show_ik_goal_debug_gui(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
+    """Arm at grasp IK goal — same HOME warm-start TCP IK as ``rpy_world_viz``."""
     import pybullet as p
-
-    from .plan_motion import build_scene
 
     scene, temp_file = build_scene(cfg, use_gui=True)
     tcp = TcpOffset()
-    goal_q = [float(v) for v in goal_q]
     try:
         p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
         p.removeAllUserDebugItems()
         frame_camera_on_scene(scene)
+
+        home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
+        goal_q = grasp_ik_goal_from_home(scene, targets, home_q, tcp)
+        if goal_q is None:
+            raise RuntimeError("Grasp TCP IK failed (HOME warm-start).")
+
+        tip_err_mm = print_grasp_ik_debug(
+            scene, targets, goal_q, label="ik-gui", warm_start_q=home_q, tcp=tcp
+        )
         _sync_scene_kinematics(scene, goal_q)
 
-        planned = _planner_tip_target(cfg, targets)
-        if planned is not None:
-            _draw_world_cross(planned, label="planned", color=[1.0, 1.0, 0.0])
+        grasp = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
+        _draw_world_cross(grasp, label="grasp target", color=[1.0, 1.0, 0.0])
         _draw_tcp_on_arm(scene, tcp)
         _draw_attached_cross(scene, tcp, (0.0, 0.0, 0.0), [1.0, 0.2, 0.2], attach="wrist")
         wrist_world = tcp.wrist_world(scene)
@@ -161,11 +130,7 @@ def show_ik_goal_debug_gui(
         _draw_world_rpy_axes(wrist_world, targets.grasp_rpy_rad, [1.0, 1.0, 0.0])
         _draw_world_rpy_axes(wrist_world, actual_rpy, [1.0, 0.2, 0.2])
 
-        gap_mm = _print_ik_goal_summary(cfg, targets, goal_q, scene)
-        print(
-            f"[grab_sensor] IK GUI: yellow=planned tip, yellow axes=planned wrist ori, "
-            f"red axes=actual wrist ori. TCP err {gap_mm:.2f} mm. Close window to exit."
-        )
+        print(f"[grab_sensor] IK GUI: TCP err {tip_err_mm:.2f} mm. Close window to exit.")
 
         dt = 1.0 / 30.0
         while p.isConnected():
@@ -187,16 +152,15 @@ def draw_goal_alignment(
     """At goal joints: planner target vs live TCP FK."""
     import pybullet as p
 
-    tip_tgt = _planner_tip_target(cfg, targets)
+    tip_tgt = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
     tcp = TcpOffset()
     set_joint_positions(scene, goal_q)
     _draw_tcp_on_arm(scene, tcp)
     tip_fk, _ = fk_grasp_points(scene, goal_q, tcp) or (None, None)
 
-    if tip_tgt is not None:
-        _draw_world_cross(tip_tgt, label="planned", color=[1.0, 1.0, 0.0])
+    _draw_world_cross(tip_tgt, label="planned", color=[1.0, 1.0, 0.0])
 
-    if tip_fk is not None and tip_tgt is not None:
+    if tip_fk is not None:
         err_mm = tcp_error_mm(scene, tip_tgt, goal_q, tcp)
         mid = 0.5 * (tip_tgt + tip_fk)
         p.addUserDebugLine(list(tip_fk), list(tip_tgt), [0.2, 0.95, 0.35], 3.0, 0)
@@ -220,8 +184,6 @@ def playback_grasp_plan_in_gui(
 ) -> None:
     """PyBullet GUI: play path, then show TCP vs planner target at goal."""
     import pybullet as p
-
-    from .plan_motion import build_scene
 
     scene, temp_file = build_scene(cfg, use_gui=True)
     tcp = TcpOffset()

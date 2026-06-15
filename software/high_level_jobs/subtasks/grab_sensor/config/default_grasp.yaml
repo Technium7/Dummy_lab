@@ -41,10 +41,12 @@ motion_planning:
   grasp_height_above_table_mm: 65.0
 
 # Used when grasp_orientation_mode: fixed_robot
-# Planner world RPY (deg). With grasp_c_from_xy: yaw += sign * atan2(Y, X) only.
-fixed_grasp_rpy_world_deg: [-20, 0.0, 180.0]
+# Taught input [a, b, c] (deg) -> planner world RPY:
+#   roll = -a + grasp_rpy_roll_offset_deg, pitch = -b, yaw = grasp_rpy_yaw_base_deg + c - atan2(x, y)
+fixed_grasp_abc_input_deg: [-5, 0.0, 0]
+grasp_rpy_roll_offset_deg: -15.0
+grasp_rpy_yaw_base_deg: 180.0
 grasp_c_from_xy: true
-grasp_xy_yaw_sign: -1.0   # +1 add atan2, -1 subtract
 
 grasp_orientation_tol_deg: 50.0
 grasp_position_tol_mm: 20.0
@@ -67,7 +69,7 @@ segmentation:
 # How to build the grasp pose after the camera locates the object:
 #
 #   follow_object  — vision gives object pose (PCA); grasp_on_object adds tilt/offset
-#   fixed_robot    — vision gives grasp XYZ only; orientation from fixed_grasp_rpy_world_deg
+#   fixed_robot    — vision gives grasp XYZ only; orientation from fixed_grasp_abc_input_deg
 grasp_orientation_mode: fixed_robot
 
 # Taught offset from detected object frame to gripper target (not the camera).

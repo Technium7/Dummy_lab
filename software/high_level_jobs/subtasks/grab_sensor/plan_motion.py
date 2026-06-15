@@ -29,29 +29,28 @@ from trajectory_planner.scene import (  # noqa: E402
 )
 from trajectory_planner.trajectory_utils import compress_duplicate_waypoints, resample_trajectory  # noqa: E402
 
+from manual_control.mapping import HOME_JOINTS_DEG  # noqa: E402
+
 from .models import GrabSensorConfig, GraspTargets
-from .grasp import (
-    apply_fixed_grasp_orientation,
-    record_grasp_tcp_targets,
-)
+from .grasp import prepare_fixed_robot_grasp_targets
 from .tcp_ik import (
     TcpOffset,
     enforce_goal_orientation,
     fk_grasp_points,
     link_pose_from_q,
+    measure_tcp_target_pose_error,
     measure_target_pose_error,
     position_error_mm,
     refine_joint_config_to_target_pose,
     refine_joint_config_to_target_position,
-    snap_joints_to_tcp_target,
+    grasp_ik_goal_from_home,
+    print_grasp_ik_debug,
     solve_goal_from_target_pose,
     tcp_world_rpy_from_q,
     target_pose_from_q,
     tcp_error_mm,
     wrist_tcp_distance_mm,
 )
-from manual_control.pose_conventions import measure_home_abc_ref_for_scene, world_rpy_rad_to_semantic_abc_deg
-from manual_control.mapping import HOME_JOINTS_DEG
 
 # Grasp targets are in PyBullet planner world (= robot GUI). The scene loads the robot
 # with 180° Z; do not apply an extra XY flip on positions.
@@ -544,30 +543,54 @@ def plan_cartesian_approach_segment(
 
 def plan_grasp_segment(
     scene,
-    cfg: GrabSensorConfig,
     start_q: Sequence[float],
     targets: GraspTargets,
     *,
     enable_collision: bool,
     ik_ori_tol_rad: float = 0.35,
-    refine_ori_tol_rad: float = 0.02,
-    pos_tol_m: float = 0.05,
     max_pos_err_m: float = 0.08,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
-    return _plan_pose_segment_with_fallbacks(
+    """Final grasp: HOME warm-start TCP IK then iLQR from ``start_q``."""
+    tcp = TcpOffset()
+    target_pos = _target_pos(targets.grasp_pos_m)
+    target_rpy = targets.grasp_rpy_rad
+
+    home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
+    goal_q = grasp_ik_goal_from_home(scene, targets, home_q, tcp)
+    if goal_q is None:
+        print("[grab_sensor] Final grasp TCP IK failed (warm-start from HOME).")
+        return None, None
+
+    tip_err_mm = tcp_error_mm(scene, target_pos, goal_q, tcp)
+    if tip_err_mm > max_pos_err_m * 1000.0:
+        print(
+            f"[grab_sensor] Final grasp TCP IK rejected: tip_err={tip_err_mm:.2f} mm "
+            f"(limit {max_pos_err_m * 1000:.1f} mm)"
+        )
+        return None, None
+
+    _, ori_err = measure_tcp_target_pose_error(scene, target_pos, target_rpy, goal_q, tcp)
+    if ori_err > ik_ori_tol_rad:
+        print(
+            f"[grab_sensor] Final grasp TCP IK rejected: tcp_ori_err={math.degrees(ori_err):.1f} deg "
+            f"(limit {math.degrees(ik_ori_tol_rad):.1f} deg)"
+        )
+        return None, None
+
+    print_grasp_ik_debug(scene, targets, goal_q, label="plan_grasp", warm_start_q=home_q, tcp=tcp)
+
+    traj = plan_joint_trajectory(
         scene,
-        TcpOffset(),
         start_q,
-        targets.grasp_pos_m,
-        targets.grasp_rpy_rad,
-        enable_collision=enable_collision,
-        segment_name="final grasp",
-        ik_ori_tol_rad=ik_ori_tol_rad,
-        refine_ori_tol_rad=refine_ori_tol_rad,
-        pos_tol_m=pos_tol_m,
-        max_pos_err_m=max_pos_err_m,
-        position_first_fallback=True,
+        goal_q,
+        target_pos,
+        target_rpy,
+        enable_collision_penalty=enable_collision,
+        tcp_position_error_m=_tcp_position_error_m_fn(tcp),
     )
+    if traj is None:
+        return None, None
+    return traj, goal_q
 
 
 def plan_approach_and_grasp(
@@ -583,14 +606,7 @@ def plan_approach_and_grasp(
     try:
         start_q = start_q_from_robot_joints_deg(scene, start_joints_deg)
 
-        home_abc_ref = measure_home_abc_ref_for_scene(
-            scene.robot_id,
-            scene.end_link_idx,
-            scene.joint_indices,
-            HOME_JOINTS_DEG,
-        )
-        apply_fixed_grasp_orientation(cfg, targets)
-        record_grasp_tcp_targets(cfg, targets)
+        prepare_fixed_robot_grasp_targets(cfg, targets)
         targets.debug["pre_grasp_rpy_deg"] = [
             float(math.degrees(v)) for v in targets.pre_grasp_rpy_rad
         ]
@@ -600,14 +616,13 @@ def plan_approach_and_grasp(
                 f"(TCP={cfg.tcp_link} in URDF)"
             )
         elif (rpy := targets.debug.get("grasp_rpy_world_deg")) is not None:
-            print(f"[grab_sensor] grasp world RPY target (deg): {[round(float(v), 2) for v in rpy]}")
-            if (heading := targets.debug.get("grasp_heading_deg")) is not None:
-                tpl = targets.debug.get("grasp_rpy_template_world_deg")
-                sign = float(targets.debug.get("grasp_xy_yaw_sign", -1.0))
-                op = "+" if sign >= 0 else "-"
+            abc = targets.debug.get("grasp_abc_input_deg")
+            abc_s = f"  abc={[round(float(v), 2) for v in abc]}" if abc else ""
+            print(f"[grab_sensor] grasp world RPY target (deg): {[round(float(v), 2) for v in rpy]}{abc_s}")
+            if (heading := targets.debug.get("grasp_heading_deg")) is not None and abc is not None:
                 print(
-                    f"[grab_sensor] yaw = template {tpl[2]:.1f} {op} atan2(Y,X) {abs(heading):.2f} "
-                    f"= {rpy[2]:.2f} deg"
+                    f"[grab_sensor] yaw = {cfg.grasp_rpy_yaw_base_deg:.0f} + c - atan2(x,y) "
+                    f"({float(abc[2]):.0f}+{cfg.grasp_rpy_yaw_base_deg:.0f}-{heading:.2f}) = {rpy[2]:.2f} deg"
                 )
 
         tcp = TcpOffset()
@@ -657,19 +672,16 @@ def plan_approach_and_grasp(
 
         grasp_traj, grasp_goal_q = plan_grasp_segment(
             scene,
-            cfg,
             pre_goal_q,
             targets,
             enable_collision=cfg.enable_collision,
             ik_ori_tol_rad=ori_tol_rad,
-            refine_ori_tol_rad=refine_ori_tol_rad,
-            pos_tol_m=pos_tol_m,
             max_pos_err_m=max_pos_err_m,
         )
         if grasp_traj is None or grasp_goal_q is None:
             raise RuntimeError(
                 "Failed to plan final grasp segment (IK or iLQR). "
-                "Typical causes: grasp target out of reach, or fixed_grasp_rpy_world_deg "
+                "Typical causes: grasp target out of reach, or fixed_grasp_abc_input_deg "
                 "incompatible with the arm at the taught grasp location."
             )
 
@@ -678,9 +690,6 @@ def plan_approach_and_grasp(
         else:
             combined = grasp_traj
         combined = compress_duplicate_waypoints(combined)
-        grasp_goal_q = snap_joints_to_tcp_target(
-            scene, targets.grasp_pos_m, grasp_goal_q, tcp
-        )
         combined = finalize_trajectory_for_cache(combined, start_q, grasp_goal_q)
 
         set_joint_positions(scene, grasp_goal_q)
@@ -731,27 +740,20 @@ def plan_approach_and_grasp(
                 f"[grab_sensor] planned grasp FK (m)={fk_pos_arr.round(4).tolist()}  "
                 f"target={targets.grasp_pos_m.round(4).tolist()}  error={pos_err_mm:.1f} mm"
             )
-        _, fk_rpy = target_pose_from_q(scene, grasp_goal_q, tcp)
         fk_tcp_rpy = tcp_world_rpy_from_q(scene, grasp_goal_q, tcp)
         target_rpy_deg = [round(math.degrees(v), 2) for v in targets.grasp_rpy_rad]
         planned_tcp_rpy_deg = [round(math.degrees(v), 2) for v in fk_tcp_rpy]
         _, grasp_ori_err = measure_target_pose_error(
             scene, targets.grasp_pos_m, targets.grasp_rpy_rad, grasp_goal_q, tcp
         )
-        grasp_abc_actual = world_rpy_rad_to_semantic_abc_deg(fk_rpy, home_abc_ref)
         print(
             f"[grab_sensor] grasp TCP world RPY deg (planned): {planned_tcp_rpy_deg}  "
-            f"target: {target_rpy_deg}"
-        )
-        print(
-            f"[grab_sensor] grasp FK A/B/C semantic (GUI deg): "
-            f"{[round(float(v), 2) for v in grasp_abc_actual]}  "
+            f"target: {target_rpy_deg}  "
             f"ori_err={math.degrees(grasp_ori_err):.1f} deg "
             f"(limit {cfg.grasp_orientation_tol_deg:.1f} deg)"
         )
         meta["grasp_fk_tcp_rpy_world_deg"] = [float(v) for v in planned_tcp_rpy_deg]
         meta["grasp_target_rpy_world_deg"] = [float(v) for v in target_rpy_deg]
-        meta["grasp_fk_abc_semantic_deg"] = [float(v) for v in grasp_abc_actual]
         meta["grasp_fk_ori_err_deg"] = float(math.degrees(grasp_ori_err))
         report_err_mm = tip_err_mm if tip_err_mm is not None else pos_err_mm
         if report_err_mm > 20.0:

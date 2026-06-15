@@ -38,19 +38,17 @@ flowchart LR
 
 #### Fixed orientation with XY heading (`fixed_robot`)
 
-Vision supplies grasp **position** only. Orientation is planner **world RPY** (deg in config, rad for IK):
+Vision supplies grasp **position** only. Orientation is planner **world RPY** derived from taught input `[a, b, c]` (deg):
 
-1. Template: `fixed_grasp_rpy_world_deg: [0, 0, 0]` — level tool in world frame (no extra 180°; the planner already loads the robot with base Z rotated 180°).
+```text
+world_roll  = -a + grasp_rpy_roll_offset_deg
+world_pitch = -b
+world_yaw   = grasp_rpy_yaw_base_deg + c - atan2(x, y)   # default 180 + c - atan2(x, y)
+```
 
-2. With `grasp_c_from_xy: true`, only yaw changes:
+Example: `fixed_grasp_abc_input_deg: [0, 0, 0]` at grasp `(0.26, 0.35)` with roll offset `-15` → world RPY ≈ `[-15, 0, 143]`.
 
-   ```text
-   yaw_grasp = yaw_template + grasp_xy_yaw_sign * atan2(Y, X)
-   ```
-
-   Flip `grasp_xy_yaw_sign` between `1` and `-1` if the tool spins the wrong way.
-
-Set `grasp_c_from_xy: false` to keep the template everywhere.
+Set `grasp_c_from_xy: false` to skip the atan2 term on yaw.
 
 Legacy mode **`vision_mode: depth_segment`** uses depth band + blob + PCA instead of YOLO + CNN.
 
@@ -68,7 +66,7 @@ python -m high_level_jobs.subtasks.grab_sensor --offline --detect-only --visuali
 # Plan + PyBullet path playback (offline test capture, no robot motion)
 python -m high_level_jobs.subtasks.grab_sensor --offline --plan-gui --visualize
 
-# Drag world roll/pitch/yaw sliders; sphere + RGB axes at origin (no URDF)
+# Drag [a,b,c] input sliders; world RPY computed at grasp target
 python -m high_level_jobs.subtasks.grab_sensor.rpy_world_viz
 
 # Or explicit files from a prior run
@@ -96,9 +94,10 @@ Primary file: `config/default_grasp.yaml`
 | `yolo.*` | YOLO weights, confidence, crop padding |
 | `grasp_net.*` | Grasp CNN weights, depth normalization band |
 | `grasp_orientation_mode` | `fixed_robot` or `follow_object` |
-| `fixed_grasp_rpy_world_deg` | World RPY template `[0,0,0]` deg; yaw ± `atan2(Y,X)` when `grasp_c_from_xy` |
-| `grasp_c_from_xy` | If true: `yaw += sign * atan2(Y,X)`; see Stage 3 |
-| `grasp_xy_yaw_sign` | `1` = add atan2, `-1` = subtract (default `-1`) |
+| `fixed_grasp_abc_input_deg` | Taught `[a,b,c]` (deg); mapped to world RPY (see Stage 3) |
+| `grasp_rpy_roll_offset_deg` | Added after negating `a` for world roll |
+| `grasp_rpy_yaw_base_deg` | Base yaw before subtracting atan2 (default `180`) |
+| `grasp_c_from_xy` | If true: `yaw -= atan2(x,y)`; see Stage 3 |
 | `load_environment` | `false` = robot-only PyBullet scene (default for grasp planning) |
 | `approach.*` | Pre-grasp offset, retreat after close |
 

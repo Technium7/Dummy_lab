@@ -69,7 +69,7 @@
       0.0
     ],
     "vision_mode": "yolo_grasp",
-    "yolo_confidence": 0.92408287525177,
+    "yolo_confidence": 0.9240785837173462,
     "yolo_class": "sensor",
     "yolo_bbox_xy": [
       392,

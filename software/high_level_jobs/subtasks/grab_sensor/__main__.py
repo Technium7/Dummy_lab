@@ -69,7 +69,10 @@ def main() -> int:
     if args.rpy_viz:
         from high_level_jobs.subtasks.grab_sensor.rpy_world_viz import main as rpy_viz_main
 
-        return rpy_viz_main()
+        rpy_argv: list[str] = []
+        if args.offline:
+            rpy_argv.append("--offline")
+        return rpy_viz_main(rpy_argv if rpy_argv else None)
 
     color_file = args.color_file
     depth_file = args.depth_file
@@ -98,6 +101,7 @@ def main() -> int:
         "execute": args.execute,
         "color_file": str(color_file) if color_file else None,
         "depth_file": str(depth_file) if depth_file else None,
+        "offline": bool(args.offline),
         "visualize": args.visualize or args.detect_only,
         "visualize_out": str(args.visualize_out) if args.visualize_out else None,
         "plan_gui": args.plan_gui,

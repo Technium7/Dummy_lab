@@ -34,10 +34,6 @@ class GraspOnObjectFrame:
         return np.asarray(self.position_mm, dtype=np.float64) * 1e-3
 
 
-# Backward-compatible alias (object on table was named "sensor" in early drafts).
-GraspInSensorFrame = GraspOnObjectFrame
-
-
 @dataclass(frozen=True)
 class ApproachConfig:
     pre_grasp_offset_mm: float = 80.0
@@ -92,9 +88,6 @@ class CameraToRobot:
     rpy_deg: Tuple[float, float, float]
 
 
-CameraExtrinsics = CameraToRobot
-
-
 @dataclass(frozen=True)
 class RobotInTableFrame:
     """Robot base origin pose expressed in the optical table frame."""
@@ -121,11 +114,10 @@ class GrabSensorConfig:
     yolo: YoloConfig | None = None
     grasp_net: GraspNetConfig | None = None
     grasp_orientation_mode: GraspOrientationMode = "follow_object"
-    fixed_grasp_rpy_world_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    fixed_grasp_abc_input_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    grasp_rpy_roll_offset_deg: float = 15.0
+    grasp_rpy_yaw_base_deg: float = 180.0
     grasp_c_from_xy: bool = True
-    grasp_xy_yaw_sign: float = -1.0
-    fixed_grasp_abc_semantic_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # legacy; unused
-    fixed_grasp_rpy_robot_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)  # legacy; unused
     load_environment: bool = False
     env_path: Path = field(default_factory=lambda: Path("physical_env/packaging_station_edit.obj"))
     mesh_scale: float = 1.0
@@ -143,16 +135,8 @@ class GrabSensorConfig:
     robot_in_table_frame: RobotInTableFrame = field(default_factory=RobotInTableFrame)
 
     @property
-    def camera_extrinsics(self) -> CameraToRobot:
-        return self.camera_to_robot
-
-    @property
-    def grasp_in_sensor_frame(self) -> GraspOnObjectFrame:
-        return self.grasp_on_object
-
-    @property
     def grasp_height_above_table_mm(self) -> float:
-        """Backward-compatible alias for ``grasp_motion.grasp_height_above_table_mm``."""
+        """Alias for ``grasp_motion.grasp_height_above_table_mm``."""
         return self.grasp_motion.grasp_height_above_table_mm
 
     @staticmethod
@@ -221,26 +205,15 @@ class GrabSensorConfig:
                 f"grasp_orientation_mode must be 'follow_object' or 'fixed_robot', got {mode_raw!r}"
             )
 
-        fixed_rpy_world = tuple(
-            float(v) for v in data.get("fixed_grasp_rpy_world_deg", [0.0, 0.0, 0.0])[:3]
-        )
-        grasp_xy_yaw_sign = float(data.get("grasp_xy_yaw_sign", -1.0))
-        if grasp_xy_yaw_sign == 0.0:
-            grasp_xy_yaw_sign = -1.0
-        elif grasp_xy_yaw_sign > 0.0:
-            grasp_xy_yaw_sign = 1.0
-        else:
-            grasp_xy_yaw_sign = -1.0
-        fixed_abc = tuple(
-            float(v)
-            for v in data.get(
+        abc_raw = data.get("fixed_grasp_abc_input_deg")
+        if abc_raw is None:
+            abc_raw = data.get(
                 "fixed_grasp_abc_semantic_deg",
                 data.get("fixed_grasp_abc_deg", [0.0, 0.0, 0.0]),
-            )[:3]
-        )
-        fixed_rpy = tuple(
-            float(v) for v in data.get("fixed_grasp_rpy_robot_deg", [0.0, 0.0, 0.0])[:3]
-        )
+            )
+        abc_input = tuple(float(v) for v in abc_raw[:3])
+        roll_offset = float(data.get("grasp_rpy_roll_offset_deg", 15.0))
+        yaw_base = float(data.get("grasp_rpy_yaw_base_deg", 180.0))
         grasp_c_from_xy = bool(data.get("grasp_c_from_xy", True))
         load_environment = bool(data.get("load_environment", False))
 
@@ -295,11 +268,10 @@ class GrabSensorConfig:
                 depth_max_m=float(grasp_net_raw.get("depth_max_m", 0.85)),
             ),
             grasp_orientation_mode=mode_raw,  # type: ignore[arg-type]
-            fixed_grasp_rpy_world_deg=fixed_rpy_world,  # type: ignore[arg-type]
+            fixed_grasp_abc_input_deg=abc_input,  # type: ignore[arg-type]
+            grasp_rpy_roll_offset_deg=roll_offset,
+            grasp_rpy_yaw_base_deg=yaw_base,
             grasp_c_from_xy=grasp_c_from_xy,
-            grasp_xy_yaw_sign=grasp_xy_yaw_sign,
-            fixed_grasp_abc_semantic_deg=fixed_abc,  # type: ignore[arg-type]
-            fixed_grasp_rpy_robot_deg=fixed_rpy,  # type: ignore[arg-type]
             load_environment=load_environment,
             env_path=env_path,
             mesh_scale=float(paths_raw.get("mesh_scale", 1.0)),
@@ -332,13 +304,6 @@ class TableObjectDetection:
     n_points: int
     bbox_xy: Tuple[int, int, int, int]
 
-    @property
-    def sensor_rpy_cam_rad(self) -> np.ndarray:
-        return self.object_rpy_cam_rad
-
-
-SensorDetection = TableObjectDetection
-
 
 @dataclass
 class GraspTargets:
@@ -351,11 +316,3 @@ class GraspTargets:
     object_pos_m: np.ndarray
     object_rpy_rad: np.ndarray
     debug: dict[str, Any] = field(default_factory=dict)
-
-    @property
-    def sensor_pos_m(self) -> np.ndarray:
-        return self.object_pos_m
-
-    @property
-    def sensor_rpy_rad(self) -> np.ndarray:
-        return self.object_rpy_rad

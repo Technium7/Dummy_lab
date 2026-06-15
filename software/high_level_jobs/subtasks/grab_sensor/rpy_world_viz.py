@@ -1,27 +1,45 @@
-"""Interactive PyBullet explorer for world roll-pitch-yaw (planner / grasp convention).
+"""Interactive PyBullet explorer for world roll-pitch-yaw on link6 (grasp planner convention).
 
-A sphere at the origin plus RGB axes show how ``p.getQuaternionFromEuler([roll, pitch, yaw])``
-orients a body — same as ``targets.grasp_rpy_rad`` in grasp planning.
+Loads the grasp URDF, shows the vision **grasp target** (yellow cross + RGB axes), and
+IK-moves the arm toward that pose as you drag world roll/pitch/yaw sliders.
 
 Run from ``software/``::
 
     python -m high_level_jobs.subtasks.grab_sensor.rpy_world_viz
+    python -m high_level_jobs.subtasks.grab_sensor.rpy_world_viz --offline
 """
 
 from __future__ import annotations
 
 import argparse
 import math
+import sys
 import time
+from pathlib import Path
 from typing import Sequence
 
-_AXIS_LEN_M = 0.12
-_WORLD_AXIS_LEN_M = 0.15
-_SPHERE_RADIUS_M = 0.025
+import numpy as np
+
+_SOFTWARE_DIR = Path(__file__).resolve().parents[3]
+if str(_SOFTWARE_DIR) not in sys.path:
+    sys.path.insert(0, str(_SOFTWARE_DIR))
+
+from manual_control.mapping import HOME_JOINTS_DEG  # noqa: E402
+from trajectory_planner.scene import disconnect_planning_scene, set_joint_positions  # noqa: E402
+
+from .config_loader import default_config_path, load_grab_sensor_config  # noqa: E402
+from .grasp import grasp_abc_to_world_rpy_deg, load_grasp_targets_from_vision  # noqa: E402
+from .models import GrabSensorConfig  # noqa: E402
+from .plan_motion import build_scene, start_q_from_robot_joints_deg  # noqa: E402
+from .tcp_ik import TcpOffset, grasp_ik_goal_from_home, link_pose_from_q, print_grasp_ik_debug, tcp_error_mm  # noqa: E402
+
+_AXIS_LEN_M = 0.08
+_WORLD_AXIS_LEN_M = 0.06
+_CROSS_HALF_M = 0.018
 
 
 def draw_world_frame_axes(
-    origin: Sequence[float] = (0.0, 0.0, 0.0),
+    origin: Sequence[float],
     *,
     half_m: float = _WORLD_AXIS_LEN_M,
     width: float = 1.5,
@@ -45,139 +63,225 @@ def draw_world_rpy_axes(
     *,
     axis_len_m: float = _AXIS_LEN_M,
     width: float = 3.0,
+    colors: Sequence[Sequence[float]] | None = None,
 ) -> None:
-    """Body X/Y/Z after PyBullet intrinsic XYZ Euler (bright RGB)."""
+    """Body X/Y/Z after PyBullet intrinsic XYZ Euler (bright RGB by default)."""
     import pybullet as p
 
     quat = p.getQuaternionFromEuler([float(v) for v in rpy_rad[:3]])
     o = [float(origin[0]), float(origin[1]), float(origin[2])]
-    colors = ([1.0, 0.15, 0.15], [0.15, 1.0, 0.15], [0.2, 0.45, 1.0])
+    axis_colors = colors or ([1.0, 0.15, 0.15], [0.15, 1.0, 0.15], [0.2, 0.45, 1.0])
     identity = [0.0, 0.0, 0.0, 1.0]
-    for axis_i, color in enumerate(colors):
+    for axis_i, color in enumerate(axis_colors):
         local_tip = [0.0, 0.0, 0.0]
         local_tip[axis_i] = axis_len_m
         tip, _ = p.multiplyTransforms(o, quat, local_tip, identity)
-        p.addUserDebugLine(o, tip, color, width, 0)
+        p.addUserDebugLine(o, tip, [float(v) for v in color[:3]], width, 0)
 
 
-def _rpy_sliders(roll_deg: float, pitch_deg: float, yaw_deg: float) -> tuple[int, int, int]:
+def draw_world_cross(
+    pos: Sequence[float],
+    *,
+    label: str,
+    color: Sequence[float],
+    half_m: float = _CROSS_HALF_M,
+) -> None:
+    import pybullet as p
+
+    x, y, z = float(pos[0]), float(pos[1]), float(pos[2])
+    c = [float(v) for v in color[:3]]
+    p.addUserDebugLine([x - half_m, y, z], [x + half_m, y, z], c, 3.0, 0)
+    p.addUserDebugLine([x, y - half_m, z], [x, y + half_m, z], c, 3.0, 0)
+    p.addUserDebugLine([x, y, z - half_m], [x, y, z + half_m], c, 2.0, 0)
+    p.addUserDebugText(label, [x, y, z + 0.015], textColorRGB=c, textSize=1.1, lifeTime=0)
+
+
+def _abc_sliders(a_deg: float, b_deg: float, c_deg: float) -> tuple[int, int, int]:
     import pybullet as p
 
     p.removeAllUserParameters()
-    roll_id = p.addUserDebugParameter("world roll (deg)", -180.0, 180.0, float(roll_deg))
-    pitch_id = p.addUserDebugParameter("world pitch (deg)", -180.0, 180.0, float(pitch_deg))
-    yaw_id = p.addUserDebugParameter("world yaw (deg)", -180.0, 180.0, float(yaw_deg))
-    return roll_id, pitch_id, yaw_id
+    a_id = p.addUserDebugParameter("input a (deg)", -180.0, 180.0, float(a_deg))
+    b_id = p.addUserDebugParameter("input b (deg)", -180.0, 180.0, float(b_deg))
+    c_id = p.addUserDebugParameter("input c (deg)", -180.0, 180.0, float(c_deg))
+    return a_id, b_id, c_id
 
 
-def _create_origin_sphere(client_id: int) -> int:
+def _frame_on_grasp(scene, grasp_pos: Sequence[float]) -> None:
     import pybullet as p
 
-    col = p.createCollisionShape(
-        p.GEOM_SPHERE,
-        radius=_SPHERE_RADIUS_M,
-        physicsClientId=client_id,
-    )
-    vis = p.createVisualShape(
-        p.GEOM_SPHERE,
-        radius=_SPHERE_RADIUS_M,
-        rgbaColor=[0.85, 0.85, 0.9, 1.0],
-        physicsClientId=client_id,
-    )
-    return p.createMultiBody(
-        baseMass=0.0,
-        baseCollisionShapeIndex=col,
-        baseVisualShapeIndex=vis,
-        basePosition=[0.0, 0.0, 0.0],
-        baseOrientation=[0.0, 0.0, 0.0, 1.0],
-        physicsClientId=client_id,
+    gx, gy, gz = (float(grasp_pos[i]) for i in range(3))
+    p.resetDebugVisualizerCamera(
+        cameraDistance=0.85,
+        cameraYaw=55,
+        cameraPitch=-28,
+        cameraTargetPosition=[gx * 0.45, gy * 0.45, gz * 0.6 + 0.05],
+        physicsClientId=scene.client_id,
     )
 
 
 def show_world_rpy_explorer(
+    cfg: GrabSensorConfig,
     *,
-    roll_deg: float = 0.0,
-    pitch_deg: float = 0.0,
-    yaw_deg: float = 0.0,
+    abc_deg: Sequence[float] | None = None,
+    start_joints_deg: Sequence[float] | None = None,
+    offline: bool = True,
+    grasp_pos_m: Sequence[float] | None = None,
 ) -> None:
-    """PyBullet GUI: sphere at origin + sliders for world RPY (deg)."""
+    """PyBullet GUI: grasp target + link6/TCP IK from [a,b,c] input sliders."""
     import pybullet as p
 
-    client = p.connect(p.GUI)
-    p.setGravity(0.0, 0.0, 0.0, physicsClientId=client)
-    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1, physicsClientId=client)
-    p.resetDebugVisualizerCamera(
-        cameraDistance=0.45,
-        cameraYaw=45,
-        cameraPitch=-25,
-        cameraTargetPosition=[0.0, 0.0, 0.0],
-        physicsClientId=client,
-    )
+    targets = load_grasp_targets_from_vision(cfg, offline=offline, grasp_pos_m=grasp_pos_m)
+    grasp_pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
 
-    sphere_id = _create_origin_sphere(client)
-    origin = [0.0, 0.0, 0.0]
-    roll_id, pitch_id, yaw_id = _rpy_sliders(roll_deg, pitch_deg, yaw_deg)
-    last_print = ""
+    abc0 = list(cfg.fixed_grasp_abc_input_deg)
+    if abc_deg is not None:
+        abc0 = [float(v) for v in abc_deg[:3]]
 
-    print(
-        "[rpy_world_viz] Sphere at origin. Dim lines = world X/Y/Z. "
-        "Bright RGB = body axes from getQuaternionFromEuler(roll,pitch,yaw)."
-    )
-    print("[rpy_world_viz] Close the PyBullet window to exit.")
-
-    dt = 1.0 / 30.0
+    scene, temp_file = build_scene(cfg, use_gui=True)
+    tcp = TcpOffset()
     try:
-        while p.isConnected(physicsClientId=client):
-            roll = float(p.readUserDebugParameter(roll_id))
-            pitch = float(p.readUserDebugParameter(pitch_id))
-            yaw = float(p.readUserDebugParameter(yaw_id))
-            rpy_rad = [math.radians(roll), math.radians(pitch), math.radians(yaw)]
-            quat = p.getQuaternionFromEuler(rpy_rad)
+        p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1, physicsClientId=scene.client_id)
+        _frame_on_grasp(scene, grasp_pos)
 
-            p.resetBasePositionAndOrientation(
-                sphere_id, origin, quat, physicsClientId=client
+        home_q = start_q_from_robot_joints_deg(scene, start_joints_deg or HOME_JOINTS_DEG)
+        set_joint_positions(scene, home_q)
+
+        a_id, b_id, c_id = _abc_sliders(abc0[0], abc0[1], abc0[2])
+        last_debug_key = None
+
+        print(
+            "[rpy_world_viz] Yellow cross = grasp TCP target; bright RGB = world RPY from [a,b,c]. "
+            "Close the PyBullet window to exit."
+        )
+        print(f"[rpy_world_viz] Grasp target m: {grasp_pos.round(4).tolist()}")
+        if heading := targets.debug.get("grasp_heading_deg"):
+            print(f"[rpy_world_viz] atan2(x,y) deg: {heading:.2f}")
+        print(
+            f"[rpy_world_viz] Config abc deg: {abc0}  "
+            f"planned world RPY deg: {targets.debug.get('grasp_rpy_world_deg')}"
+        )
+
+        dt = 1.0 / 30.0
+        while p.isConnected(physicsClientId=scene.client_id):
+            a = float(p.readUserDebugParameter(a_id))
+            b = float(p.readUserDebugParameter(b_id))
+            c = float(p.readUserDebugParameter(c_id))
+            roll, pitch, yaw = grasp_abc_to_world_rpy_deg(cfg, [a, b, c], grasp_pos)
+            targets.grasp_rpy_rad = np.radians(np.asarray([roll, pitch, yaw], dtype=np.float64))
+            rpy_rad = [float(v) for v in targets.grasp_rpy_rad]
+
+            q_goal = grasp_ik_goal_from_home(scene, targets, home_q, tcp) or list(home_q)
+            set_joint_positions(scene, q_goal)
+
+            debug_key = (
+                round(a, 3),
+                round(b, 3),
+                round(c, 3),
+                tuple(round(float(v), 6) for v in q_goal),
+            )
+            if debug_key != last_debug_key:
+                print_grasp_ik_debug(
+                    scene,
+                    targets,
+                    q_goal,
+                    label="rpy_world_viz",
+                    warm_start_q=home_q,
+                    tcp=tcp,
+                )
+                last_debug_key = debug_key
+
+            wrist_pos, fk_rpy, _ = link_pose_from_q(scene, q_goal)
+            tip_pos = tcp.tip_world(scene)
+            tip_err_mm = tcp_error_mm(scene, targets.grasp_pos_m, q_goal, tcp) if tcp.has_tcp(scene) else float("nan")
+            anchor = [float(wrist_pos[0]), float(wrist_pos[1]), float(wrist_pos[2])]
+            grasp = [float(grasp_pos[0]), float(grasp_pos[1]), float(grasp_pos[2])]
+
+            p.removeAllUserDebugItems(physicsClientId=scene.client_id)
+
+            draw_world_cross(grasp, label="grasp target", color=[1.0, 1.0, 0.0])
+            draw_world_frame_axes(grasp, half_m=_WORLD_AXIS_LEN_M * 0.9)
+            draw_world_rpy_axes(grasp, rpy_rad)
+
+            draw_world_frame_axes(anchor)
+            draw_world_rpy_axes(
+                anchor,
+                fk_rpy,
+                axis_len_m=_AXIS_LEN_M * 0.85,
+                width=2.0,
+                colors=([0.9, 0.9, 0.9], [0.75, 0.75, 0.75], [0.6, 0.6, 0.6]),
             )
 
-            p.removeAllUserDebugItems(physicsClientId=client)
-            draw_world_frame_axes(origin)
-            draw_world_rpy_axes(origin, rpy_rad)
+            if tcp.has_tcp(scene):
+                draw_world_cross(tip_pos, label="TCP FK", color=[1.0, 0.35, 0.35], half_m=_CROSS_HALF_M * 0.7)
+                p.addUserDebugLine(anchor, grasp, [0.6, 0.6, 0.6], 1.5, 0)
 
             p.addUserDebugText(
-                f"RPY deg: {roll:.1f}, {pitch:.1f}, {yaw:.1f}",
-                [0.0, 0.0, 0.08],
+                f"abc [{a:.1f}, {b:.1f}, {c:.1f}] -> world RPY deg: {roll:.1f}, {pitch:.1f}, {yaw:.1f}",
+                [grasp[0], grasp[1], grasp[2] + 0.06],
                 textColorRGB=[1.0, 1.0, 0.85],
-                textSize=1.2,
+                textSize=1.05,
                 lifeTime=0,
-                physicsClientId=client,
+                physicsClientId=scene.client_id,
             )
-
-            summary = (
-                f"roll={roll:.2f} pitch={pitch:.2f} yaw={yaw:.2f}  "
-                f"quat={[round(v, 4) for v in quat]}"
+            fk_deg = [math.degrees(v) for v in fk_rpy]
+            p.addUserDebugText(
+                f"link6 FK deg: {fk_deg[0]:.1f}, {fk_deg[1]:.1f}, {fk_deg[2]:.1f}  "
+                f"TCP err {tip_err_mm:.1f} mm",
+                [grasp[0], grasp[1], grasp[2] + 0.04],
+                textColorRGB=[0.85, 0.85, 1.0],
+                textSize=0.95,
+                lifeTime=0,
+                physicsClientId=scene.client_id,
             )
-            if summary != last_print:
-                print(f"[rpy_world_viz] {summary}")
-                last_print = summary
 
             time.sleep(dt)
     finally:
-        if p.isConnected(physicsClientId=client):
-            p.disconnect(physicsClientId=client)
+        disconnect_planning_scene(scene)
+        if temp_file and temp_file.exists():
+            temp_file.unlink(missing_ok=True)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Drag world roll/pitch/yaw sliders; sphere + RGB axes at origin.",
+        description="Grasp target + link6/TCP; drag [a,b,c] input sliders.",
     )
-    parser.add_argument("--roll-deg", type=float, default=0.0)
-    parser.add_argument("--pitch-deg", type=float, default=0.0)
-    parser.add_argument("--yaw-deg", type=float, default=0.0)
+    parser.add_argument("--config", type=Path, default=default_config_path())
+    parser.add_argument(
+        "--offline",
+        action="store_true",
+        help="Use saved debug capture for grasp target (default when neither --live nor --offline).",
+    )
+    parser.add_argument(
+        "--live",
+        action="store_true",
+        help="Use live camera for grasp target.",
+    )
+    parser.add_argument(
+        "--grasp-pos-m",
+        type=float,
+        nargs=3,
+        metavar=("X", "Y", "Z"),
+        default=None,
+        help="Override grasp TCP position (planner world m).",
+    )
+    parser.add_argument(
+        "--abc-deg",
+        type=float,
+        nargs=3,
+        metavar=("A", "B", "C"),
+        default=None,
+        help="Initial taught input [a, b, c] (deg).",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
+    if args.live and args.offline:
+        parser.error("Use only one of --offline or --live.")
 
+    cfg = load_grab_sensor_config(args.config)
     show_world_rpy_explorer(
-        roll_deg=args.roll_deg,
-        pitch_deg=args.pitch_deg,
-        yaw_deg=args.yaw_deg,
+        cfg,
+        abc_deg=args.abc_deg,
+        offline=not args.live,
+        grasp_pos_m=args.grasp_pos_m,
     )
     return 0
 

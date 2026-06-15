@@ -18,6 +18,8 @@ from trajectory_planner.scene import (
     set_joint_positions,
 )
 
+from .models import GraspTargets
+
 _IK_REST_SEED = 42
 _IK_DIRECT_ATTEMPTS = 8
 _IK_FALLBACK_ATTEMPTS = 12
@@ -59,6 +61,47 @@ def solve_tcp_ik(
         physicsClientId=scene.client_id,
     )
     return [float(sol[j]) for j in scene.joint_indices[:n]]
+
+
+def measure_tcp_target_pose_error(
+    scene: PlanningScene,
+    target_pos: Sequence[float],
+    target_rpy: Sequence[float],
+    q: Sequence[float],
+    tcp: TcpOffset,
+) -> Tuple[float, float]:
+    """TCP position + ``grasp_tcp_link`` orientation error vs target (rad)."""
+    set_joint_positions(scene, q)
+    tip_pos = tcp.tip_world(scene)
+    tip_rpy = tcp_world_rpy_from_q(scene, q, tcp)
+    return pose_error_rad(tip_pos, tip_rpy, target_pos, target_rpy)
+
+
+def grasp_ik_goal_from_home(
+    scene: PlanningScene,
+    targets: GraspTargets,
+    home_q: Sequence[float],
+    tcp: TcpOffset | None = None,
+) -> List[float] | None:
+    """HOME warm-start TCP IK for ``targets`` grasp pose (resets arm to HOME first)."""
+    tool = tcp if tcp is not None else TcpOffset()
+    if not tool.has_tcp(scene):
+        return None
+    warm_q = [float(v) for v in home_q]
+    set_joint_positions(scene, warm_q)
+    target_orn = p.getQuaternionFromEuler([float(v) for v in targets.grasp_rpy_rad[:3]])
+    try:
+        q_goal = solve_tcp_ik(
+            scene,
+            np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3],
+            target_orn,
+            warm_q,
+        )
+    except (ValueError, TypeError):
+        return None
+    if not is_state_valid(scene, q_goal):
+        return None
+    return q_goal
 
 
 @dataclass(frozen=True)
@@ -192,6 +235,39 @@ def tcp_error_mm(
 ) -> float:
     set_joint_positions(scene, q)
     return float(np.linalg.norm(tcp.tip_world(scene) - np.asarray(target_pos, dtype=np.float64))) * 1000.0
+
+
+def print_grasp_ik_debug(
+    scene: PlanningScene,
+    targets: GraspTargets,
+    goal_q: Sequence[float],
+    *,
+    label: str,
+    warm_start_q: Sequence[float] | None = None,
+    tcp: TcpOffset | None = None,
+) -> float:
+    """Print joint solution, TCP FK pose, and target pose. Returns TCP position error (mm)."""
+    tool = tcp if tcp is not None else TcpOffset()
+    set_joint_positions(scene, goal_q)
+    target_pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3]
+    target_rpy_deg = [round(math.degrees(v), 4) for v in targets.grasp_rpy_rad]
+    tip_pos = tool.tip_world(scene)
+    tip_rpy_deg = [round(math.degrees(v), 4) for v in tcp_world_rpy_from_q(scene, goal_q, tool)]
+    _, link_rpy, _ = link_pose_from_q(scene, goal_q)
+    link_rpy_deg = [round(math.degrees(v), 4) for v in link_rpy]
+    pos_err_mm = tcp_error_mm(scene, target_pos, goal_q, tool)
+    _, ori_err = measure_tcp_target_pose_error(scene, target_pos, targets.grasp_rpy_rad, goal_q, tool)
+
+    print(f"[{label}] grasp TCP target pos m: {target_pos.round(6).tolist()}")
+    print(f"[{label}] grasp TCP target rpy deg: {target_rpy_deg}")
+    if warm_start_q is not None:
+        print(f"[{label}] IK warm-start joints sim rad: {[round(float(v), 6) for v in warm_start_q]}")
+    print(f"[{label}] IK goal joints sim rad: {[round(float(v), 6) for v in goal_q]}")
+    print(f"[{label}] FK TCP pos m: {tip_pos.round(6).tolist()}")
+    print(f"[{label}] FK TCP rpy deg: {tip_rpy_deg}")
+    print(f"[{label}] FK link6 rpy deg: {link_rpy_deg}")
+    print(f"[{label}] TCP err: {pos_err_mm:.3f} mm  ori err: {math.degrees(ori_err):.3f} deg")
+    return pos_err_mm
 
 
 def measure_target_pose_error(
