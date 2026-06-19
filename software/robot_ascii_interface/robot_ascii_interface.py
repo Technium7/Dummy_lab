@@ -212,7 +212,7 @@ class RobotAsciiInterface:
             raise ValueError("joint must be in 1..7")
         return self.send_command(f'#OFFSET_J {j}', wait_ms=wait_ms)
 
-    def set_joint_current_limit(self, joint: int, current_a: float, wait_ms: int = 200):
+    def set_joint_current_limit(self, joint: int, current_a: float, wait_ms: int = 80):
         """
         Set a motor current limit in amps (firmware: ``#I_LIMIT_J``).
 
@@ -223,9 +223,13 @@ class RobotAsciiInterface:
         j = int(joint)
         if j < 1 or j > 7:
             raise ValueError("joint must be in 1..7")
-        return self.send_command(f"#I_LIMIT_J {j} {float(current_a):g}", wait_ms=wait_ms)
+        return self.send_command(
+            f"#I_LIMIT_J {j} {float(current_a):g}",
+            wait_ms=wait_ms,
+            max_read_s=0.5,
+        )
 
-    def set_arm_current_limits(self, current_a: float, *, joints: range = range(1, 7), wait_ms: int = 200):
+    def set_arm_current_limits(self, current_a: float, *, joints: range = range(1, 7), wait_ms: int = 80):
         """Apply the same current limit (A) to arm joints J1..J6 (or custom range)."""
         results = []
         for j in joints:

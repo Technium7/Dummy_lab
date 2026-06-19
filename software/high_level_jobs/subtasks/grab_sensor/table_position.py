@@ -275,6 +275,12 @@ def format_table_xyz_display(table_xyz_m: Sequence[float]) -> str:
     )
 
 
+def format_planner_xyz_display(xyz_m: Sequence[float]) -> str:
+    """Human-readable PyBullet planner / robot-base TCP target (m and mm)."""
+    x, y, z = (float(xyz_m[i]) for i in range(3))
+    return f"({x:+.4f}, {y:+.4f}, {z:+.4f}) m  ({x * 1000:+.1f}, {y * 1000:+.1f}, {z * 1000:+.1f}) mm"
+
+
 def format_robot_in_table_display(robot_in_table: Any) -> str:
     """Robot base origin expressed in the optical table frame."""
     ti = robot_in_table.translation_in

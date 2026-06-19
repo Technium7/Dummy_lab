@@ -33,7 +33,7 @@ from manual_control.mapping import HOME_JOINTS_DEG  # noqa: E402
 
 from .models import GrabSensorConfig, GraspTargets
 from .grasp import prepare_fixed_robot_grasp_targets
-from .table_position import robot_point_table_display
+from .table_position import robot_point_table_display, format_planner_xyz_display
 from .tcp_ik import (
     TcpOffset,
     enforce_goal_orientation,
@@ -796,16 +796,27 @@ def plan_approach_and_grasp(
         targets.debug["pre_grasp_rpy_deg"] = [
             float(math.degrees(v)) for v in targets.pre_grasp_rpy_rad
         ]
-        if (rpy := targets.debug.get("grasp_rpy_world_deg")) is not None and (
-            targets.debug.get("grasp_position_source") != "table_base_xy_height"
-        ):
+        print(
+            f"[grab_sensor] grasp target (planner): "
+            f"{format_planner_xyz_display(targets.grasp_pos_m)}"
+        )
+        if cfg.approach.plan_pre_grasp:
+            print(
+                f"[grab_sensor] pre-grasp target (planner): "
+                f"{format_planner_xyz_display(targets.pre_grasp_pos_m)}"
+            )
+        rpy_deg = targets.debug.get("grasp_rpy_world_deg")
+        if rpy_deg is not None:
             abc = targets.debug.get("grasp_abc_input_deg")
             abc_s = f"  abc={[round(float(v), 2) for v in abc]}" if abc else ""
-            print(f"[grab_sensor] grasp world RPY target (deg): {[round(float(v), 2) for v in rpy]}{abc_s}")
+            print(
+                f"[grab_sensor] grasp RPY (planner world deg): "
+                f"{[round(float(v), 2) for v in rpy_deg]}{abc_s}"
+            )
             if (heading := targets.debug.get("grasp_heading_deg")) is not None and abc is not None:
                 print(
                     f"[grab_sensor] yaw = {cfg.grasp_rpy_yaw_base_deg:.0f} + c - atan2(x,y) "
-                    f"({float(abc[2]):.0f}+{cfg.grasp_rpy_yaw_base_deg:.0f}-{heading:.2f}) = {rpy[2]:.2f} deg"
+                    f"({float(abc[2]):.0f}+{cfg.grasp_rpy_yaw_base_deg:.0f}-{heading:.2f}) = {rpy_deg[2]:.2f} deg"
                 )
 
         tcp = TcpOffset()

@@ -90,6 +90,11 @@ approach:
   plan_return_home: true                # after lift: iLQR back to HOME joints
   retreat_after_close_mm: 40.0
 
+# Robot execution (#I_LIMIT_J before !START; 0 = skip)
+execute:
+  joint_current_limit_a: 1.2
+  home_confirm_attempts: 3
+
 paths:
   # Grasp URDF: base xacro + ``grasp_tcp_fixed`` on link6_1 (edit offset in URDF by hand).
   robot: robot_design/Dummy_ros2_gripper_description/urdf/Dummy_ros2_gripper_grasp.urdf

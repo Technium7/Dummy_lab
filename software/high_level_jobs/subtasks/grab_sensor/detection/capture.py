@@ -229,7 +229,7 @@ def restore_realsense_color_auto(color_sensor: Any | None) -> None:
         pass
 
 
-_REALSENSE_STOP_SETTLE_S = 0.4
+_REALSENSE_STOP_SETTLE_S = 0.15
 _active_realsense_streamers: weakref.WeakSet = weakref.WeakSet()
 
 

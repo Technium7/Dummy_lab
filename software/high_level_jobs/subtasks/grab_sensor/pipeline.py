@@ -215,7 +215,10 @@ def run_grab_sensor_pipeline(
         f"mode={targets.debug.get('grasp_orientation_mode')}"
     )
     if cfg.grasp_position_from_table_base:
-        from .table_position import format_robot_in_table_display, format_table_xyz_display
+        from .table_position import (
+            format_robot_in_table_display,
+            format_table_xyz_display,
+        )
 
         print(f"[grab_sensor] robot in table frame: {format_robot_in_table_display(cfg.robot_in_table_frame)}")
         summary = targets.debug.get("grasp_frame_summary")
@@ -229,12 +232,6 @@ def run_grab_sensor_pipeline(
         from manual_control.mapping import HOME_JOINTS_DEG
 
         start_joints_deg = list(HOME_JOINTS_DEG)
-        if robot is not None:
-            from trajectory_run.run_planned_trajectory import read_physical_joints
-
-            current = read_physical_joints(robot)
-            if current is not None:
-                start_joints_deg = current
 
     if bool(params.get("ik_gui", False)):
         prepare_fixed_robot_grasp_targets(cfg, targets)
@@ -272,10 +269,30 @@ def run_grab_sensor_pipeline(
         "start_joints_deg": start_joints_deg,
     }
 
-    if bool(params.get("execute", False)) and robot is not None:
+    if bool(params.get("execute", False)):
         exec_params = dict(params)
+        exec_params.setdefault("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+        exec_params.setdefault("home_confirm_attempts", cfg.execute.home_confirm_attempts)
         exec_params["plan_meta"] = plan_meta
-        execute_on_robot(robot, trajectory, targets, cfg, exec_params)
-        result["executed"] = True
+
+        own_robot = False
+        if robot is None:
+            from robot_ascii_interface import RobotAsciiInterface
+            from robot_config import default_robot_port
+
+            port = str(params.get("port") or default_robot_port())
+            baud = int(params.get("baudrate") or 115200)
+            robot = RobotAsciiInterface(port=port, baudrate=baud)
+            if not robot.connect():
+                raise RuntimeError(f"Failed to connect to {port}")
+            own_robot = True
+            print(f"[grab_sensor] Connected to {port} for execute.")
+
+        try:
+            execute_on_robot(robot, trajectory, targets, cfg, exec_params)
+            result["executed"] = True
+        finally:
+            if own_robot and robot is not None:
+                robot.disconnect()
 
     return result

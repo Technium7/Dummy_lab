@@ -51,6 +51,32 @@ def format_joints_deg(joints: Sequence[float]) -> str:
     return "  ".join(parts)
 
 
+def debug_robot_state(
+    robot: RobotAsciiInterface,
+    *,
+    step: str,
+    label: str = "",
+    target_deg: Sequence[float] | None = None,
+) -> None:
+    """Print serial + joint snapshot to diagnose execute / HOME failures."""
+    tag = f"{label}[debug] {step}: "
+    ser_open = bool(getattr(robot, "ser", None) is not None and robot.ser.is_open)
+    print(f"{tag}serial_open={ser_open}")
+    joints = read_physical_joints(robot, retries=3)
+    if joints is None:
+        print(f"{tag}GETJPOS -> None (no valid reply)")
+        return
+    print(f"{tag}GETJPOS -> {format_joints_deg(joints)}")
+    if target_deg is not None:
+        target = clamp_firmware_joints_deg([float(target_deg[j]) for j in range(6)])
+        max_err, per_joint = _joint_errors(joints, target)
+        worst = int(np.argmax(np.abs(per_joint))) + 1
+        print(
+            f"{tag}vs target max |Δ|={max_err:.3f} deg (worst J{worst})  "
+            f"target={format_joints_deg(target)}"
+        )
+
+
 def _joint_errors(
     measured: Sequence[float],
     reference: Sequence[float],
@@ -206,6 +232,28 @@ def _segment_velocities_deg_s(
     return q, vels
 
 
+def ensure_robot_enabled(
+    robot: RobotAsciiInterface,
+    *,
+    label: str = "",
+    max_attempts: int = 3,
+) -> bool:
+    """Send ``!START`` until ``#GETJPOS`` works (motors may disable after fault or over-current)."""
+    for attempt in range(max(1, max_attempts)):
+        if attempt > 0:
+            print(f"{label}!START retry {attempt + 1}/{max_attempts}...")
+        _discard_stream_acks(robot)
+        resp = robot.start()
+        print(f"{label}!START -> {resp}")
+        time.sleep(0.2)
+        if read_physical_joints(robot, retries=8) is not None:
+            return True
+        time.sleep(0.3)
+    print(f"{label}Warning: no joint reads after {max_attempts} !START attempt(s).")
+    debug_robot_state(robot, step="ensure_robot_enabled failed", label=label)
+    return False
+
+
 def ensure_robot_armed(
     robot: RobotAsciiInterface,
     *,
@@ -244,17 +292,35 @@ def firmware_home(
     else:
         print(f"{label}!HOME")
 
-    # Sequential mode during homing — avoid CMDMODE 2 fighting stale stream targets.
     _discard_stream_acks(robot)
-    print(f"{label}#CMDMODE 1 -> {robot.set_command_mode(1)}")
+    if not ensure_robot_enabled(robot, label=label):
+        debug_robot_state(
+            robot,
+            step="before !HOME — drives not responding after !START",
+            label=label,
+            target_deg=target,
+        )
+
+    # Sequential mode during homing — avoid CMDMODE 2 fighting stale stream targets.
+    cmdmode_resp = robot.set_command_mode(1)
+    print(f"{label}#CMDMODE 1 -> {cmdmode_resp}")
+    if cmdmode_resp is None:
+        debug_robot_state(robot, step="CMDMODE 1 returned None", label=label, target_deg=target)
     time.sleep(0.2)
 
     home_timeout_s = max(30.0, float(home_read_sec))
     resp = robot.home(max_wait_s=home_timeout_s)
     if resp is None:
         print(f"{label}Note: !HOME serial reply not received (may still be moving).")
+        debug_robot_state(robot, step="!HOME no serial reply", label=label, target_deg=target)
     elif "ok" not in str(resp).lower():
         print(f"{label}Warning: !HOME response: {resp}")
+        debug_robot_state(
+            robot,
+            step=f"!HOME bad response ({resp!r})",
+            label=label,
+            target_deg=target,
+        )
 
     print(f"{label}Waiting until joints reach HOME (up to {settle_timeout_sec:.0f} s)...")
     ok, final = wait_until_joints(
@@ -279,6 +345,13 @@ def firmware_home(
         )
         if pin_ok and pinned is not None:
             ok, final = True, pinned
+        elif not pin_ok:
+            debug_robot_state(
+                robot,
+                step="pin HOME failed after !HOME settle timeout",
+                label=label,
+                target_deg=target,
+            )
 
     if cmd_mode == 2:
         ensure_robot_armed(robot, cmd_mode=cmd_mode, label=label)
@@ -290,11 +363,18 @@ def firmware_home(
     if final is None:
         final = read_physical_joints(robot)
     if final is None:
+        debug_robot_state(robot, step="firmware_home finished with no joint read", label=label, target_deg=target)
         return False, None
     err = float(np.max(np.abs(np.asarray(final[:6]) - np.asarray(target))))
     print(f"{label}  at HOME: {format_joints_deg(final)} (max |Δ|={err:.3f} deg)")
     if err > home_arrive_tol_deg:
         print(f"{label}Failed: not at HOME within {home_arrive_tol_deg:.2f} deg.")
+        debug_robot_state(
+            robot,
+            step=f"not within {home_arrive_tol_deg:.2f} deg after homing",
+            label=label,
+            target_deg=target,
+        )
         return False, final
     return True, final
 

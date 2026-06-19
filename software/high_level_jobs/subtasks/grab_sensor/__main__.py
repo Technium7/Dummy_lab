@@ -22,7 +22,6 @@ _OFFLINE_COLOR = (
 _OFFLINE_DEPTH = (
     Path(__file__).resolve().parent / "debug" / "grab_sensor.depth.npy"
 )
-from robot_ascii_interface import RobotAsciiInterface
 from robot_config import default_robot_port
 
 
@@ -72,6 +71,12 @@ def main() -> int:
         action="store_true",
         help="Interactive world RPY sliders (PyBullet); see rpy_world_viz module",
     )
+    p.add_argument(
+        "--joint-current-limit-a",
+        type=float,
+        default=None,
+        help="Motor current limit (A) for J1-J6 via #I_LIMIT_J at execute (default: config execute.joint_current_limit_a)",
+    )
     args = p.parse_args()
 
     if args.rpy_viz:
@@ -116,13 +121,15 @@ def main() -> int:
         "ik_gui": args.ik_gui,
         "allow_offline_fallback": not args.no_fallback_offline,
     }
+    if args.joint_current_limit_a is not None:
+        params["joint_current_limit_a"] = float(args.joint_current_limit_a)
+    elif args.execute:
+        params.setdefault("joint_current_limit_a", cfg.execute.joint_current_limit_a)
 
     robot = None
     if args.execute:
-        robot = RobotAsciiInterface(port=args.port, baudrate=args.baudrate)
-        if not robot.connect():
-            print(f"Failed to connect to {args.port}", file=sys.stderr)
-            return 1
+        params["port"] = args.port
+        params["baudrate"] = args.baudrate
 
     if args.detect_only:
         from high_level_jobs.subtasks.grab_sensor.pipeline import run_detection
@@ -133,8 +140,6 @@ def main() -> int:
         return 0
 
     run_grab_sensor_pipeline(cfg, params, robot=robot)
-    if robot is not None:
-        robot.disconnect()
     return 0
 
 

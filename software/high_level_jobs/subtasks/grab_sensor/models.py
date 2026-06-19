@@ -35,6 +35,14 @@ class GraspOnObjectFrame:
 
 
 @dataclass(frozen=True)
+class ExecuteConfig:
+    """Robot streaming options applied during ``execute_on_robot``."""
+
+    joint_current_limit_a: float = 1.2
+    home_confirm_attempts: int = 3
+
+
+@dataclass(frozen=True)
 class ApproachConfig:
     pre_grasp_offset_mm: float = 80.0
     pre_grasp_along_xy: bool = True
@@ -137,11 +145,7 @@ class GrabSensorConfig:
     grasp_orientation_tol_deg: float = 45.0
     grasp_position_tol_mm: float = 80.0
     robot_in_table_frame: RobotInTableFrame = field(default_factory=RobotInTableFrame)
-
-    @property
-    def grasp_height_above_table_mm(self) -> float:
-        """Alias for ``grasp_motion.grasp_height_above_table_mm``."""
-        return self.grasp_motion.grasp_height_above_table_mm
+    execute: ExecuteConfig = field(default_factory=ExecuteConfig)
 
     @staticmethod
     def from_mapping(data: Mapping[str, Any], base_dir: Path | None = None) -> GrabSensorConfig:
@@ -149,6 +153,7 @@ class GrabSensorConfig:
 
         grasp_raw = data.get("grasp_on_object") or data.get("grasp_in_sensor_frame") or {}
         approach_raw = data.get("approach", {})
+        execute_raw = data.get("execute", {})
         motion_raw = data.get("motion_planning", {})
         grasp_motion = GraspMotionConfig(
             grasp_height_above_table_mm=float(
@@ -302,6 +307,10 @@ class GrabSensorConfig:
             robot_in_table_frame=RobotInTableFrame(
                 translation_in=trans_in,  # type: ignore[arg-type]
                 rpy_deg=robot_rpy,  # type: ignore[arg-type]
+            ),
+            execute=ExecuteConfig(
+                joint_current_limit_a=float(execute_raw.get("joint_current_limit_a", 1.2)),
+                home_confirm_attempts=int(execute_raw.get("home_confirm_attempts", 3)),
             ),
         )
 

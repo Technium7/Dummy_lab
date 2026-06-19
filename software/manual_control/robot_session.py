@@ -38,12 +38,11 @@ def connect_robot_for_teleop(
         )
         return None
 
+    if joint_current_limit_a > 0.0:
+        print(f"[Robot] I_LIMIT_J 1-6 -> {joint_current_limit_a:g}A (before START)")
+        apply_arm_current_limits(robot, joint_current_limit_a, label="")
     print(f"[Robot] START -> {robot.start()}")
     time.sleep(0.15)
-    if joint_current_limit_a > 0.0:
-        for joint, resp in robot.set_arm_current_limits(joint_current_limit_a):
-            print(f"[Robot] I_LIMIT_J {joint} {joint_current_limit_a:g}A -> {resp}")
-        time.sleep(0.1)
     print(f"[Robot] CMDMODE 2 -> {robot.set_command_mode(2)}")
     time.sleep(0.2)
     print(f"[Robot] HAND_EN -> {robot.hand_enable()}")
@@ -54,6 +53,25 @@ def connect_robot_for_teleop(
     else:
         print("[Robot] Warning: GETJPOS failed after init.", file=sys.stderr)
     return robot
+
+
+def apply_arm_current_limits(
+    robot: RobotAsciiInterface,
+    current_a: float,
+    *,
+    label: str = "",
+) -> None:
+    """Set J1–J6 motor current limit via firmware ``#I_LIMIT_J`` (before ``!START``)."""
+    if current_a <= 0.0:
+        return
+    for joint in range(1, 7):
+        cmd = f"#I_LIMIT_J {joint} {current_a:g}"
+        if not robot.send_command_async(cmd):
+            print(f"{label}[Robot] I_LIMIT_J {joint} {current_a:g}A -> send failed")
+        else:
+            print(f"{label}[Robot] I_LIMIT_J {joint} {current_a:g}A -> sent")
+        time.sleep(0.06)
+    time.sleep(0.25)
 
 
 def disconnect_robot(robot: RobotAsciiInterface | None) -> None:

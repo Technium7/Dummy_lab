@@ -12,14 +12,16 @@ if str(_SOFTWARE_DIR) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_DIR))
 
 from manual_control.mapping import HOME_JOINTS_DEG, clamp_firmware_joints_deg  # noqa: E402
+from manual_control.robot_session import apply_arm_current_limits  # noqa: E402
 from robot_ascii_interface import RobotAsciiInterface  # noqa: E402
 from trajectory_run.run_planned_trajectory import (  # noqa: E402
+    debug_robot_state,
+    ensure_robot_enabled,
     firmware_home,
     prepare_robot_trajectory,
     read_physical_joints,
     sim_trajectory_to_robot_deg,
     stream_waypoints_deg,
-    wait_until_joints,
 )
 
 from .models import GrabSensorConfig, GraspTargets
@@ -31,8 +33,12 @@ def ensure_robot_ready(
     cmd_mode: int = 2,
     home_first: bool = True,
     open_hand: bool = False,
+    joint_current_limit_a: float = 0.0,
     label: str = "",
 ) -> bool:
+    apply_arm_current_limits(robot, joint_current_limit_a, label=label)
+    print(f"{label}!START -> {robot.start()}")
+    time.sleep(0.15)
     print(f"{label}HAND_EN -> {robot.hand_enable()}")
     time.sleep(0.1)
     if open_hand:
@@ -40,8 +46,6 @@ def ensure_robot_ready(
         time.sleep(0.3)
 
     if not home_first:
-        print(f"{label}!START -> {robot.start()}")
-        time.sleep(0.2)
         print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
         time.sleep(0.2)
         return True
@@ -53,9 +57,14 @@ def ensure_robot_ready(
         label=label,
     )
     if not ok:
+        debug_robot_state(
+            robot,
+            step="ensure_robot_ready — initial firmware HOME failed",
+            label=label,
+            target_deg=HOME_JOINTS_DEG,
+        )
         return False
 
-    # Hold HOME in stream mode before the first approach segment (avoids HOME→stream jerk).
     hold_q = at_home if at_home is not None else read_physical_joints(robot)
     if hold_q is not None:
         from trajectory_run.run_planned_trajectory import _hold_stream_speed
@@ -181,19 +190,6 @@ def retreat_after_close_if_needed(
     )
 
 
-def close_gripper_and_retreat(
-    robot: RobotAsciiInterface,
-    targets: GraspTargets,
-    cfg: GrabSensorConfig,
-    params: Mapping[str, Any],
-    *,
-    label: str = "",
-) -> None:
-    del targets  # kept for future Cartesian retreat
-    close_gripper(robot, label=label)
-    retreat_after_close_if_needed(robot, cfg, params, label=label)
-
-
 def _home_joint_error_deg(robot: RobotAsciiInterface) -> float | None:
     current = read_physical_joints(robot)
     if current is None:
@@ -202,37 +198,12 @@ def _home_joint_error_deg(robot: RobotAsciiInterface) -> float | None:
     return float(np.max(np.abs(np.asarray(current[:6]) - np.asarray(target))))
 
 
-def _settle_return_home_stream(
-    robot: RobotAsciiInterface,
-    params: Mapping[str, Any],
-    *,
-    label: str = "",
-) -> None:
-    """Stream settle only checks joint stability, not distance to HOME — wait for the goal."""
-    err_before = _home_joint_error_deg(robot)
-    if err_before is not None:
-        print(f"{label}After return stream: max |Δ| from HOME = {err_before:.2f} deg")
-    if err_before is not None and err_before <= float(params.get("home_stream_goal_tol_deg", 2.0)):
-        return
-
-    timeout = float(params.get("home_stream_settle_timeout_sec", 90.0))
-    tol = float(params.get("home_stream_goal_tol_deg", 2.0))
-    print(f"{label}Waiting for streamed return to reach HOME (up to {timeout:.0f} s)...")
-    ok, _ = wait_until_joints(
-        robot,
-        HOME_JOINTS_DEG,
-        timeout_sec=timeout,
-        tol_deg=tol,
-        label=label,
-        name="streamed return HOME",
-    )
-    if not ok:
-        err = _home_joint_error_deg(robot)
-        if err is not None:
-            print(
-                f"{label}Warning: streamed return still {err:.2f} deg from HOME; "
-                "will run !HOME."
-            )
+def _log_home_error(robot: RobotAsciiInterface, *, label: str = "", step: str) -> None:
+    err = _home_joint_error_deg(robot)
+    if err is not None:
+        print(f"{label}{step}: max |Δ| from HOME = {err:.2f} deg")
+    else:
+        debug_robot_state(robot, step=step, label=label, target_deg=HOME_JOINTS_DEG)
 
 
 def _confirm_return_home(
@@ -242,25 +213,47 @@ def _confirm_return_home(
     params: Mapping[str, Any],
     label: str = "",
 ) -> None:
-    """Streamed return HOME is approximate; finish with firmware HOME like startup."""
+    """Finish with firmware ``!HOME`` (retry ``!START`` if drives dropped out)."""
     settle = float(params.get("home_settle_timeout_sec", 120.0))
-    print(f"{label}Confirming firmware HOME...")
-    ok, final = firmware_home(
-        robot,
-        HOME_JOINTS_DEG,
-        cmd_mode=cmd_mode,
-        settle_timeout_sec=settle,
-        label=label,
-    )
-    if not ok:
-        print(
-            f"{label}Warning: return trajectory finished but firmware HOME confirm failed. "
-            "Joints may not match HOME."
+    attempts = max(1, int(params.get("home_confirm_attempts", 3)))
+    last_err: str | None = None
+
+    for attempt in range(attempts):
+        if attempt > 0:
+            print(f"{label}HOME confirm retry {attempt + 1}/{attempts}...")
+            if not ensure_robot_enabled(robot, label=label):
+                last_err = "no joint reads after !START"
+                continue
+            time.sleep(0.3)
+
+        print(f"{label}Confirming firmware HOME...")
+        ok, final = firmware_home(
+            robot,
+            HOME_JOINTS_DEG,
+            cmd_mode=cmd_mode,
+            settle_timeout_sec=settle,
+            label=label,
         )
-        return
-    if final is not None:
-        err = float(np.max(np.abs(np.asarray(final[:6]) - np.asarray(HOME_JOINTS_DEG))))
-        print(f"{label}At HOME (max |Δ|={err:.3f} deg).")
+        if ok and final is not None:
+            err = float(np.max(np.abs(np.asarray(final[:6]) - np.asarray(HOME_JOINTS_DEG))))
+            print(f"{label}At HOME (max |Δ|={err:.3f} deg).")
+            return
+
+        if not ok and final is None:
+            reason = "firmware_home failed (no joint read)"
+        elif not ok:
+            reason = "firmware_home failed (not at HOME)"
+        else:
+            reason = "firmware_home ok but no final joints"
+        err = _home_joint_error_deg(robot)
+        last_err = f"{reason}; max |Δ|={err:.2f} deg" if err is not None else reason
+        print(f"{label}[debug] HOME attempt {attempt + 1}/{attempts}: {last_err}")
+        debug_robot_state(robot, step=f"HOME attempt {attempt + 1} failed", label=label, target_deg=HOME_JOINTS_DEG)
+
+    raise RuntimeError(
+        f"{label}Failed to reach HOME after {attempts} attempt(s) ({last_err}). "
+        "Motors may have disabled during lift; check the arm and serial link."
+    )
 
 
 def _stream_segment_or_raise(
@@ -284,6 +277,12 @@ def _stream_segment_or_raise(
         ramp_speed_scale=ramp_speed_scale,
         **stream_kw,
     ):
+        debug_robot_state(
+            robot,
+            step=f"stream failed: {segment}",
+            label=stream_kw.get("label", ""),
+            target_deg=HOME_JOINTS_DEG,
+        )
         raise RuntimeError(f"{segment} trajectory streaming failed.")
 
 
@@ -302,48 +301,25 @@ def _motion_segments(meta: Mapping[str, Any]) -> dict[str, np.ndarray | None]:
     return out
 
 
-def _legacy_segment_slices(
-    trajectory: np.ndarray,
-    meta: Mapping[str, Any],
-) -> dict[str, np.ndarray | None]:
-    n_total = int(trajectory.shape[0])
-    n_pre = int(meta.get("n_pre") or 0)
-    n_grasp_end = meta.get("n_through_grasp")
-    n_grasp_end = int(n_grasp_end) if n_grasp_end is not None else n_total
-    n_grasp_end = max(1, min(n_grasp_end, n_total))
-
-    pre_seg = trajectory[:n_pre] if n_pre > 0 else None
-    grasp_start = max(0, n_pre - 1) if n_pre > 0 else 0
-    grasp_seg = trajectory[grasp_start:n_grasp_end] if n_grasp_end > grasp_start else None
-    post_seg = trajectory[n_grasp_end - 1 :] if n_grasp_end < n_total else None
-    return {
-        "pre_grasp": pre_seg,
-        "grasp": grasp_seg,
-        "lift": post_seg,
-        "home": None,
-    }
-
-
 def execute_on_robot(
     robot: RobotAsciiInterface,
-    trajectory_rad: np.ndarray,
+    _trajectory_rad: np.ndarray,
     targets: GraspTargets,
     cfg: GrabSensorConfig,
     params: Mapping[str, Any],
     *,
     label: str = "",
 ) -> None:
-    trajectory = np.asarray(trajectory_rad, dtype=np.float64)
-    if trajectory.ndim != 2 or trajectory.shape[0] < 1:
-        raise ValueError("execute_on_robot requires a non-empty joint trajectory.")
-
+    del targets  # kept for API compatibility with callers
     exec_params = dict(params)
     meta = exec_params.get("plan_meta") or {}
     _populate_pre_grasp_joints_deg(exec_params, meta)
 
     segments = _motion_segments(meta)
-    if not segments or segments.get("grasp") is None:
-        segments = _legacy_segment_slices(trajectory, meta)
+    if segments.get("grasp") is None:
+        raise RuntimeError(
+            "execute_on_robot requires plan_meta['segments']['grasp'] from plan_approach_and_grasp."
+        )
 
     pre_seg = segments.get("pre_grasp")
     grasp_seg = segments.get("grasp")
@@ -352,14 +328,19 @@ def execute_on_robot(
 
     open_gripper_at_pre = bool(params.get("open_gripper", True))
     close_at_grasp = bool(params.get("close_gripper", True))
+    return_home = bool(meta.get("plan_return_home", cfg.approach.plan_return_home))
 
     cmd_mode = int(params.get("cmd_mode", 2))
     home_first = bool(params.get("home_first", True))
+    joint_current_limit_a = float(
+        params.get("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    )
     if not ensure_robot_ready(
         robot,
         cmd_mode=cmd_mode,
         home_first=home_first,
         open_hand=False,
+        joint_current_limit_a=joint_current_limit_a,
         label=label,
     ):
         raise RuntimeError("Failed to reach HOME before grasp execution.")
@@ -373,7 +354,6 @@ def execute_on_robot(
 
     armed = home_first
 
-    # Phase 1: HOME -> pre-grasp (already homed + held; no re-arm or seed jerk)
     if pre_seg is not None:
         print(f"{label}Phase 1: HOME -> pre-grasp ({len(pre_seg)} planner samples).")
         ramp = float(params.get("approach_speed_scale", 0.65))
@@ -391,7 +371,6 @@ def execute_on_robot(
         if open_gripper_at_pre:
             open_gripper(robot, label=label)
 
-    # Phase 2: pre-grasp -> grasp (gripper open)
     if grasp_seg is not None:
         phase = "pre-grasp -> grasp" if pre_seg is not None else "HOME -> grasp"
         if open_gripper_at_pre and pre_seg is None:
@@ -412,7 +391,6 @@ def execute_on_robot(
     if close_at_grasp:
         close_gripper(robot, label=label)
 
-    # Phase 3: lift (gripper closed, object in hand)
     if lift_seg is not None:
         print(f"{label}Phase 3: post-grasp lift ({len(lift_seg)} planner samples).")
         _stream_segment_or_raise(
@@ -424,8 +402,6 @@ def execute_on_robot(
             seed_from_robot=False,
         )
 
-    # Phase 4: return HOME (stream approximates path; firmware HOME confirms at end)
-    return_home = bool(meta.get("plan_return_home", cfg.approach.plan_return_home))
     if home_seg is not None:
         print(f"{label}Phase 4: return HOME ({len(home_seg)} planner samples).")
         home_ramp = params.get("return_home_speed_scale")
@@ -439,7 +415,7 @@ def execute_on_robot(
             sync_start_to_robot=True,
             ramp_speed_scale=float(home_ramp) if home_ramp is not None else None,
         )
-        _settle_return_home_stream(robot, params, label=label)
+        _log_home_error(robot, label=label, step="After return stream")
     elif close_at_grasp and lift_seg is None:
         retreat_after_close_if_needed(robot, cfg, exec_params, label=label)
 

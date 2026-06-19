@@ -21,6 +21,7 @@ states:
         params:
           config: software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml
           execute: true
+          joint_current_limit_a: 1.2
           home_first: true
           open_gripper: true
           close_gripper: true
