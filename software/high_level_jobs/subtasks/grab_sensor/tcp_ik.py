@@ -77,23 +77,24 @@ def measure_tcp_target_pose_error(
     return pose_error_rad(tip_pos, tip_rpy, target_pos, target_rpy)
 
 
-def grasp_ik_goal_from_home(
+def tcp_ik_goal_from_home(
     scene: PlanningScene,
-    targets: GraspTargets,
+    target_pos: Sequence[float],
+    target_rpy: Sequence[float],
     home_q: Sequence[float],
     tcp: TcpOffset | None = None,
 ) -> List[float] | None:
-    """HOME warm-start TCP IK for ``targets`` grasp pose (resets arm to HOME first)."""
+    """HOME warm-start TCP IK for an arbitrary pose (resets arm to HOME first)."""
     tool = tcp if tcp is not None else TcpOffset()
     if not tool.has_tcp(scene):
         return None
     warm_q = [float(v) for v in home_q]
     set_joint_positions(scene, warm_q)
-    target_orn = p.getQuaternionFromEuler([float(v) for v in targets.grasp_rpy_rad[:3]])
+    target_orn = p.getQuaternionFromEuler([float(v) for v in target_rpy[:3]])
     try:
         q_goal = solve_tcp_ik(
             scene,
-            np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3],
+            np.asarray(target_pos, dtype=np.float64)[:3],
             target_orn,
             warm_q,
         )
@@ -102,6 +103,23 @@ def grasp_ik_goal_from_home(
     if not is_state_valid(scene, q_goal):
         return None
     return q_goal
+
+
+def grasp_ik_goal_from_home(
+    scene: PlanningScene,
+    targets: GraspTargets,
+    home_q: Sequence[float],
+    tcp: TcpOffset | None = None,
+) -> List[float] | None:
+    """HOME warm-start TCP IK for ``targets`` grasp pose (resets arm to HOME first)."""
+    tool = tcp if tcp is not None else TcpOffset()
+    return tcp_ik_goal_from_home(
+        scene,
+        targets.grasp_pos_m,
+        targets.grasp_rpy_rad,
+        home_q,
+        tool,
+    )
 
 
 @dataclass(frozen=True)

@@ -1,8 +1,8 @@
 {
   "centroid_cam_m": [
-    0.16288917849136075,
-    0.02010934375740725,
-    0.626
+    -0.04227221305408038,
+    -0.15877698777047813,
+    0.7160000340081751
   ],
   "object_rpy_cam_deg": [
     0.0,
@@ -10,17 +10,17 @@
     0.0
   ],
   "object_yaw_cam_deg": 0.0,
-  "n_points": 29746,
+  "n_points": 21668,
   "bbox_xy": [
-    392,
-    171,
-    198,
-    157
+    187,
+    37,
+    173,
+    132
   ],
   "grasp_pos_robot_m": [
-    0.2602,
-    0.3523,
-    0.0523
+    -0.06580000000000001,
+    0.43206,
+    0.0673
   ],
   "grasp_rpy_robot_deg": [
     0.0,
@@ -28,9 +28,9 @@
     0.0
   ],
   "pre_grasp_pos_robot_m": [
-    0.17869726928671087,
-    -0.24910329707938159,
-    0.3302744311080481
+    0.14781129445017227,
+    -0.2941208360584689,
+    0.05000755085903669
   ],
   "pre_grasp_rpy_robot_deg": [
     0.0,
@@ -41,22 +41,22 @@
   "debug": {
     "object_yaw_cam_deg": 0.0,
     "grasp_orientation_mode": "fixed_robot",
-    "n_points": 29746,
+    "n_points": 21668,
     "bbox_xy": [
-      392,
-      171,
-      198,
-      157
+      187,
+      37,
+      173,
+      132
     ],
     "object_pos_robot_m": [
-      0.202,
-      -0.2816,
-      0.3303
+      0.1658,
+      -0.3299,
+      0.05
     ],
     "grasp_pos_robot_m": [
-      0.202,
-      -0.2816,
-      0.3303
+      0.1658,
+      -0.3299,
+      0.05
     ],
     "grasp_rpy_robot_deg": [
       0.0,
@@ -69,112 +69,140 @@
       0.0
     ],
     "vision_mode": "yolo_grasp",
-    "yolo_confidence": 0.9240785837173462,
+    "yolo_confidence": 0.9709129333496094,
     "yolo_class": "sensor",
     "yolo_bbox_xy": [
-      392,
-      171,
-      198,
-      157
+      187,
+      37,
+      173,
+      132
     ],
     "grasp_uv": [
-      473,
-      254
-    ],
-    "grasp_cam_m": [
-      0.1629,
-      0.0201,
-      0.626
-    ],
-    "crop_origin": [
-      376,
-      155
-    ],
-    "grasp_uv_crop": [
-      97,
+      278,
       99
     ],
-    "grasp_source": "crop_rgbd",
+    "grasp_cam_m": [
+      -0.0423,
+      -0.1588,
+      0.716
+    ],
+    "crop_origin": [
+      171,
+      21
+    ],
+    "grasp_uv_crop": [
+      107,
+      78
+    ],
+    "grasp_source": "base_ellipse_net",
     "base_uv": [
-      479,
-      302
+      270,
+      141
     ],
-    "base_uv_crop": [
-      103,
-      147
-    ],
+    "base_ellipse": {
+      "center_uv": [
+        270,
+        141
+      ],
+      "axis_a_px": 12.72,
+      "axis_b_px": 8.31,
+      "angle_deg": 0.35
+    },
+    "base_ellipse_crop": {
+      "center_uv": [
+        99,
+        120
+      ],
+      "axis_a_px": 12.72,
+      "axis_b_px": 8.31,
+      "angle_deg": 0.35
+    },
     "base_cam_m": [
-      0.1553,
-      0.0637,
-      0.575
+      -0.0548,
+      -0.1163,
+      0.76
     ],
     "base_table_xyz_m": [
-      0.1078,
-      0.2253,
-      -0.0038
+      -0.1801,
+      0.3457,
+      0.0
     ],
     "base_table_xy_mm": [
-      107.79,
-      225.33
+      -180.09,
+      345.72
     ],
-    "table_calib_path": "/home/jack/Desktop/Dummy_lab/software/camera/calibration_table/runs/run_20260613_215045/table_calib.json",
+    "base_table_xy_in": [
+      -7.09,
+      13.611
+    ],
+    "base_grid_col": -7,
+    "base_grid_row": 14,
+    "table_calib_path": "/home/jack/Desktop/Dummy_lab/software/camera/calibration_table/runs/run_20260618_213837/table_calib.json",
+    "base_table_pose_source": "calib_homography",
     "grasp_table_xyz_m": [
-      0.1078,
-      0.2253,
-      0.065
+      -0.1801,
+      0.3457,
+      0.08
     ],
     "grasp_table_xy_mm": [
-      86.55,
-      289.38
+      -166.77,
+      350.05
     ],
+    "grasp_table_xy_in": [
+      -6.566,
+      13.782
+    ],
+    "grasp_grid_col": -7,
+    "grasp_grid_row": 14,
+    "grasp_table_pose_source": "transform_table_cam",
     "grasp_offset_from_base_mm": {
-      "dx_mm": -21.24,
-      "dy_mm": 64.05,
-      "dz_mm": -1.93,
-      "dist_3d_mm": 67.51,
-      "dist_xy_mm": 67.48
+      "dx_mm": 13.32,
+      "dy_mm": 4.34,
+      "dz_mm": 62.13,
+      "dist_3d_mm": 63.69,
+      "dist_xy_mm": 14.01
     },
     "grasp_position_source": "table_base_xy_height",
     "grasp_tip_pos_robot_m": [
-      0.2602,
-      0.3523,
-      0.0523
+      -0.0658,
+      0.4321,
+      0.0673
     ],
-    "grasp_height_above_table_mm": 65.0,
+    "grasp_height_above_table_mm": 80.0,
     "robot_in_table_in": [
-      -6.0,
-      -5.0,
+      -4.5,
+      -3.4,
       0.5
     ],
     "grasp_frame_summary": {
       "table_xyz_mm": [
-        107.8,
-        225.3,
-        65.0
+        -180.1,
+        345.7,
+        80.0
       ],
       "robot_gui_m": [
-        0.2602,
-        0.3523,
-        0.0523
+        -0.0658,
+        0.4321,
+        0.0673
       ],
       "robot_gui_mm": [
-        260.2,
-        352.3,
-        52.3
+        -65.8,
+        432.1,
+        67.3
       ],
       "robot_gui_formula_mm": {
-        "x": "+6in + 108mm",
-        "y": "+5in + 225mm",
-        "z": "65mm - 0.5in"
+        "x": "+4in + -180mm",
+        "y": "+3in + 346mm",
+        "z": "80mm - 0.5in"
       },
       "robot_gui_formula_check_mm": [
-        260.2,
-        352.3,
-        52.3
+        -65.8,
+        432.1,
+        67.3
       ],
       "robot_in_table_in": [
-        -6.0,
-        -5.0,
+        -4.5,
+        -3.4,
         0.5
       ]
     }

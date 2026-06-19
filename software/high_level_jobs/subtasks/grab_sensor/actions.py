@@ -7,7 +7,7 @@ from typing import Any, Mapping
 
 from high_level_jobs.subtasks.robot_actions import _get_or_create_robot, _v
 
-from .config_loader import load_grab_sensor_config, resolve_config_path
+from .config_loader import apply_runtime_calibrations, load_grab_sensor_config, resolve_config_path
 from .execute import execute_on_robot
 from .pipeline import run_detection, run_grab_sensor_pipeline
 from .plan_motion import plan_approach_and_grasp
@@ -30,6 +30,7 @@ def grab_sensor_detect(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     Params: config, color_file, depth_file, camera_serial, width, height, ...
     """
     cfg, path = _load_cfg(params, ctx)
+    cfg = apply_runtime_calibrations(cfg, params)
     ctx["grab_sensor_config_path"] = str(path)
     ctx["grab_sensor_config"] = cfg
 
@@ -55,8 +56,9 @@ def grab_sensor_plan(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     cfg = ctx.get("grab_sensor_config")
     if cfg is None:
         cfg, path = _load_cfg(params, ctx)
-        ctx["grab_sensor_config"] = cfg
         ctx["grab_sensor_config_path"] = str(path)
+    cfg = apply_runtime_calibrations(cfg, params)
+    ctx["grab_sensor_config"] = cfg
 
     targets = ctx.get("grab_sensor_targets")
     if targets is None:
@@ -91,7 +93,9 @@ def grab_sensor_plan(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
 
 def grab_sensor_execute(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     """
-    Stream planned trajectory and close gripper. Requires robot connection + plan in ctx.
+    Stream planned trajectory: open gripper at pre-grasp, close at grasp, then lift/HOME.
+
+    Requires robot connection + plan in ctx.
     """
     trajectory = ctx.get("grab_sensor_trajectory_rad")
     targets = ctx.get("grab_sensor_targets")
@@ -119,6 +123,7 @@ def grab_sensor_execute(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
 def grab_sensor(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     """Full pipeline: detect → plan → (optional) execute."""
     cfg, path = _load_cfg(params, ctx)
+    cfg = apply_runtime_calibrations(cfg, params)
     ctx["grab_sensor_config"] = cfg
     ctx["grab_sensor_config_path"] = str(path)
 

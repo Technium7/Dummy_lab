@@ -13,30 +13,52 @@ _SOFTWARE_DIR = Path(__file__).resolve().parents[3]
 _DEFAULT_RUNS_DIR = _SOFTWARE_DIR / "camera" / "calibration_table" / "runs"
 
 
+def _table_calib_reproj_px(path: Path) -> float | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return float(data.get("metrics", {}).get("reprojection_error_px", float("inf")))
+    except (json.JSONDecodeError, TypeError, ValueError, OSError):
+        return None
+
+
+def _iter_table_calib_runs(*, newest_first: bool = True) -> list[Path]:
+    if not _DEFAULT_RUNS_DIR.is_dir():
+        return []
+    run_dirs = [d for d in _DEFAULT_RUNS_DIR.iterdir() if d.is_dir()]
+    run_dirs.sort(key=lambda d: d.stat().st_mtime, reverse=newest_first)
+    return [run_dir / "table_calib.json" for run_dir in run_dirs]
+
+
 def resolve_table_calib_path(
     configured: Path | None = None,
     *,
     max_reproj_px: float = 20.0,
+    prefer_latest: bool = True,
 ) -> Path | None:
-    """Use explicit path, else best recent table_calib.json by reprojection error."""
+    """Use explicit path, else newest valid ``table_calib.json`` under calibration_table/runs."""
     if configured is not None:
         path = configured.resolve()
         if path.is_file():
             return path
-    if not _DEFAULT_RUNS_DIR.is_dir():
+    for candidate in _iter_table_calib_runs(newest_first=True):
+        if not candidate.is_file():
+            continue
+        err = _table_calib_reproj_px(candidate)
+        if err is None or err > max_reproj_px:
+            continue
+        if prefer_latest:
+            return candidate
+        break
+
+    if prefer_latest:
         return None
 
     best: tuple[float, Path] | None = None
-    for run_dir in sorted(_DEFAULT_RUNS_DIR.iterdir(), key=lambda d: d.stat().st_mtime, reverse=True):
-        candidate = run_dir / "table_calib.json"
+    for candidate in _iter_table_calib_runs(newest_first=True):
         if not candidate.is_file():
             continue
-        try:
-            data = json.loads(candidate.read_text(encoding="utf-8"))
-            err = float(data.get("metrics", {}).get("reprojection_error_px", float("inf")))
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-        if err > max_reproj_px:
+        err = _table_calib_reproj_px(candidate)
+        if err is None or err > max_reproj_px:
             continue
         if best is None or err < best[0]:
             best = (err, candidate)
@@ -46,6 +68,81 @@ def resolve_table_calib_path(
 def load_table_calib(table_calib_path: Path) -> dict[str, Any]:
     table_calib_path = table_calib_path.resolve()
     return json.loads(table_calib_path.read_text(encoding="utf-8"))
+
+
+_homography_cache: dict[str, tuple[float, np.ndarray | None]] = {}
+
+
+def build_table_plane_homography(calib_data: dict[str, Any]) -> np.ndarray | None:
+    """Fit table-surface (x,y) -> image (u,v) homography from calibrated holes."""
+    try:
+        import cv2
+    except ImportError:
+        return None
+
+    holes = calib_data.get("holes") or []
+    if len(holes) < 4:
+        return None
+    src = np.array([[h["table_xy_m"][0], h["table_xy_m"][1]] for h in holes], dtype=np.float64)
+    dst = np.array([h["image_px"] for h in holes], dtype=np.float64)
+    homography, _mask = cv2.findHomography(src, dst, cv2.RANSAC, 2.0)
+    return homography
+
+
+def _homography_for_calib(table_calib_path: Path) -> np.ndarray | None:
+    path = table_calib_path.resolve()
+    mtime = path.stat().st_mtime
+    cached = _homography_cache.get(str(path))
+    if cached is not None and cached[0] == mtime:
+        return cached[1]
+    data = load_table_calib(path)
+    homography = build_table_plane_homography(data)
+    _homography_cache[str(path)] = (mtime, homography)
+    return homography
+
+
+def pixel_to_table_surface_xy(
+    uv: tuple[int, int],
+    table_calib_path: Path,
+) -> tuple[float, float] | None:
+    """Map image pixel to table-surface XY (m) using calib hole homography."""
+    homography = _homography_for_calib(table_calib_path)
+    if homography is None:
+        return None
+    homography_inv = np.linalg.inv(homography)
+    u, v = float(uv[0]), float(uv[1])
+    projected = homography_inv @ np.array([u, v, 1.0], dtype=np.float64)
+    if abs(projected[2]) < 1e-9:
+        return None
+    return float(projected[0] / projected[2]), float(projected[1] / projected[2])
+
+
+def infer_pixel_table_pose(
+    uv: tuple[int, int],
+    table_calib_path: Path,
+    *,
+    z_m: float = 0.0,
+) -> dict[str, Any] | None:
+    """Table pose from pixel on the table plane (matches overlay grid labels)."""
+    xy = pixel_to_table_surface_xy(uv, table_calib_path)
+    if xy is None:
+        return None
+    data = load_table_calib(table_calib_path)
+    pitch_m = float(data.get("grid_config", {}).get("pitch_m", _INCH_TO_M))
+    tx, ty = xy
+    grid_col, grid_row, col_f, row_f = table_xy_to_grid_indices(tx, ty, pitch_m)
+    return {
+        "table_xyz_m": [tx, ty, float(z_m)],
+        "table_xy_mm": [tx * 1000.0, ty * 1000.0],
+        "table_xy_in": [tx / _INCH_TO_M, ty / _INCH_TO_M],
+        "grid_col": grid_col,
+        "grid_row": grid_row,
+        "grid_col_f": col_f,
+        "grid_row_f": row_f,
+        "pitch_m": pitch_m,
+        "table_calib_path": str(table_calib_path),
+        "table_pose_source": "calib_homography",
+    }
 
 
 def load_transform_table_cam(table_calib_path: Path) -> np.ndarray:
@@ -87,10 +184,13 @@ def table_xy_to_grid_indices(
     table_y_m: float,
     pitch_m: float,
 ) -> tuple[int, int, float, float]:
-    """Return nearest grid cell (col, row) and fractional indices."""
+    """Return nearest grid cell (col, row) and fractional indices.
+
+    Matches saved table_calib holes: +Y table = +row (north on grow overlay).
+    """
     pitch = max(float(pitch_m), 1e-9)
     col_f = table_x_m / pitch
-    row_f = -table_y_m / pitch
+    row_f = table_y_m / pitch
     return int(round(col_f)), int(round(row_f)), col_f, row_f
 
 
@@ -164,6 +264,27 @@ def robot_gui_to_table_m(
     """Robot GUI / firmware base frame point -> optical table frame (m)."""
     p = np.array([*robot_xyz_m[:3], 1.0], dtype=np.float64)
     return (table_robot_matrix(robot_in_table) @ p)[:3]
+
+
+def format_table_xyz_display(table_xyz_m: Sequence[float]) -> str:
+    """Human-readable table pose: inches and mm."""
+    tx, ty, tz = (float(table_xyz_m[i]) for i in range(3))
+    return (
+        f"({tx / _INCH_TO_M:+.2f}, {ty / _INCH_TO_M:+.2f}, {tz / _INCH_TO_M:+.2f}) in  "
+        f"({tx * 1000:+.0f}, {ty * 1000:+.0f}, {tz * 1000:+.0f}) mm"
+    )
+
+
+def format_robot_in_table_display(robot_in_table: Any) -> str:
+    """Robot base origin expressed in the optical table frame."""
+    ti = robot_in_table.translation_in
+    rpy = [round(float(v), 1) for v in robot_in_table.rpy_deg]
+    return f"offset_in=[{ti[0]:+.1f}, {ti[1]:+.1f}, {ti[2]:+.1f}]  rpy_deg={rpy}"
+
+
+def robot_point_table_display(robot_xyz_m: Sequence[float], robot_in_table: Any) -> str:
+    """Format a robot-frame point as table-frame inches/mm."""
+    return format_table_xyz_display(robot_gui_to_table_m(robot_xyz_m, robot_in_table))
 
 
 def table_point_to_cam_m(
@@ -291,6 +412,18 @@ def _require_cv2():
     return cv2
 
 
+from .detection.base_ellipse import BaseEllipse, draw_base_ellipse, EDIT_BASE_BGR, NN_BASE_BGR
+
+
+def draw_nn_base_marker(bgr: np.ndarray, u: int, v: int) -> None:
+    """Backward-compatible center-only marker."""
+    draw_base_ellipse(
+        bgr,
+        BaseEllipse.from_center_uv((int(u), int(v))),
+        draw_center=True,
+    )
+
+
 def draw_table_grid_overlay(
     bgr: np.ndarray,
     calib_data: dict[str, Any],
@@ -363,124 +496,84 @@ def draw_base_table_annotation(
     *,
     base_uv: tuple[int, int],
     table_pose: dict[str, Any],
-    table_surface_uv: tuple[int, int] | None = None,
+    base_ellipse: BaseEllipse | None = None,
     grasp_uv: tuple[int, int] | None = None,
     grasp_pose: dict[str, Any] | None = None,
     grasp_offset_mm: dict[str, float] | None = None,
 ) -> None:
-    """Highlight sensor base and optional grasp point with table-frame positions."""
-    cv2 = _require_cv2()
+    """Highlight elliptical sensor base counter and optional grasp point."""
     u, v = int(base_uv[0]), int(base_uv[1])
     h_img, w_img = bgr.shape[:2]
 
-    cv2.drawMarker(bgr, (u, v), (0, 255, 0), cv2.MARKER_TILTED_CROSS, 24, 2)
-    cv2.circle(bgr, (u, v), 14, (0, 255, 0), 2, cv2.LINE_AA)
-    cv2.circle(bgr, (u, v), 5, (0, 255, 255), -1, cv2.LINE_AA)
-
-    if table_surface_uv is not None:
-        su, sv = table_surface_uv
-        if 0 <= su < w_img and 0 <= sv < h_img:
-            cv2.drawMarker(bgr, (su, sv), (255, 200, 0), cv2.MARKER_DIAMOND, 16, 2)
+    ellipse = base_ellipse or BaseEllipse.from_center_uv((u, v))
+    draw_base_ellipse(bgr, ellipse)
 
     if grasp_uv is not None and grasp_offset_mm is not None:
         gu, gv = int(grasp_uv[0]), int(grasp_uv[1])
         if 0 <= gu < w_img and 0 <= gv < h_img:
+            cv2 = _require_cv2()
             cv2.line(bgr, (u, v), (gu, gv), (255, 120, 255), 2, cv2.LINE_AA)
-            mid_u = (u + gu) // 2
-            mid_v = (v + gv) // 2
-            cv2.putText(
-                bgr,
-                f"{grasp_offset_mm['dist_3d_mm']:.0f}mm",
-                (mid_u + 6, mid_v - 6),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.45,
-                (255, 120, 255),
-                1,
-                cv2.LINE_AA,
-            )
 
+
+def format_overlay_caption(
+    table_pose: dict[str, Any],
+    *,
+    grasp_pose: dict[str, Any] | None = None,
+    grasp_offset_mm: dict[str, float] | None = None,
+    table_calib_name: str | None = None,
+    nn_grasp_uv: tuple[int, int] | None = None,
+    nn_base_uv: tuple[int, int] | None = None,
+) -> list[tuple[str, tuple[int, int, int]]]:
+    """Caption lines for below-image panel (text, BGR color)."""
     tx_mm, ty_mm = table_pose["table_xy_mm"]
-    tx_in, ty_in = table_pose["table_xy_in"]
-
-    lines = [
-        f"BASE table: X={tx_mm:+.1f}mm  Y={ty_mm:+.1f}mm",
-        f"           X={tx_in:+.2f}in   Y={ty_in:+.2f}in",
+    tx_in, ty_in = table_pose.get("table_xy_in") or (tx_mm / (_INCH_TO_M * 1000.0), ty_mm / (_INCH_TO_M * 1000.0))
+    grid_col = table_pose.get("grid_col")
+    grid_row = table_pose.get("grid_row")
+    grid_bit = ""
+    if grid_col is not None and grid_row is not None:
+        grid_bit = f" | grid ({grid_col}, {grid_row})"
+    lines: list[tuple[str, tuple[int, int, int]]] = [
+        (
+            f"Sensor base on table: ({tx_in:+.2f}, {ty_in:+.2f}) in "
+            f"({tx_mm:+.0f}, {ty_mm:+.0f}) mm{grid_bit} | "
+            f"Z={table_pose['table_xyz_m'][2] * 1000:.1f} mm",
+            (120, 255, 180),
+        ),
     ]
     if grasp_pose is not None and grasp_offset_mm is not None:
         gx_mm, gy_mm = grasp_pose["table_xy_mm"]
-        gx_in, gy_in = grasp_pose["table_xy_in"]
-        lines.extend(
-            [
-                f"GRASP table: X={gx_mm:+.1f}mm  Y={gy_mm:+.1f}mm",
-                f"            X={gx_in:+.2f}in   Y={gy_in:+.2f}in",
-                (
-                    f"from base: dX={grasp_offset_mm['dx_mm']:+.1f}mm  "
-                    f"dY={grasp_offset_mm['dy_mm']:+.1f}mm  "
-                    f"{grasp_offset_mm['dist_3d_mm']:.0f}mm away"
-                ),
-            ]
+        gx_in, gy_in = grasp_pose.get("table_xy_in") or (
+            gx_mm / (_INCH_TO_M * 1000.0),
+            gy_mm / (_INCH_TO_M * 1000.0),
         )
-
-    tx0 = min(u + 16, w_img - 380)
-    ty0 = max(v + 24, 60)
-    for i, line in enumerate(lines):
-        color = (0, 255, 120) if i < 2 else (120, 180, 255)
-        cv2.putText(
-            bgr,
-            line,
-            (tx0, ty0 + i * 20),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.48,
-            color,
-            1,
-            cv2.LINE_AA,
+        gcol = grasp_pose.get("grid_col")
+        grow = grasp_pose.get("grid_row")
+        ggrid = ""
+        if gcol is not None and grow is not None:
+            ggrid = f" | grid ({gcol}, {grow})"
+        lines.append(
+            (
+                f"Grasp on sensor: ({gx_in:+.2f}, {gy_in:+.2f}) in "
+                f"({gx_mm:+.0f}, {gy_mm:+.0f}) mm{ggrid} | "
+                f"{grasp_offset_mm['dist_3d_mm']:.0f} mm from base "
+                f"(dX={grasp_offset_mm['dx_mm']:+.1f}, dY={grasp_offset_mm['dy_mm']:+.1f}, "
+                f"dZ={grasp_offset_mm['dz_mm']:+.1f} mm)",
+                (180, 200, 255),
+            )
         )
-
-    panel_h = 112 if grasp_pose is not None else 88
-    panel_y = h_img - panel_h
-    cv2.rectangle(bgr, (0, panel_y), (w_img, h_img), (30, 30, 30), -1)
-    summary = (
-        f"Sensor base on table: ({tx_mm:+.1f}, {ty_mm:+.1f}) mm | "
-        f"Z={table_pose['table_xyz_m'][2]*1000:.1f} mm"
+    coord_bits = []
+    if nn_grasp_uv is not None:
+        coord_bits.append(f"grasp {nn_grasp_uv}")
+    if nn_base_uv is not None:
+        coord_bits.append(f"base {nn_base_uv}")
+    if coord_bits:
+        lines.append((f"NN px: {'  |  '.join(coord_bits)}", (180, 220, 180)))
+    if table_calib_name:
+        lines.append((f"Table calib: {table_calib_name}", (200, 200, 200)))
+    lines.append(
+        (
+            "Green = NN base ellipse | red = NN grasp | magenta = base-to-grasp | gray grid = table holes",
+            (180, 200, 180),
+        )
     )
-    cv2.putText(
-        bgr,
-        summary,
-        (10, panel_y + 28),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.52,
-        (120, 255, 180),
-        1,
-        cv2.LINE_AA,
-    )
-    if grasp_pose is not None and grasp_offset_mm is not None:
-        gx_mm, gy_mm = grasp_pose["table_xy_mm"]
-        grasp_summary = (
-            f"Grasp on sensor: ({gx_mm:+.1f}, {gy_mm:+.1f}) mm | "
-            f"{grasp_offset_mm['dist_3d_mm']:.0f} mm from base "
-            f"(dX={grasp_offset_mm['dx_mm']:+.1f}, dY={grasp_offset_mm['dy_mm']:+.1f}, "
-            f"dZ={grasp_offset_mm['dz_mm']:+.1f} mm)"
-        )
-        cv2.putText(
-            bgr,
-            grasp_summary,
-            (10, panel_y + 54),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.48,
-            (180, 200, 255),
-            1,
-            cv2.LINE_AA,
-        )
-        legend_y = panel_y + 82
-    else:
-        legend_y = panel_y + 56
-    cv2.putText(
-        bgr,
-        "Green X = base  |  red grasp = NN grasp  |  magenta line = base-to-grasp  |  gray grid = table holes",
-        (10, legend_y),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.42,
-        (180, 200, 180),
-        1,
-        cv2.LINE_AA,
-    )
+    return lines

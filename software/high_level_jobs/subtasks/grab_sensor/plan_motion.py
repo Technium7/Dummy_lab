@@ -33,6 +33,7 @@ from manual_control.mapping import HOME_JOINTS_DEG  # noqa: E402
 
 from .models import GrabSensorConfig, GraspTargets
 from .grasp import prepare_fixed_robot_grasp_targets
+from .table_position import robot_point_table_display
 from .tcp_ik import (
     TcpOffset,
     enforce_goal_orientation,
@@ -44,7 +45,7 @@ from .tcp_ik import (
     refine_joint_config_to_target_pose,
     refine_joint_config_to_target_position,
     grasp_ik_goal_from_home,
-    print_grasp_ik_debug,
+    solve_tcp_ik,
     solve_goal_from_target_pose,
     tcp_world_rpy_from_q,
     target_pose_from_q,
@@ -117,6 +118,12 @@ def _report_pose_error(
     return pos_err_m * 1000.0, math.degrees(ori_err_rad)
 
 
+def _ik_seed_q(start_q: Sequence[float], ik_warm_start_q: Sequence[float] | None) -> List[float]:
+    if ik_warm_start_q is not None:
+        return [float(v) for v in ik_warm_start_q]
+    return [float(v) for v in start_q]
+
+
 def plan_segment(
     scene,
     tcp: TcpOffset,
@@ -128,13 +135,16 @@ def plan_segment(
     ik_ori_tol_rad: float = 0.35,
     refine_ori_tol_rad: float = 0.02,
     ik_pos_tol_m: float = 0.08,
+    ik_warm_start_q: Sequence[float] | None = None,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
     target_pos_arr = _target_pos(target_pos)
+    ik_seed = _ik_seed_q(start_q, ik_warm_start_q)
+    set_joint_positions(scene, ik_seed)
     goal_q = solve_goal_from_target_pose(
         scene,
         target_pos_arr,
         target_rpy,
-        start_q,
+        ik_seed,
         tcp,
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
@@ -208,9 +218,12 @@ def _solve_goal_from_position_seed(
     max_pos_err_m: float,
     ik_ori_tol_rad: float,
     refine_ori_tol_rad: float,
+    ik_warm_start_q: Sequence[float] | None = None,
 ) -> Optional[List[float]]:
+    ik_seed = _ik_seed_q(start_q, ik_warm_start_q)
+    set_joint_positions(scene, ik_seed)
     q_pos = solve_goal_position_first(
-        scene, tcp, target_pos, start_q, pos_tol_m=pos_tol_m, max_pos_err_m=max_pos_err_m
+        scene, tcp, target_pos, ik_seed, pos_tol_m=pos_tol_m, max_pos_err_m=max_pos_err_m
     )
     if q_pos is None:
         return None
@@ -301,6 +314,7 @@ def _plan_pose_segment_with_fallbacks(
     max_pos_err_m: float = 0.08,
     cartesian_hold_rpy: Sequence[float] | None = None,
     position_first_fallback: bool = False,
+    ik_warm_start_q: Sequence[float] | None = None,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
     traj, goal_q = plan_segment(
         scene,
@@ -312,6 +326,7 @@ def _plan_pose_segment_with_fallbacks(
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
         ik_pos_tol_m=max_pos_err_m,
+        ik_warm_start_q=ik_warm_start_q,
     )
     if traj is not None and goal_q is not None:
         return traj, goal_q
@@ -333,11 +348,13 @@ def _plan_pose_segment_with_fallbacks(
     )
     if traj is not None and goal_q is not None:
         cartesian_goal_q = goal_q
+        ik_seed = _ik_seed_q(cartesian_goal_q, ik_warm_start_q)
+        set_joint_positions(scene, ik_seed)
         goal_q = solve_goal_from_target_pose(
             scene,
             _target_pos(target_pos),
             target_rpy,
-            cartesian_goal_q,
+            ik_seed,
             tcp,
             ik_ori_tol_rad=ik_ori_tol_rad,
             refine_ori_tol_rad=refine_ori_tol_rad,
@@ -382,6 +399,7 @@ def _plan_pose_segment_with_fallbacks(
         max_pos_err_m=max_pos_err_m,
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
+        ik_warm_start_q=ik_warm_start_q,
     )
     if goal_q is None:
         if not position_first_fallback:
@@ -390,11 +408,13 @@ def _plan_pose_segment_with_fallbacks(
             f"[grab_sensor] Position/orientation IK failed for {segment_name}; "
             "retrying position-first (orientation from FK)."
         )
+        ik_seed = _ik_seed_q(start_q, ik_warm_start_q)
+        set_joint_positions(scene, ik_seed)
         goal_q = solve_goal_position_first(
             scene,
             tcp,
             target_pos,
-            start_q,
+            ik_seed,
             pos_tol_m=pos_tol_m,
             max_pos_err_m=max_pos_err_m,
         )
@@ -452,11 +472,13 @@ def plan_pre_grasp_segment(
     targets: GraspTargets,
     *,
     enable_collision: bool,
-    ik_ori_tol_rad: float = 0.35,
-    refine_ori_tol_rad: float = 0.02,
     pos_tol_m: float = 0.05,
     max_pos_err_m: float = 0.08,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
+    """Pre-grasp: reach retreat pose; orientation tolerance is relaxed vs final grasp."""
+    pre_ori_tol_rad = math.radians(float(cfg.approach.pre_grasp_orientation_tol_deg))
+    refine_ori_tol_rad = min(pre_ori_tol_rad, math.radians(15.0))
+    home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
     return _plan_pose_segment_with_fallbacks(
         scene,
         TcpOffset(),
@@ -465,11 +487,13 @@ def plan_pre_grasp_segment(
         targets.pre_grasp_rpy_rad,
         enable_collision=enable_collision,
         segment_name="pre-grasp",
-        ik_ori_tol_rad=ik_ori_tol_rad,
+        ik_ori_tol_rad=pre_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
         pos_tol_m=pos_tol_m,
         max_pos_err_m=max_pos_err_m,
         cartesian_hold_rpy=targets.pre_grasp_rpy_rad,
+        position_first_fallback=True,
+        ik_warm_start_q=home_q,
     )
 
 
@@ -550,15 +574,29 @@ def plan_grasp_segment(
     ik_ori_tol_rad: float = 0.35,
     max_pos_err_m: float = 0.08,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
-    """Final grasp: HOME warm-start TCP IK then iLQR from ``start_q``."""
+    """Final grasp: TCP IK warm-started from ``start_q`` (pre-grasp), then iLQR."""
     tcp = TcpOffset()
     target_pos = _target_pos(targets.grasp_pos_m)
     target_rpy = targets.grasp_rpy_rad
+    refine_ori_tol_rad = min(ik_ori_tol_rad, math.radians(5.0))
 
-    home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
-    goal_q = grasp_ik_goal_from_home(scene, targets, home_q, tcp)
+    set_joint_positions(scene, start_q)
+    goal_q = solve_goal_from_target_pose(
+        scene,
+        target_pos,
+        target_rpy,
+        start_q,
+        tcp,
+        ik_ori_tol_rad=ik_ori_tol_rad,
+        refine_ori_tol_rad=refine_ori_tol_rad,
+        ik_pos_tol_m=max_pos_err_m,
+    )
     if goal_q is None:
-        print("[grab_sensor] Final grasp TCP IK failed (warm-start from HOME).")
+        home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
+        print("[grab_sensor] Grasp TCP IK from pre-grasp failed; retrying warm-start from HOME.")
+        goal_q = grasp_ik_goal_from_home(scene, targets, home_q, tcp)
+    if goal_q is None:
+        print("[grab_sensor] Final grasp TCP IK failed.")
         return None, None
 
     tip_err_mm = tcp_error_mm(scene, target_pos, goal_q, tcp)
@@ -577,8 +615,6 @@ def plan_grasp_segment(
         )
         return None, None
 
-    print_grasp_ik_debug(scene, targets, goal_q, label="plan_grasp", warm_start_q=home_q, tcp=tcp)
-
     traj = plan_joint_trajectory(
         scene,
         start_q,
@@ -591,6 +627,156 @@ def plan_grasp_segment(
     if traj is None:
         return None, None
     return traj, goal_q
+
+
+def _post_grasp_lift_pos_m(targets: GraspTargets, lift_mm: float) -> np.ndarray:
+    pos = np.asarray(targets.grasp_pos_m, dtype=np.float64)[:3].copy()
+    pos[2] += float(lift_mm) * 1e-3
+    return pos
+
+
+def plan_vertical_lift_hold_orientation(
+    scene,
+    tcp: TcpOffset,
+    start_q: Sequence[float],
+    lift_delta_z_m: float,
+    *,
+    enable_collision: bool,
+    n_steps: int = 16,
+    pos_tol_m: float = 0.005,
+    ori_tol_rad: float = 0.05,
+) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
+    """Pure +Z TCP move; TCP orientation locked to FK at ``start_q`` (grasp pose)."""
+    import pybullet as p
+
+    if lift_delta_z_m <= 0.0:
+        return None, None
+
+    set_joint_positions(scene, start_q)
+    start_tip = tcp.tip_world(scene)
+    hold_rpy = tcp_world_rpy_from_q(scene, start_q, tcp)
+    hold_orn = p.getQuaternionFromEuler([float(v) for v in hold_rpy])
+
+    target_tip = start_tip.copy()
+    target_tip[2] += float(lift_delta_z_m)
+
+    q = [float(v) for v in start_q]
+    waypoints: List[List[float]] = [list(q)]
+    for i in range(1, n_steps + 1):
+        alpha = i / n_steps
+        interp_tip = (1.0 - alpha) * start_tip + alpha * target_tip
+        set_joint_positions(scene, q)
+        try:
+            q = solve_tcp_ik(scene, interp_tip, hold_orn, q)
+        except (ValueError, TypeError):
+            return None, None
+        if not is_state_valid(scene, q):
+            return None, None
+        waypoints.append(list(q))
+
+    goal_q = q
+    pos_err_m, ori_err = measure_tcp_target_pose_error(scene, target_tip, hold_rpy, goal_q, tcp)
+    print(
+        f"[grab_sensor] vertical lift FK: tip_err={pos_err_m * 1000:.2f} mm, "
+        f"ori_err={math.degrees(ori_err):.2f} deg (TCP orientation held from grasp)"
+    )
+    if pos_err_m > pos_tol_m * 4.0 or ori_err > ori_tol_rad:
+        return None, None
+
+    traj = plan_joint_trajectory(
+        scene,
+        start_q,
+        goal_q,
+        target_tip,
+        hold_rpy,
+        enable_collision_penalty=enable_collision,
+        tcp_position_error_m=_tcp_position_error_m_fn(tcp),
+    )
+    if traj is None:
+        raw = np.asarray(waypoints, dtype=np.float64)
+        traj = resample_trajectory(raw, max(12, len(raw) * 3))
+    return traj, goal_q
+
+
+def plan_post_grasp_lift_segment(
+    scene,
+    cfg: GrabSensorConfig,
+    start_q: Sequence[float],
+    targets: GraspTargets,
+    *,
+    enable_collision: bool,
+    max_pos_err_m: float = 0.08,
+) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
+    """Straight +Z lift after grasp; orientation locked to FK at grasp."""
+    lift_mm = float(cfg.approach.post_grasp_lift_mm)
+    if lift_mm <= 0.0:
+        return None, None
+
+    lift_pos = _post_grasp_lift_pos_m(targets, lift_mm)
+    tcp = TcpOffset()
+
+    print(
+        f"[grab_sensor] post-grasp lift: +{lift_mm:.0f} mm along world +Z "
+        f"to {lift_pos.round(4).tolist()} (orientation held from grasp FK)"
+    )
+
+    return plan_vertical_lift_hold_orientation(
+        scene,
+        tcp,
+        start_q,
+        lift_mm * 1e-3,
+        enable_collision=enable_collision,
+        pos_tol_m=max_pos_err_m,
+    )
+
+
+def plan_return_home_segment(
+    scene,
+    start_q: Sequence[float],
+    *,
+    enable_collision: bool,
+) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
+    """Joint-space iLQR from ``start_q`` back to HOME."""
+    home_q = start_q_from_robot_joints_deg(scene, HOME_JOINTS_DEG)
+    set_joint_positions(scene, home_q)
+    home_pos, home_rpy = get_end_link_pose(scene)
+    print("[grab_sensor] return HOME...")
+    traj = plan_joint_trajectory(
+        scene,
+        start_q,
+        home_q,
+        home_pos,
+        home_rpy,
+        enable_collision_penalty=enable_collision,
+    )
+    if traj is None:
+        return None, None
+    return traj, home_q
+
+
+def _finalize_motion_segment(
+    trajectory: np.ndarray | None,
+    start_q: Sequence[float],
+    goal_q: Sequence[float],
+) -> np.ndarray | None:
+    if trajectory is None or len(trajectory) < 2:
+        return None
+    compressed = compress_duplicate_waypoints(np.asarray(trajectory, dtype=np.float64))
+    return finalize_trajectory_for_cache(compressed, start_q, goal_q)
+
+
+def _stack_motion_segments(segments: Sequence[np.ndarray | None]) -> np.ndarray:
+    parts: list[np.ndarray] = []
+    for seg in segments:
+        if seg is None or len(seg) < 1:
+            continue
+        if not parts:
+            parts.append(np.asarray(seg, dtype=np.float64))
+        else:
+            parts.append(np.asarray(seg[1:], dtype=np.float64))
+    if not parts:
+        raise RuntimeError("No motion segments to combine.")
+    return np.vstack(parts)
 
 
 def plan_approach_and_grasp(
@@ -610,12 +796,9 @@ def plan_approach_and_grasp(
         targets.debug["pre_grasp_rpy_deg"] = [
             float(math.degrees(v)) for v in targets.pre_grasp_rpy_rad
         ]
-        if targets.debug.get("grasp_position_source") == "table_base_xy_height":
-            print(
-                f"[grab_sensor] grasp tip target m={targets.debug.get('grasp_tip_pos_m')}  "
-                f"(TCP={cfg.tcp_link} in URDF)"
-            )
-        elif (rpy := targets.debug.get("grasp_rpy_world_deg")) is not None:
+        if (rpy := targets.debug.get("grasp_rpy_world_deg")) is not None and (
+            targets.debug.get("grasp_position_source") != "table_base_xy_height"
+        ):
             abc = targets.debug.get("grasp_abc_input_deg")
             abc_s = f"  abc={[round(float(v), 2) for v in abc]}" if abc else ""
             print(f"[grab_sensor] grasp world RPY target (deg): {[round(float(v), 2) for v in rpy]}{abc_s}")
@@ -640,8 +823,6 @@ def plan_approach_and_grasp(
                 start_q,
                 targets,
                 enable_collision=cfg.enable_collision,
-                ik_ori_tol_rad=ori_tol_rad,
-                refine_ori_tol_rad=refine_ori_tol_rad,
                 pos_tol_m=pos_tol_m,
                 max_pos_err_m=max_pos_err_m,
             )
@@ -661,9 +842,9 @@ def plan_approach_and_grasp(
                 targets.pre_grasp_rpy_rad,
             )
             print(
-                f"[grab_sensor] pre-grasp FK: pos_err={pre_pos_err_mm:.1f} mm, "
-                f"ori_err={pre_ori_err_deg:.1f} deg "
-                f"(orientation limit {cfg.grasp_orientation_tol_deg:.1f} deg)"
+                f"[grab_sensor] planned pre-grasp (table): "
+                f"{robot_point_table_display(pre_fk_pos, cfg.robot_in_table_frame)}  "
+                f"(FK err {pre_pos_err_mm:.1f} mm, ori {pre_ori_err_deg:.1f} deg)"
             )
             meta["pre_grasp_fk_pos_err_mm"] = pre_pos_err_mm
             meta["pre_grasp_fk_ori_err_deg"] = pre_ori_err_deg
@@ -685,12 +866,65 @@ def plan_approach_and_grasp(
                 "incompatible with the arm at the taught grasp location."
             )
 
-        if pre_traj is not None:
-            combined = np.vstack([pre_traj, grasp_traj[1:]])
-        else:
-            combined = grasp_traj
-        combined = compress_duplicate_waypoints(combined)
-        combined = finalize_trajectory_for_cache(combined, start_q, grasp_goal_q)
+        pre_seg = (
+            _finalize_motion_segment(pre_traj, start_q, pre_goal_q)
+            if pre_traj is not None
+            else None
+        )
+        grasp_seg = _finalize_motion_segment(grasp_traj, pre_goal_q, grasp_goal_q)
+        if grasp_seg is None:
+            raise RuntimeError("Failed to finalize grasp motion segment.")
+
+        lift_traj = None
+        lift_goal_q = grasp_goal_q
+        lift_seg = None
+        if float(cfg.approach.post_grasp_lift_mm) > 0.0:
+            lift_traj, lift_goal_q = plan_post_grasp_lift_segment(
+                scene,
+                cfg,
+                grasp_goal_q,
+                targets,
+                enable_collision=cfg.enable_collision,
+                max_pos_err_m=max_pos_err_m,
+            )
+            if lift_traj is None or lift_goal_q is None:
+                raise RuntimeError(
+                    "Failed to plan post-grasp lift segment (+Z retreat after grasp)."
+                )
+            lift_seg = _finalize_motion_segment(lift_traj, grasp_goal_q, lift_goal_q)
+            set_joint_positions(scene, lift_goal_q)
+            lift_fk_pos, _ = target_pose_from_q(scene, lift_goal_q, tcp)
+            lift_err_mm = float(
+                np.linalg.norm(lift_fk_pos - _post_grasp_lift_pos_m(targets, cfg.approach.post_grasp_lift_mm))
+            ) * 1000.0
+            print(f"[grab_sensor] post-grasp lift FK: pos_err={lift_err_mm:.1f} mm")
+            meta["post_lift_fk_pos_err_mm"] = lift_err_mm
+            meta["lift_goal_q"] = lift_goal_q
+
+        home_traj = None
+        final_goal_q = lift_goal_q
+        home_seg = None
+        if cfg.approach.plan_return_home:
+            home_traj, home_goal_q = plan_return_home_segment(
+                scene,
+                lift_goal_q,
+                enable_collision=cfg.enable_collision,
+            )
+            if home_traj is None or home_goal_q is None:
+                raise RuntimeError("Failed to plan return HOME segment after grasp lift.")
+            home_seg = _finalize_motion_segment(home_traj, lift_goal_q, home_goal_q)
+            final_goal_q = home_goal_q
+            meta["home_goal_q"] = home_goal_q
+
+        segments = {
+            "pre_grasp": pre_seg,
+            "grasp": grasp_seg,
+            "lift": lift_seg,
+            "home": home_seg,
+        }
+        meta["segments"] = segments
+        combined = _stack_motion_segments([pre_seg, grasp_seg, lift_seg, home_seg])
+        meta["n_through_grasp"] = len(_stack_motion_segments([pre_seg, grasp_seg]))
 
         set_joint_positions(scene, grasp_goal_q)
         fk_points = fk_grasp_points(scene, grasp_goal_q, tcp)
@@ -713,9 +947,13 @@ def plan_approach_and_grasp(
 
         meta.update(
             {
-                "n_pre": len(pre_traj) if pre_traj is not None else 0,
+                "n_pre": len(pre_seg) if pre_seg is not None else 0,
                 "plan_pre_grasp": cfg.approach.plan_pre_grasp,
-                "n_grasp": len(grasp_traj),
+                "n_grasp": len(grasp_seg),
+                "n_lift": len(lift_seg) if lift_seg is not None else 0,
+                "n_home": len(home_seg) if home_seg is not None else 0,
+                "post_grasp_lift_mm": float(cfg.approach.post_grasp_lift_mm),
+                "plan_return_home": cfg.approach.plan_return_home,
                 "n_total": len(combined),
                 "start_q": start_q,
                 "pre_goal_q": pre_goal_q,
@@ -725,37 +963,32 @@ def plan_approach_and_grasp(
                 "wrist_tcp_mm": wrist_tcp_mm,
             }
         )
+        print(
+            f"[grab_sensor] motion segments: pre={meta['n_pre']} grasp={meta['n_grasp']} "
+            f"lift={meta['n_lift']} home={meta['n_home']} total={meta['n_total']}"
+        )
+        report_err_mm = tip_err_mm if tip_err_mm is not None else pos_err_mm
         if fk_tip_arr is not None and tip_err_mm is not None:
             meta["grasp_fk_tip_m"] = fk_tip_arr.round(4).tolist()
             meta["grasp_fk_tip_err_mm"] = tip_err_mm
 
-        if tip_err_mm is not None:
+        planned_tip = fk_tip_arr if fk_tip_arr is not None else fk_pos_arr
+        if planned_tip is not None:
             print(
-                f"[grab_sensor] planned end-link FK (m)={fk_pos_arr.round(4).tolist()}  "
-                f"tip FK (m)={fk_tip_arr.round(4).tolist()}  "
-                f"tip target={tip_target}  tip error={tip_err_mm:.1f} mm"
+                f"[grab_sensor] planned grasp (table): "
+                f"{robot_point_table_display(planned_tip, cfg.robot_in_table_frame)}  "
+                f"(FK err {report_err_mm:.1f} mm)"
             )
-        else:
-            print(
-                f"[grab_sensor] planned grasp FK (m)={fk_pos_arr.round(4).tolist()}  "
-                f"target={targets.grasp_pos_m.round(4).tolist()}  error={pos_err_mm:.1f} mm"
-            )
+
         fk_tcp_rpy = tcp_world_rpy_from_q(scene, grasp_goal_q, tcp)
         target_rpy_deg = [round(math.degrees(v), 2) for v in targets.grasp_rpy_rad]
         planned_tcp_rpy_deg = [round(math.degrees(v), 2) for v in fk_tcp_rpy]
         _, grasp_ori_err = measure_target_pose_error(
             scene, targets.grasp_pos_m, targets.grasp_rpy_rad, grasp_goal_q, tcp
         )
-        print(
-            f"[grab_sensor] grasp TCP world RPY deg (planned): {planned_tcp_rpy_deg}  "
-            f"target: {target_rpy_deg}  "
-            f"ori_err={math.degrees(grasp_ori_err):.1f} deg "
-            f"(limit {cfg.grasp_orientation_tol_deg:.1f} deg)"
-        )
         meta["grasp_fk_tcp_rpy_world_deg"] = [float(v) for v in planned_tcp_rpy_deg]
         meta["grasp_target_rpy_world_deg"] = [float(v) for v in target_rpy_deg]
         meta["grasp_fk_ori_err_deg"] = float(math.degrees(grasp_ori_err))
-        report_err_mm = tip_err_mm if tip_err_mm is not None else pos_err_mm
         if report_err_mm > 20.0:
             print(
                 f"[grab_sensor] WARNING: arm FK misses grasp target by {report_err_mm:.1f} mm "

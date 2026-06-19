@@ -9,7 +9,11 @@ _SOFTWARE_DIR = Path(__file__).resolve().parents[3]
 if str(_SOFTWARE_DIR) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_DIR))
 
-from high_level_jobs.subtasks.grab_sensor.config_loader import default_config_path, load_grab_sensor_config
+from high_level_jobs.subtasks.grab_sensor.config_loader import (
+    apply_runtime_calibrations,
+    default_config_path,
+    load_grab_sensor_config,
+)
 from high_level_jobs.subtasks.grab_sensor.pipeline import run_grab_sensor_pipeline
 
 _OFFLINE_COLOR = (
@@ -25,7 +29,11 @@ from robot_config import default_robot_port
 def main() -> int:
     p = argparse.ArgumentParser(description="Detect sensor with D415, plan grasp, optionally execute.")
     p.add_argument("--config", type=Path, default=default_config_path())
-    p.add_argument("--execute", action="store_true", help="Stream plan to robot and close gripper")
+    p.add_argument(
+        "--execute",
+        action="store_true",
+        help="Stream plan to robot (open at pre-grasp, close at grasp, lift/HOME)",
+    )
     p.add_argument("--port", default=default_robot_port())
     p.add_argument("--baudrate", type=int, default=int(os.environ.get("ROBOT_BAUDRATE", "115200")))
     p.add_argument("--color-file", type=Path, default=None, help="Offline test from saved capture")
@@ -85,7 +93,7 @@ def main() -> int:
             print(f"Offline color capture not found: {color_file}", file=sys.stderr)
             return 1
         try:
-            from high_level_jobs.subtasks.grab_sensor.capture import validate_color_image_file
+            from high_level_jobs.subtasks.grab_sensor.detection.capture import validate_color_image_file
 
             validate_color_image_file(color_file)
         except OSError as exc:
@@ -96,7 +104,7 @@ def main() -> int:
             )
             return 1
 
-    cfg = load_grab_sensor_config(args.config)
+    cfg = apply_runtime_calibrations(load_grab_sensor_config(args.config), {})
     params = {
         "execute": args.execute,
         "color_file": str(color_file) if color_file else None,

@@ -36,7 +36,7 @@ from camera.calibration_table.table_calib import build_calibration_result, save_
 
 
 def _real_sense_streamer():
-    from high_level_jobs.subtasks.grab_sensor.capture import RealSenseStreamer
+    from high_level_jobs.subtasks.grab_sensor.detection.capture import RealSenseStreamer
 
     return RealSenseStreamer
 

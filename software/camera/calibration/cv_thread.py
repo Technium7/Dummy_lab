@@ -13,7 +13,7 @@ _SOFTWARE_DIR = Path(__file__).resolve().parents[2]
 if str(_SOFTWARE_DIR) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_DIR))
 
-from high_level_jobs.subtasks.grab_sensor.capture import RealSenseStreamer
+from high_level_jobs.subtasks.grab_sensor.detection.capture import RealSenseStreamer
 
 from .card_config import CalibrationCardConfig
 from .chessboard import detect_board_pose

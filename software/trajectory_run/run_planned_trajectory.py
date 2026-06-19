@@ -18,9 +18,12 @@ from manual_control.mapping import (  # noqa: E402
     HOME_JOINTS_DEG,
     MAX_SPEED,
     MIN_SPEED,
+    clamp_firmware_joints_deg,
     deg_speed_to_ascii_speed,
+    max_ascii_speed,
     sim_rad_to_transformed_deg,
 )
+from manual_control.robot_session import connect_robot_for_teleop, disconnect_robot  # noqa: E402
 from robot_ascii_interface import RobotAsciiInterface  # noqa: E402
 from robot_config import default_robot_port  # noqa: E402
 from trajectory_run.plan_loader import default_plan_path, load_plan_npz, load_planned_trajectory_rad  # noqa: E402
@@ -150,16 +153,74 @@ def wait_until_joints(
     return False, last
 
 
-def _drain_serial(robot: RobotAsciiInterface, max_lines: int = 32) -> None:
-    if not robot.ser or not robot.ser.is_open:
+def _discard_stream_acks(robot: RobotAsciiInterface, *, max_lines: int = 512) -> None:
+    if robot._session is not None:
+        robot._session.discard_stream_acks(max_lines=max_lines)
+
+
+def _hold_stream_speed() -> float:
+    """Low-speed hold after stream segments (matches teleop key-up hold)."""
+    return max(6.9, max_ascii_speed() * 0.2)
+
+
+def _seed_stream_start(
+    robot: RobotAsciiInterface,
+    first_target: Sequence[float],
+    *,
+    label: str = "",
+) -> None:
+    """Sync firmware target to the path start without a large first-segment jerk."""
+    first = clamp_firmware_joints_deg(first_target)
+    hold_speed = _hold_stream_speed()
+    current = read_physical_joints(robot)
+    if current is None:
+        robot.hold_stream_pose(first, hold_speed)
+        time.sleep(0.1)
         return
-    try:
-        for _ in range(max_lines):
-            if robot.ser.in_waiting <= 0:
-                break
-            robot.ser.readline()
-    except Exception:
-        pass
+    current = clamp_firmware_joints_deg(current)
+    err = float(np.max(np.abs(np.asarray(current[:6]) - np.asarray(first[:6]))))
+    if err > 0.35:
+        print(f"{label}Stream seed: holding current pose (max |Δ|={err:.2f} deg) before path.")
+        robot.hold_stream_pose(current, hold_speed)
+        time.sleep(0.15)
+    robot.hold_stream_pose(first, hold_speed)
+    time.sleep(0.1)
+
+
+def _segment_velocities_deg_s(
+    pts: np.ndarray,
+    index: int,
+    dt_s: float,
+    velocities_deg_s: np.ndarray | None,
+    *,
+    vmax: float,
+    scale: float,
+) -> tuple[list[float], list[float]]:
+    q = clamp_firmware_joints_deg(pts[index])
+    if velocities_deg_s is not None and len(velocities_deg_s) > index:
+        vels = [float(velocities_deg_s[index, j]) * scale for j in range(6)]
+    else:
+        q_prev = clamp_firmware_joints_deg(pts[index - 1])
+        vels = [(q[j] - q_prev[j]) / dt_s for j in range(6)]
+    vels = [max(-vmax, min(vmax, v)) for v in vels]
+    return q, vels
+
+
+def ensure_robot_armed(
+    robot: RobotAsciiInterface,
+    *,
+    cmd_mode: int = 2,
+    label: str = "",
+) -> None:
+    """``!START`` then CMDMODE for ``&`` streaming (required after ``!STOP`` — firmware ignores motion when disabled)."""
+    print(f"{label}!START -> {robot.start()}")
+    time.sleep(0.15)
+    if cmd_mode == 2:
+        robot.ensure_cmdmode_stream()
+    else:
+        print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
+        time.sleep(0.2)
+    _discard_stream_acks(robot)
 
 
 def firmware_home(
@@ -174,7 +235,8 @@ def firmware_home(
     label: str = "",
 ) -> tuple[bool, List[float] | None]:
     """Send ``!HOME``, poll joints until at plan start, then enable streaming CMDMODE."""
-    target = [float(target_deg[j]) for j in range(6)]
+    del home_wait_ms  # legacy CLI arg; ``send_home_command`` blocks until firmware returns
+    target = clamp_firmware_joints_deg([float(target_deg[j]) for j in range(6)])
     current = read_physical_joints(robot)
     if current is not None:
         err = float(np.max(np.abs(np.asarray(current[:6]) - np.asarray(target))))
@@ -183,10 +245,12 @@ def firmware_home(
         print(f"{label}!HOME")
 
     # Sequential mode during homing — avoid CMDMODE 2 fighting stale stream targets.
+    _discard_stream_acks(robot)
     print(f"{label}#CMDMODE 1 -> {robot.set_command_mode(1)}")
     time.sleep(0.2)
 
-    resp = robot.home(wait_ms=home_wait_ms, extra_read_sec=home_read_sec)
+    home_timeout_s = max(30.0, float(home_read_sec))
+    resp = robot.home(max_wait_s=home_timeout_s)
     if resp is None:
         print(f"{label}Note: !HOME serial reply not received (may still be moving).")
     elif "ok" not in str(resp).lower():
@@ -201,7 +265,7 @@ def firmware_home(
         label=label,
         name="HOME",
     )
-    _drain_serial(robot)
+    _discard_stream_acks(robot)
 
     if not ok and final is not None:
         print(f"{label}Pin HOME: fine correction after !HOME")
@@ -216,8 +280,12 @@ def firmware_home(
         if pin_ok and pinned is not None:
             ok, final = True, pinned
 
-    print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
-    time.sleep(0.2)
+    if cmd_mode == 2:
+        ensure_robot_armed(robot, cmd_mode=cmd_mode, label=label)
+    else:
+        print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
+        time.sleep(0.2)
+        _discard_stream_acks(robot)
 
     if final is None:
         final = read_physical_joints(robot)
@@ -242,7 +310,7 @@ def pin_to_joint_target(
     name: str = "target",
 ) -> tuple[bool, List[float] | None]:
     """Send a final ``&`` move so the robot settles on commanded joint angles."""
-    target = [float(target_deg[j]) for j in range(6)]
+    target = clamp_firmware_joints_deg([float(target_deg[j]) for j in range(6)])
     current = read_physical_joints(robot)
     if current is None:
         print(f"{label}Could not read joints before pin to {name}.")
@@ -257,14 +325,9 @@ def pin_to_joint_target(
         f"{label}Pin {name}: correcting max |Δ|={err_before:.3f} deg -> "
         f"{format_joints_deg(target)}"
     )
-    speed = deg_speed_to_ascii_speed([max_joint_vel_deg_s] * 6)
-    robot.move_joint(
-        target[0], target[1], target[2], target[3], target[4], target[5],
-        speed=speed,
-        wait_ms=250,
-    )
-    if not robot.wait_for_motion_complete(timeout_sec=settle_timeout_sec):
-        print(f"{label}Warning: pin to {name} did not settle within {settle_timeout_sec:.0f} s.")
+    hold_speed = deg_speed_to_ascii_speed([min(max_joint_vel_deg_s * 0.2, 8.0)] * 6)
+    robot.hold_stream_pose(target, hold_speed)
+    time.sleep(0.35)
 
     final = read_physical_joints(robot)
     if final is None:
@@ -303,23 +366,36 @@ def stream_waypoints_deg(
     robot: RobotAsciiInterface,
     waypoints_deg: np.ndarray,
     *,
-    send_interval_ms: float = 150.0,
+    velocities_deg_s: np.ndarray | None = None,
+    send_interval_ms: float = 70.0,
     max_joint_vel_deg_s: float = MAX_SPEED,
     speed_scale: float = 1.0,
     planned_duration_s: float | None = None,
     settle_timeout_sec: float = 120.0,
     label: str = "",
+    arm: bool = True,
+    seed_from_robot: bool = True,
+    hold_end: bool = True,
 ) -> bool:
     """
     Stream ``&`` targets in interruptible mode (CMDMODE 2).
 
-    Speed uses ``deg_speed_to_ascii_speed`` from ``manual_control.mapping`` (same as
-    teleop): per-segment joint velocity = Δq/Δt, scaled by ``speed_scale``.
+  When ``velocities_deg_s`` is provided (from quintic smoothing), use those speeds
+    instead of finite-difference deltas so starts/ends stay smooth.
     """
     pts = np.asarray(waypoints_deg, dtype=np.float64)
     if len(pts) < 2:
         print(f"{label}Need at least 2 waypoints (got {len(pts)}).")
         return False
+
+    if arm:
+        ensure_robot_armed(robot, label=label)
+    else:
+        robot.ensure_cmdmode_stream()
+        _discard_stream_acks(robot)
+
+    if seed_from_robot:
+        _seed_stream_start(robot, pts[0], label=label)
 
     n_seg = len(pts) - 1
     if planned_duration_s is not None and planned_duration_s > 1e-3:
@@ -336,10 +412,9 @@ def stream_waypoints_deg(
     )
 
     for i in range(1, len(pts)):
-        q_prev = pts[i - 1]
-        q = pts[i]
-        vels_seg = [(q[j] - q_prev[j]) / dt_s for j in range(6)]
-        vels_seg = [max(-vmax, min(vmax, v * scale)) for v in vels_seg]
+        q, vels_seg = _segment_velocities_deg_s(
+            pts, i, dt_s, velocities_deg_s, vmax=vmax, scale=scale
+        )
         speed = deg_speed_to_ascii_speed(vels_seg)
 
         ok = robot.send_trajectory_point_async(
@@ -350,9 +425,16 @@ def stream_waypoints_deg(
             return False
         time.sleep(dt_s)
 
-    print(f"{label}Waiting for motion to settle...")
-    if not robot.wait_for_motion_complete(timeout_sec=settle_timeout_sec):
-        print(f"{label}Warning: settle timeout ({settle_timeout_sec:.0f} s).")
+    if hold_end:
+        final = clamp_firmware_joints_deg(pts[-1])
+        robot.hold_stream_pose(final, _hold_stream_speed())
+        time.sleep(0.25)
+
+    _discard_stream_acks(robot)
+    if settle_timeout_sec > 0.0:
+        print(f"{label}Waiting for motion to settle...")
+        if not robot.wait_for_motion_complete(timeout_sec=min(settle_timeout_sec, 30.0)):
+            print(f"{label}Warning: settle timeout ({settle_timeout_sec:.0f} s).")
     return True
 
 
@@ -400,6 +482,7 @@ def run_trajectory(
     start_deg: Sequence[float],
     goal_deg: Sequence[float],
     *,
+    forward_vel: np.ndarray | None = None,
     planned_duration_s: float | None,
     repeats: int,
     send_interval_ms: float,
@@ -417,6 +500,7 @@ def run_trajectory(
 ) -> list[dict]:
     """Execute HOME -> target -> HOME cycles; print physical joints after each leg."""
     reverse_pos = forward_pos[::-1]
+    reverse_vel = forward_vel[::-1] if forward_vel is not None else None
     multi = repeats > 1
     stream_kw = dict(
         send_interval_ms=send_interval_ms,
@@ -460,7 +544,15 @@ def run_trajectory(
         if multi:
             print("=" * 60)
 
-        if not stream_waypoints_deg(robot, forward_pos, label=prefix, **stream_kw):
+        if not stream_waypoints_deg(
+            robot,
+            forward_pos,
+            velocities_deg_s=forward_vel,
+            label=prefix,
+            arm=True,
+            seed_from_robot=True,
+            **stream_kw,
+        ):
             raise SystemExit(f"{prefix}Forward motion failed.".strip())
 
         if pin_endpoints:
@@ -483,7 +575,15 @@ def run_trajectory(
             print(f"{prefix}Max |Δ| from planned goal (deg): {goal_max_err:.4f}".strip())
 
         print(f"\n{prefix}Step 3: target -> HOME".strip())
-        if not stream_waypoints_deg(robot, reverse_pos, label=prefix, **stream_kw):
+        if not stream_waypoints_deg(
+            robot,
+            reverse_pos,
+            velocities_deg_s=reverse_vel,
+            label=prefix,
+            arm=False,
+            seed_from_robot=False,
+            **stream_kw,
+        ):
             raise SystemExit(f"{prefix}Reverse motion failed.".strip())
 
         if pin_endpoints:
@@ -552,8 +652,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--interval-ms",
         type=float,
-        default=150.0,
-        help="Stream period when no planned duration (default 150 ms, same as teleop)",
+        default=70.0,
+        help="Stream period when no planned duration (default 70 ms, same as manual_control)",
     )
     parser.add_argument(
         "--cmd-mode",
@@ -601,8 +701,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--speed-scale",
         type=float,
-        default=1.5,
-        help="Multiply streamed speed commands (>1 faster on robot, default 1.5)",
+        default=1.0,
+        help="Multiply streamed speed commands (>1 faster on robot, default 1.0)",
     )
     parser.add_argument(
         "--skip-home",
@@ -670,6 +770,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Load plan and print summary without connecting to the robot",
     )
+    parser.add_argument(
+        "--debug-serial",
+        action="store_true",
+        help="Log every serial command and non-ack response (same as manual_control)",
+    )
+    parser.add_argument(
+        "--joint-current-limit-a",
+        type=float,
+        default=0.0,
+        help="Set motor current limit (A) for J1-J6 at connect via #I_LIMIT_J (0=skip)",
+    )
     return parser.parse_args()
 
 
@@ -730,16 +841,17 @@ def main() -> None:
             print(f"Planned leg duration: {planned_duration_s:.2f} s")
         return
 
-    robot = RobotAsciiInterface(port=port, baudrate=args.baudrate, timeout=args.timeout)
-    if not robot.connect():
+    robot = connect_robot_for_teleop(
+        port=port,
+        baudrate=args.baudrate,
+        timeout=args.timeout,
+        debug_serial=bool(args.debug_serial),
+        joint_current_limit_a=float(args.joint_current_limit_a),
+    )
+    if robot is None:
         raise SystemExit(f"Failed to connect on {port}")
 
     try:
-        print(f"!STOP  -> {robot.stop()}")
-        time.sleep(0.2)
-        print(f"!START -> {robot.start()}")
-        time.sleep(0.2)
-
         initial = read_physical_joints(robot)
         if initial is not None:
             print(f"Initial physical joints: {format_joints_deg(initial)}")
@@ -749,6 +861,7 @@ def main() -> None:
             forward_pos,
             start_deg,
             goal_deg,
+            forward_vel=forward_vel,
             planned_duration_s=planned_duration_s,
             repeats=max(1, int(args.repeats)),
             send_interval_ms=send_interval_ms,
@@ -797,7 +910,7 @@ def main() -> None:
         robot.stop()
         raise
     finally:
-        robot.disconnect()
+        disconnect_robot(robot)
 
 
 if __name__ == "__main__":

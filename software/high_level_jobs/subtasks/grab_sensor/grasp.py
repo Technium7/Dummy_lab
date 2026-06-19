@@ -69,6 +69,13 @@ def record_grasp_tcp_targets(cfg: GrabSensorConfig, targets: GraspTargets) -> No
     targets.pre_grasp_pos_m = tip_pre
     targets.pre_grasp_rpy_rad = rpy.copy()
 
+    lift_mm = float(cfg.approach.post_grasp_lift_mm)
+    if lift_mm > 0.0:
+        lift_pos = tip.copy()
+        lift_pos[2] += lift_mm * 1e-3
+        targets.debug["post_lift_tip_pos_m"] = lift_pos.round(4).tolist()
+        targets.debug["post_grasp_lift_mm"] = lift_mm
+
 
 def _normalize_yaw_deg(yaw_deg: float) -> float:
     return (float(yaw_deg) + 180.0) % 360.0 - 180.0

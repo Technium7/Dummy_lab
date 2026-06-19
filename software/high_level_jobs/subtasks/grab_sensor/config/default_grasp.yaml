@@ -17,28 +17,30 @@ camera_to_robot:
 vision_mode: yolo_grasp
 
 yolo:
-  model_path: software/high_level_jobs/subtasks/grab_sensor/dataset/grasp_keypoints/model/sensor_yolo.pt
+  model_path: software/high_level_jobs/subtasks/grab_sensor/detection/dataset/grasp_keypoints/model/sensor_yolo.pt
   class_name: sensor
   confidence: 0.35
   crop_padding_px: 16
 
 grasp_net:
-  model_path: software/high_level_jobs/subtasks/grab_sensor/dataset/grasp_keypoints/model/grasp_point.pt
+  model_path: software/high_level_jobs/subtasks/grab_sensor/detection/dataset/grasp_keypoints/model/grasp_point.pt
+  base_model_path: software/high_level_jobs/subtasks/grab_sensor/detection/dataset/grasp_keypoints/model/base_point.pt
   depth_patch_radius_px: 3
   predict_on: crop
   bbox_margin_px: 12
   depth_min_m: 0.25
   depth_max_m: 0.85
 
-# Optional: optical-table calibration for sensor-base -> table XYZ (from calibration_table)
-# table_calib_path: software/camera/calibration_table/runs/run_20260612_225443/table_calib.json
+# Optional: pin a specific table calib run. If omitted, detect/plan/execute use the newest
+# valid table_calib.json under software/camera/calibration_table/runs/
+# table_calib_path: software/camera/calibration_table/runs/run_20260618_211107/table_calib.json
 
 # Grasp XYZ from detected base on table (same X/Y, fixed height above surface)
 grasp_position_from_table_base: true
 
 # Motion planning: tip height on sensor; TCP offset is in the grasp URDF (``grasp_tcp_link``)
 motion_planning:
-  grasp_height_above_table_mm: 65.0
+  grasp_height_above_table_mm: 80.0
 
 # Used when grasp_orientation_mode: fixed_robot
 # Taught input [a, b, c] (deg) -> planner world RPY:
@@ -54,7 +56,7 @@ grasp_position_tol_mm: 20.0
 # Robot base pose in optical table frame (inches, same convention as view_table_calibration)
 # Grasp robot GUI ≈ (-robot_x_in * 1in + table_x, -robot_y_in * 1in + table_y, table_z - robot_z_in)
 robot_in_table_frame:
-  translation_in: [-6, -5, 0.5]
+  translation_in: [-4.5, -3.4, 0.5]
   rpy_deg: [0, 0, 0]
 
 # --- Legacy depth segmentation (used when vision_mode: depth_segment) ------
@@ -80,9 +82,12 @@ grasp_on_object:
   approach_offset_mm: 5.0
 
 approach:
-  plan_pre_grasp: false   # if false: HOME -> grasp only (no pre-grasp waypoint)
+  plan_pre_grasp: true   # if false: HOME -> grasp only (no pre-grasp waypoint)
   pre_grasp_offset_mm: 40.0
   pre_grasp_along_xy: true   # retreat toward robot along XY (false = world +Z)
+  pre_grasp_orientation_tol_deg: 90.0   # relaxed vs grasp_orientation_tol_deg (final grasp)
+  post_grasp_lift_mm: 120.0             # after grasp: retreat straight up along world +Z
+  plan_return_home: true                # after lift: iLQR back to HOME joints
   retreat_after_close_mm: 40.0
 
 paths:

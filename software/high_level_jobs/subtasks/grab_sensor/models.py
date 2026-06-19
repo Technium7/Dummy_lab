@@ -39,6 +39,9 @@ class ApproachConfig:
     pre_grasp_offset_mm: float = 80.0
     pre_grasp_along_xy: bool = True
     plan_pre_grasp: bool = False
+    pre_grasp_orientation_tol_deg: float = 90.0
+    post_grasp_lift_mm: float = 100.0
+    plan_return_home: bool = True
     retreat_after_close_mm: float = 40.0
 
 
@@ -69,6 +72,7 @@ class YoloConfig:
 @dataclass(frozen=True)
 class GraspNetConfig:
     model_path: Path
+    base_model_path: Path | None = None
     depth_patch_radius_px: int = 3
     predict_on: Literal["full_frame", "crop"] = "crop"
     bbox_margin_px: int = 12
@@ -161,7 +165,7 @@ class GrabSensorConfig:
         paths_raw = data.get("paths", {})
 
         package_dir = Path(__file__).resolve().parent
-        default_model_dir = package_dir / "dataset" / "grasp_keypoints" / "model"
+        default_model_dir = package_dir / "detection" / "dataset" / "grasp_keypoints" / "model"
 
         def _resolve_model_path(raw_path: str | None, default_name: str) -> Path:
             if raw_path:
@@ -243,6 +247,11 @@ class GrabSensorConfig:
                 pre_grasp_offset_mm=float(approach_raw.get("pre_grasp_offset_mm", 80.0)),
                 pre_grasp_along_xy=bool(approach_raw.get("pre_grasp_along_xy", True)),
                 plan_pre_grasp=bool(approach_raw.get("plan_pre_grasp", False)),
+                pre_grasp_orientation_tol_deg=float(
+                    approach_raw.get("pre_grasp_orientation_tol_deg", 90.0)
+                ),
+                post_grasp_lift_mm=float(approach_raw.get("post_grasp_lift_mm", 100.0)),
+                plan_return_home=bool(approach_raw.get("plan_return_home", True)),
                 retreat_after_close_mm=float(approach_raw.get("retreat_after_close_mm", 40.0)),
             ),
             segmentation=SegmentationConfig(
@@ -261,6 +270,10 @@ class GrabSensorConfig:
             ),
             grasp_net=GraspNetConfig(
                 model_path=_resolve_model_path(grasp_net_raw.get("model_path"), "grasp_point.pt"),
+                base_model_path=_resolve_model_path(
+                    grasp_net_raw.get("base_model_path"),
+                    "base_point.pt",
+                ),
                 depth_patch_radius_px=int(grasp_net_raw.get("depth_patch_radius_px", 3)),
                 predict_on=predict_on_raw,  # type: ignore[arg-type]
                 bbox_margin_px=int(grasp_net_raw.get("bbox_margin_px", 12)),

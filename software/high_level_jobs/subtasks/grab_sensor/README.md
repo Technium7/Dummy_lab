@@ -21,13 +21,13 @@ flowchart LR
 
 - **Input:** full 640×480 color frame  
 - **Output:** bounding box for class `sensor`  
-- **Model:** `dataset/grasp_keypoints/model/sensor_yolo.pt` (Ultralytics YOLOv8n, fine-tuned locally)
+- **Model:** `detection/dataset/grasp_keypoints/model/sensor_yolo.pt` (Ultralytics YOLOv8n, fine-tuned locally)
 
 ### Stage 2 — Grasp point (RGB + depth CNN)
 
 - **Input:** crop inside YOLO box (+ padding), **4 channels** (RGB + normalized depth)  
 - **Output:** grasp pixel `(u, v)` in crop space → mapped to full image  
-- **Model:** `dataset/grasp_keypoints/model/grasp_point.pt`  
+- **Models:** `grasp_point.pt` (grasp) + `base_point.pt` (base) — separate CNNs after YOLO crop
 - Depth at that pixel → 3D point in the camera frame  
 
 ### Stage 3 — Robot grasp
@@ -103,48 +103,19 @@ Primary file: `config/default_grasp.yaml`
 
 ## Data collection & training
 
-Training data stays **local** under `dataset/` (see `dataset/README.md`). It is not committed to git.
-
-### 1. Label grasp points (interactive)
+Vision labeling and model training live under **`detection/`** — see [`detection/README.md`](detection/README.md).
 
 ```powershell
-pip install opencv-python pyrealsense2 torch
-python -m high_level_jobs.subtasks.grab_sensor.label_grasp
+python -m high_level_jobs.subtasks.grab_sensor.detection.live_label
+python -m high_level_jobs.subtasks.grab_sensor.detection.label_base
+python -m high_level_jobs.subtasks.grab_sensor.detection.train_grasp_model --crop --depth --epochs 120
 ```
-
-Click grasp point → **S** save → adjust scene → repeat.
-
-### 2. Train YOLO sensor detector
-
-Bootstrap bbox labels from grasp clicks, then train:
-
-```powershell
-pip install ultralytics
-python -m high_level_jobs.subtasks.grab_sensor.export_yolo_dataset
-python -m high_level_jobs.subtasks.grab_sensor.train_yolo_model --export-first
-```
-
-### 3. Train grasp CNN (YOLO crop + RGBD)
-
-Uses YOLO boxes for training crops when weights exist:
-
-```powershell
-python -m high_level_jobs.subtasks.grab_sensor.train_grasp_model --crop --depth --epochs 100
-```
-
-### 4. Review / confirm predictions (optional)
-
-```powershell
-python -m high_level_jobs.subtasks.grab_sensor.review_grasp
-```
-
-**Y** confirm NN proposal, **R** reset and label manually, **T** retrain.
 
 ## Overlay legend (`grasp_overlay.png`)
 
 | Marker | Meaning |
 |--------|---------|
-| Green tint + yellow box | YOLO sensor region |
+| Yellow box | YOLO sensor region |
 | Red **GRASP (NN)** | Grasp CNN pixel (trust this for vision accuracy) |
 | Cyan **object center** | 3D grasp point reprojected to the image |
 | Orange **pre-grasp** | Approach point in image |
@@ -173,11 +144,5 @@ $env:KMP_DUPLICATE_LIB_OK="TRUE"
 | Module | Role |
 |--------|------|
 | `pipeline.py` | End-to-end detect → plan → execute |
-| `yolo_detect.py` | YOLO wrapper |
-| `yolo_grasp.py` | YOLO → crop RGBD → grasp point |
-| `grasp_point_net.py` | CNN definition, train, predict |
-| `label_grasp.py` | Interactive labeling GUI |
-| `train_grasp_model.py` | Train grasp CNN |
-| `export_yolo_dataset.py` / `train_yolo_model.py` | YOLO dataset + training |
-| `review_grasp.py` | Confirm / relabel loop |
+| `detection/` | Vision capture, YOLO + grasp CNN, labeling, training (see `detection/README.md`) |
 | `plan_motion.py` / `execute.py` | iLQR + robot streaming |

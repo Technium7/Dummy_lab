@@ -22,6 +22,7 @@ states:
           config: software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml
           execute: true
           home_first: true
+          open_gripper: true
           close_gripper: true
           retreat_after_close: true
 

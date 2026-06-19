@@ -7,6 +7,6 @@
     "ppx": 314.0621337890625,
     "ppy": 234.38771057128906
   },
-  "device_name": "file",
-  "device_serial": "file"
+  "device_name": "Intel RealSense D415",
+  "device_serial": "104122062828"
 }
