@@ -27,8 +27,8 @@ dataset/
 ## Minimum workflow
 
 1. Collect labels (grasp + base): `python -m high_level_jobs.subtasks.grab_sensor.detection.live_label`
-2. Fix missing bases on old samples: `python -m high_level_jobs.subtasks.grab_sensor.detection.label_base`
+2. Fix missing bases on old samples: `python -m high_level_jobs.subtasks.grab_sensor.detection.relabel`
 3. Train YOLO: `python -m high_level_jobs.subtasks.grab_sensor.detection.train_yolo_model --export-first`
-4. Train grasp + base nets: `python -m high_level_jobs.subtasks.grab_sensor.detection.train_grasp_model --crop --depth`
+4. Train grasp + base nets: `python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --crop --depth`
 
 Models must exist before running `vision_mode: yolo_grasp` in production.

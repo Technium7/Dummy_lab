@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
 from typing import Any
 
@@ -79,33 +78,7 @@ class BaseEllipse:
         )
 
 
-def ellipse_from_center_and_edges(
-    center_uv: tuple[int, int],
-    edge_a_uv: tuple[int, int],
-    edge_b_uv: tuple[int, int],
-    *,
-    min_axis_px: float = 4.0,
-) -> BaseEllipse:
-    """Fit ellipse from center + two edge clicks (axis A direction/length, axis B extent)."""
-    cx, cy = float(center_uv[0]), float(center_uv[1])
-    dx1 = float(edge_a_uv[0]) - cx
-    dy1 = float(edge_a_uv[1]) - cy
-    axis_a = max(min_axis_px, float(np.hypot(dx1, dy1)))
-    angle_rad = math.atan2(dy1, dx1)
-    perp_x = -math.sin(angle_rad)
-    perp_y = math.cos(angle_rad)
-    dx2 = float(edge_b_uv[0]) - cx
-    dy2 = float(edge_b_uv[1]) - cy
-    axis_b = max(min_axis_px, abs(dx2 * perp_x + dy2 * perp_y))
-    return BaseEllipse(
-        center_uv=(int(round(cx)), int(round(cy))),
-        axis_a_px=axis_a,
-        axis_b_px=axis_b,
-        angle_deg=float(math.degrees(angle_rad)),
-    )
-
-
-def parse_label_base_ellipse(data: dict[str, Any]) -> BaseEllipse | None:
+def parse_base_ellipse(data: dict[str, Any]) -> BaseEllipse | None:
     """Read base ellipse from a label JSON (new or legacy center-only)."""
     if "base_ellipse" in data and data["base_ellipse"]:
         ell = BaseEllipse.from_dict(data["base_ellipse"])
@@ -196,8 +169,6 @@ def _require_cv2():
 LABEL_OVERLAY_ALPHA = 0.45
 LABEL_GRASP_BGR = (0, 0, 255)
 LABEL_BASE_BGR = (0, 255, 0)
-LABEL_EDGE_A_BGR = (0, 255, 255)
-LABEL_EDGE_B_BGR = (0, 220, 255)
 
 
 def _blend_layer(bgr: np.ndarray, layer: np.ndarray, alpha: float) -> None:
@@ -220,67 +191,6 @@ def draw_label_grasp(bgr: np.ndarray, u: int, v: int, *, alpha: float = LABEL_OV
 
     layer = np.zeros_like(bgr)
     _draw(layer)
-    _blend_layer(bgr, layer, alpha)
-
-
-def draw_label_center(bgr: np.ndarray, u: int, v: int, *, alpha: float = LABEL_OVERLAY_ALPHA) -> None:
-    cv2 = _require_cv2()
-
-    def _draw(layer: np.ndarray) -> None:
-        cv2.drawMarker(layer, (u, v), LABEL_BASE_BGR, cv2.MARKER_CROSS, 10, 1, cv2.LINE_AA)
-        cv2.circle(layer, (u, v), 3, LABEL_BASE_BGR, 1, cv2.LINE_AA)
-
-    layer = np.zeros_like(bgr)
-    _draw(layer)
-    _blend_layer(bgr, layer, alpha)
-
-
-def draw_label_edge_point(
-    bgr: np.ndarray,
-    u: int,
-    v: int,
-    color: tuple[int, int, int],
-    *,
-    alpha: float = LABEL_OVERLAY_ALPHA,
-) -> None:
-    cv2 = _require_cv2()
-    layer = np.zeros_like(bgr)
-    cv2.circle(layer, (u, v), 3, color, 1, cv2.LINE_AA)
-    cv2.drawMarker(layer, (u, v), color, cv2.MARKER_TILTED_CROSS, 8, 1, cv2.LINE_AA)
-    _blend_layer(bgr, layer, alpha)
-
-
-def draw_label_ellipse(
-    bgr: np.ndarray,
-    ellipse: BaseEllipse,
-    *,
-    color: tuple[int, int, int] = LABEL_BASE_BGR,
-    alpha: float = LABEL_OVERLAY_ALPHA,
-) -> None:
-    """Thin semi-transparent ellipse for labeling GUIs."""
-    cv2 = _require_cv2()
-    u, v = int(ellipse.center_uv[0]), int(ellipse.center_uv[1])
-    h_img, w_img = bgr.shape[:2]
-    if not (0 <= u < w_img and 0 <= v < h_img):
-        return
-    layer = np.zeros_like(bgr)
-    axes = (
-        max(2, int(round(ellipse.axis_a_px))),
-        max(2, int(round(ellipse.axis_b_px))),
-    )
-    cv2.ellipse(
-        layer,
-        (u, v),
-        axes,
-        float(ellipse.angle_deg),
-        0,
-        360,
-        color,
-        1,
-        cv2.LINE_AA,
-    )
-    cv2.drawMarker(layer, (u, v), color, cv2.MARKER_CROSS, 10, 1, cv2.LINE_AA)
-    cv2.circle(layer, (u, v), 3, color, 1, cv2.LINE_AA)
     _blend_layer(bgr, layer, alpha)
 
 

@@ -136,7 +136,9 @@ def main() -> int:
 
         _, targets, _, _ = run_detection(cfg, params)
         print("Grasp target (robot m):", targets.grasp_pos_m.round(4).tolist())
-        print("Grasp rpy (robot deg):", targets.debug.get("grasp_rpy_robot_deg"))
+        print("Pre-grasp (robot m):", targets.pre_grasp_pos_m.round(4).tolist())
+        rpy = targets.debug.get("grasp_rpy_world_deg") or targets.debug.get("grasp_rpy_robot_deg")
+        print("Grasp RPY (world deg):", rpy)
         return 0
 
     run_grab_sensor_pipeline(cfg, params, robot=robot)

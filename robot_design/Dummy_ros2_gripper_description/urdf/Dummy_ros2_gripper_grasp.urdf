@@ -25,7 +25,7 @@
   </collision>
 </link>
 <joint name="grasp_tcp_fixed" type="fixed">
-  <origin xyz="0 -0.103 -0.028" rpy="0 0 0"/>
+  <origin xyz="0 -0.085 -0.028" rpy="0 0 0"/>
   <parent link="link6_1"/>
   <child link="grasp_tcp_link"/>
 </joint>

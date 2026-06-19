@@ -144,6 +144,32 @@ def prepare_fixed_robot_grasp_targets(cfg: GrabSensorConfig, targets: GraspTarge
     record_grasp_tcp_targets(cfg, targets)
 
 
+def finalize_grasp_targets(cfg: GrabSensorConfig, targets: GraspTargets) -> None:
+    """
+    Stable production path: table-base XYZ override (if enabled), fixed RPY, TCP pre-grasp/lift.
+
+    Call after vision ``compute_grasp_targets`` and ``targets.debug`` are populated.
+    Safe to call again before planning (idempotent).
+    """
+    if cfg.grasp_position_from_table_base:
+        apply_table_base_grasp_position(cfg, targets, targets.debug)
+    prepare_fixed_robot_grasp_targets(cfg, targets)
+
+
+def build_grasp_targets(
+    cfg: GrabSensorConfig,
+    detection: TableObjectDetection,
+    *,
+    vision_debug: dict[str, Any] | None = None,
+) -> GraspTargets:
+    """Vision detection → finalized robot grasp targets (single entry for pipeline and overlays)."""
+    targets = compute_grasp_targets(cfg, detection)
+    if vision_debug:
+        targets.debug.update(vision_debug)
+    finalize_grasp_targets(cfg, targets)
+    return targets
+
+
 def load_grasp_targets_from_vision(
     cfg: GrabSensorConfig,
     *,
@@ -172,7 +198,9 @@ def load_grasp_targets_from_vision(
                 "allow_offline_fallback": not offline,
             },
         )
-    prepare_fixed_robot_grasp_targets(cfg, targets)
+        return targets
+
+    finalize_grasp_targets(cfg, targets)
     return targets
 
 
@@ -189,7 +217,7 @@ def apply_table_base_grasp_position(
     if not base_xyz or len(base_xyz) < 2:
         raise RuntimeError(
             "grasp_position_from_table_base requires base_table_xyz_m from vision "
-            "(label sensor bases and train the 4-output grasp net)."
+            "(label base ellipses, train base_point.pt, and ensure table calib is loaded)."
         )
 
     from .table_position import table_grasp_frame_summary, table_point_to_robot_gui_m

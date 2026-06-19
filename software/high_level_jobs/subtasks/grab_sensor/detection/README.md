@@ -1,6 +1,8 @@
 # Grab sensor — vision & training
 
-Camera capture, YOLO sensor detection, grasp/base CNN, labeling GUIs, and model training. Runtime inference is called from `grab_sensor.pipeline`; motion planning and execution stay in the parent package.
+Camera capture, YOLO sensor detection, grasp/base CNN, labeling GUIs, and model training.
+
+Runtime inference: `yolo_grasp.infer_yolo_grasp_points` → `grasp.build_grasp_targets` in `pipeline.py`. Motion planning and execution stay in the parent package.
 
 ## Layout
 
@@ -14,12 +16,10 @@ detection/
   visualize.py            # grasp_overlay.png debug drawing
   live_label.py           # Live GUI: label grasp + base manually
   live_review.py          # Live GUI: NN proposals, correct and save
-  label_base.py           # Offline relabel: base ellipse on saved dataset images
-  review_grasp.py         # Live GUI: confirm / override NN grasp proposals
+  relabel.py              # Offline relabel: base ellipse on saved dataset images
   export_yolo_dataset.py  # Bootstrap YOLO labels from grasp clicks
   train_yolo_model.py     # Train YOLO sensor detector
-  train_grasp_model.py    # Train grasp + base CNNs (separate nets)
-  train_base_model.py     # Train base net only
+  train_model.py          # Train grasp and/or base CNNs (--grasp-only / --base-only / --both)
   dataset/                # Local training data (not in git; see dataset/README.md)
 ```
 
@@ -34,16 +34,16 @@ pip install opencv-python pyrealsense2 torch ultralytics
 python -m high_level_jobs.subtasks.grab_sensor.detection.live_label
 
 # 1b. Relabel base ellipse on saved images (offline — no camera)
-python -m high_level_jobs.subtasks.grab_sensor.detection.label_base
+python -m high_level_jobs.subtasks.grab_sensor.detection.relabel
 
 # 3. Train YOLO sensor detector
 python -m high_level_jobs.subtasks.grab_sensor.detection.export_yolo_dataset
 python -m high_level_jobs.subtasks.grab_sensor.detection.train_yolo_model --export-first
 
-# 4. Train grasp + base CNNs (separate networks, YOLO crop + RGBD)
-python -m high_level_jobs.subtasks.grab_sensor.detection.train_grasp_model --crop --depth --epochs 120
-# Or base only:
-python -m high_level_jobs.subtasks.grab_sensor.detection.train_base_model --crop --depth --epochs 120
+# 4. Train grasp and/or base CNNs (YOLO crop + RGBD; default: both)
+python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --crop --depth --epochs 120
+python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --grasp-only --crop --depth
+python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --base-only --crop --depth
 
 # 5. Review NN on live camera — confirm or fix bad predictions
 python -m high_level_jobs.subtasks.grab_sensor.detection.live_review
@@ -53,9 +53,9 @@ python -m high_level_jobs.subtasks.grab_sensor.detection.live_review
 
 **live_label:** **G** = grasp mode (left-click). **B** = base mode (left-drag ellipse + handles). **S** save.
 
-**live_review:** cyan/green = NN grasp/base on live feed. Left/right-click to fix, **Y**/**S** save, **R** reset to NN, **T** retrain.
+**live_review:** cyan/green = NN grasp/base on live feed. **G** grasp (left-click), **B** base (left-drag ellipse + handles), **Y**/**S** save, **R** reset to NN, **T** retrain.
 
-**label_base:** offline relabel. Left-drag ellipse box + handles; **S** save, **N**/**P** navigate.
+**relabel:** offline relabel. Left-drag ellipse box + handles; **S** save, **N**/**P** navigate.
 
 ## Models
 
@@ -64,6 +64,8 @@ Default weights (override in `config/default_grasp.yaml`):
 - `detection/dataset/grasp_keypoints/model/sensor_yolo.pt` — YOLO detector
 - `detection/dataset/grasp_keypoints/model/grasp_point.pt` — grasp CNN
 - `detection/dataset/grasp_keypoints/model/base_point.pt` — base CNN (separate)
+
+Training writes loss curves under `model/runs/grasp_point/` and `model/runs/base_point/` (`training_loss.png` + `training_loss.json`, loss vs iteration).
 
 Models must exist before running `vision_mode: yolo_grasp` in the grab pipeline.
 

@@ -50,7 +50,31 @@ Example: `fixed_grasp_abc_input_deg: [0, 0, 0]` at grasp `(0.26, 0.35)` with rol
 
 Set `grasp_c_from_xy: false` to skip the atan2 term on yaw.
 
-Legacy mode **`vision_mode: depth_segment`** uses depth band + blob + PCA instead of YOLO + CNN.
+## Stable grasp path
+
+Production defaults in `config/default_grasp.yaml`:
+
+| Stage | What |
+|-------|------|
+| Vision | `yolo_grasp` — YOLO → crop RGBD → `grasp_point.pt` + `base_point.pt` |
+| Position | `grasp_position_from_table_base` — base ellipse → table XY + fixed height |
+| Orientation | `fixed_robot` — taught `[a,b,c]` → world RPY at grasp XY |
+| Motion | pre-grasp → grasp → lift → return HOME |
+
+All detect/plan/overlay paths call `grasp.build_grasp_targets()` so pre-grasp, RPY, and table-base XYZ stay consistent.
+
+```bash
+# Detect + overlay only
+python -m high_level_jobs.subtasks.grab_sensor --detect-only --visualize
+
+# Plan offline (no robot)
+python -m high_level_jobs.subtasks.grab_sensor --offline --visualize
+
+# Full execute (use Ctrl+C to abort — not Ctrl+Z; stopped jobs hold /dev/ttyACM0)
+python -m high_level_jobs.subtasks.grab_sensor --execute --visualize
+```
+
+Legacy `vision_mode: depth_segment` uses depth band + blob + PCA instead of YOLO + CNN.
 
 ## Quick start
 
@@ -98,8 +122,11 @@ Primary file: `config/default_grasp.yaml`
 | `grasp_rpy_roll_offset_deg` | Added after negating `a` for world roll |
 | `grasp_rpy_yaw_base_deg` | Base yaw before subtracting atan2 (default `180`) |
 | `grasp_c_from_xy` | If true: `yaw -= atan2(x,y)`; see Stage 3 |
+| `grasp_position_from_table_base` | Use base CNN + table calib for grasp XY (stable path) |
+| `grasp_motion.grasp_height_above_table_mm` | Grasp Z above table surface (mm) |
 | `load_environment` | `false` = robot-only PyBullet scene (default for grasp planning) |
-| `approach.*` | Pre-grasp offset, retreat after close |
+| `approach.*` | Pre-grasp offset, lift, return HOME |
+| `execute.joint_current_limit_a` | `#I_LIMIT_J` before `!START` (0 = skip) |
 
 ## Data collection & training
 
@@ -107,8 +134,8 @@ Vision labeling and model training live under **`detection/`** — see [`detecti
 
 ```powershell
 python -m high_level_jobs.subtasks.grab_sensor.detection.live_label
-python -m high_level_jobs.subtasks.grab_sensor.detection.label_base
-python -m high_level_jobs.subtasks.grab_sensor.detection.train_grasp_model --crop --depth --epochs 120
+python -m high_level_jobs.subtasks.grab_sensor.detection.relabel
+python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --crop --depth --epochs 120
 ```
 
 ## Overlay legend (`grasp_overlay.png`)
@@ -143,6 +170,7 @@ $env:KMP_DUPLICATE_LIB_OK="TRUE"
 
 | Module | Role |
 |--------|------|
+| `grasp.py` | Target geometry: `build_grasp_targets`, table-base XYZ, fixed RPY, TCP pre-grasp |
 | `pipeline.py` | End-to-end detect → plan → execute |
 | `detection/` | Vision capture, YOLO + grasp CNN, labeling, training (see `detection/README.md`) |
 | `plan_motion.py` / `execute.py` | iLQR + robot streaming |

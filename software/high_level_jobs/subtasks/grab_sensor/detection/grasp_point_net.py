@@ -30,7 +30,7 @@ from .base_ellipse import (
     BaseEllipse,
     ellipse_to_norm_crop,
     norm_crop_to_ellipse,
-    parse_label_base_ellipse,
+    parse_base_ellipse,
 )
 LabelTarget = str  # "grasp" | "base"
 
@@ -53,6 +53,8 @@ class TrainResult:
     best_val_base_px_error: float | None
     epochs_run: int
     num_outputs: int
+    loss_plot_path: Path | None = None
+    loss_history_path: Path | None = None
 
 
 class GraspPointNet(nn.Module):
@@ -267,7 +269,7 @@ def list_labeled_samples(
             base_uv = (int(data["base_u"]), int(data["base_v"]))
         elif "base_uv" in data and len(data["base_uv"]) >= 2:
             base_uv = (int(data["base_uv"][0]), int(data["base_uv"][1]))
-        base_ellipse = parse_label_base_ellipse(data)
+        base_ellipse = parse_base_ellipse(data)
         if base_ellipse is not None:
             base_uv = base_ellipse.center_uv
 
@@ -526,8 +528,6 @@ def _eval_px_error_crop(
     model: GraspPointNet,
     loader: DataLoader,
     device: torch.device,
-    *,
-    ellipse_mode: bool = False,
 ) -> float:
     if len(loader.dataset) == 0:
         return float("nan")
@@ -542,24 +542,14 @@ def _eval_px_error_crop(
             crop_w = dims[0].numpy()
             crop_h = dims[1].numpy()
             for i in range(diff.shape[0]):
-                if ellipse_mode:
-                    errors.append(
-                        float(
-                            np.hypot(
-                                diff[i, 0] * max(crop_w[i] - 1, 1),
-                                diff[i, 1] * max(crop_h[i] - 1, 1),
-                            )
+                errors.append(
+                    float(
+                        np.hypot(
+                            diff[i, 0] * max(crop_w[i] - 1, 1),
+                            diff[i, 1] * max(crop_h[i] - 1, 1),
                         )
                     )
-                else:
-                    errors.append(
-                        float(
-                            np.hypot(
-                                diff[i, 0] * max(crop_w[i] - 1, 1),
-                                diff[i, 1] * max(crop_h[i] - 1, 1),
-                            )
-                        )
-                    )
+                )
     return float(np.mean(errors)) if errors else float("nan")
 
 
@@ -580,7 +570,81 @@ def _eval_px_error_full(model: GraspPointNet, loader: DataLoader, device: torch.
     return float(np.mean(errors)) if errors else float("nan")
 
 
-def train_grasp_model(
+def _training_run_dir(model_path: Path, target: LabelTarget) -> Path:
+    run_name = "grasp_point" if target == "grasp" else "base_point"
+    return model_path.parent / "runs" / run_name
+
+
+def _save_training_curve(
+    run_dir: Path,
+    *,
+    target: LabelTarget,
+    train_history: list[dict[str, float | int]],
+    val_history: list[dict[str, float | int]],
+) -> tuple[Path | None, Path | None]:
+    """Write per-iteration train loss (+ val px error) as JSON and PNG."""
+    if not train_history:
+        return None, None
+
+    run_dir = run_dir.resolve()
+    run_dir.mkdir(parents=True, exist_ok=True)
+    json_path = run_dir / "training_loss.json"
+    payload = {
+        "target": target,
+        "train_loss": train_history,
+        "val_px_error": val_history,
+    }
+    json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+    png_path: Path | None = None
+    try:
+        import matplotlib
+
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        return json_path, None
+
+    train_iters = [int(h["iteration"]) for h in train_history]
+    train_loss = [float(h["loss"]) for h in train_history]
+    title = "Grasp point CNN" if target == "grasp" else "Base ellipse CNN"
+
+    if val_history:
+        fig, (ax_loss, ax_val) = plt.subplots(2, 1, figsize=(8, 6), sharex=False)
+    else:
+        fig, ax_loss = plt.subplots(1, 1, figsize=(8, 4))
+        ax_val = None
+
+    fig.suptitle(title)
+    ax_loss.plot(train_iters, train_loss, color="#1f77b4", linewidth=0.8, alpha=0.65, label="train batch")
+    if len(train_loss) >= 8:
+        window = min(16, max(4, len(train_loss) // 20))
+        kernel = np.ones(window, dtype=np.float64) / window
+        smooth = np.convolve(train_loss, kernel, mode="valid")
+        smooth_iters = train_iters[window - 1 :]
+        ax_loss.plot(smooth_iters, smooth, color="#d62728", linewidth=1.5, label=f"{window}-batch avg")
+    ax_loss.set_ylabel("MSE loss")
+    ax_loss.set_xlabel("iteration")
+    ax_loss.legend(loc="upper right", fontsize=8)
+    ax_loss.grid(True, alpha=0.25)
+
+    if ax_val is not None and val_history:
+        val_epochs = [int(h["epoch"]) for h in val_history]
+        val_err = [float(h["val_px_error"]) for h in val_history]
+        ax_val.plot(val_epochs, val_err, "o-", color="#2ca02c", label="val px error")
+        ax_val.set_ylabel("val px error")
+        ax_val.set_xlabel("epoch")
+        ax_val.legend(loc="upper right", fontsize=8)
+        ax_val.grid(True, alpha=0.25)
+
+    fig.tight_layout()
+    png_path = run_dir / "training_loss.png"
+    fig.savefig(png_path, dpi=150)
+    plt.close(fig)
+    return json_path, png_path
+
+
+def train_point_model(
     data_dir: Path,
     *,
     model_path: Path | None = None,
@@ -618,7 +682,7 @@ def train_grasp_model(
             raise ValueError(
                 f"Need at least 2 samples with base labels in {data_dir}, "
                 f"found {len(samples)} ({total} total grasp labels). "
-                "Label bases with live_label or label_base."
+                "Label bases with live_label or relabel."
             )
         raise ValueError(f"Need at least 2 labeled samples in {data_dir}, found {len(samples)}")
 
@@ -661,7 +725,7 @@ def train_grasp_model(
         )
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
         val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False) if val_ds else None
-        eval_fn = lambda m, l, d: _eval_px_error_crop(m, l, d, ellipse_mode=(target == "base"))
+        eval_fn = _eval_px_error_crop
     else:
         if target == "base":
             raise ValueError("Base model training requires crop_mode=True (YOLO-aligned crops).")
@@ -679,10 +743,16 @@ def train_grasp_model(
     best_val = float("inf")
     best_state: dict[str, Any] | None = None
     epochs_run = 0
+    iteration = 0
+    train_history: list[dict[str, float | int]] = []
+    val_history: list[dict[str, float | int]] = []
+    run_dir = _training_run_dir(model_path, target)
+    label = "grasp" if target == "grasp" else "base"
 
-    for _epoch in range(epochs):
+    for epoch in range(epochs):
         epochs_run += 1
         model.train()
+        epoch_losses: list[float] = []
         for batch in train_loader:
             batch_x, batch_y = batch[0], batch[1]
             batch_x = batch_x.to(torch_device)
@@ -692,14 +762,46 @@ def train_grasp_model(
             loss = loss_fn(pred, batch_y)
             loss.backward()
             optimizer.step()
+            iteration += 1
+            loss_val = float(loss.item())
+            epoch_losses.append(loss_val)
+            train_history.append(
+                {"iteration": iteration, "epoch": epoch + 1, "loss": loss_val},
+            )
 
+        avg_train = float(np.mean(epoch_losses)) if epoch_losses else float("nan")
+        val_err = float("nan")
         if val_loader is not None:
             val_err = eval_fn(model, val_loader, torch_device)
+            val_history.append(
+                {"epoch": epoch + 1, "iteration": iteration, "val_px_error": val_err},
+            )
             if val_err < best_val:
                 best_val = val_err
                 best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            print(
+                f"  [{label}] epoch {epoch + 1}/{epochs}  iter {iteration}  "
+                f"train_loss={avg_train:.6f}  val_px={val_err:.2f}",
+                flush=True,
+            )
         elif best_state is None:
             best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            print(
+                f"  [{label}] epoch {epoch + 1}/{epochs}  iter {iteration}  "
+                f"train_loss={avg_train:.6f}",
+                flush=True,
+            )
+
+    loss_history_path, loss_plot_path = _save_training_curve(
+        run_dir,
+        target=target,
+        train_history=train_history,
+        val_history=val_history,
+    )
+    if loss_plot_path is not None:
+        print(f"  [{label}] loss plot: {loss_plot_path}", flush=True)
+    elif loss_history_path is not None:
+        print(f"  [{label}] loss history: {loss_history_path}", flush=True)
 
     if best_state is not None:
         model.load_state_dict(best_state)
@@ -734,17 +836,9 @@ def train_grasp_model(
         best_val_base_px_error=best_val_px if target == "base" else None,
         epochs_run=epochs_run,
         num_outputs=num_outputs,
+        loss_plot_path=loss_plot_path,
+        loss_history_path=loss_history_path,
     )
-
-
-def train_base_model(
-    data_dir: Path,
-    *,
-    model_path: Path | None = None,
-    **kwargs: Any,
-) -> TrainResult:
-    """Train a separate base-point CNN (same architecture, base labels only)."""
-    return train_grasp_model(data_dir, model_path=model_path, target="base", **kwargs)
 
 
 def _infer_num_outputs(meta: dict[str, Any], state_dict: dict[str, Any]) -> int:

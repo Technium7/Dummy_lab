@@ -43,7 +43,7 @@ def grab_sensor_detect(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
     _v(
         ctx,
         f"Grasp target (robot m) {targets.grasp_pos_m.round(4).tolist()}, "
-        f"rpy deg {targets.debug.get('grasp_rpy_robot_deg')}",
+        f"RPY deg {targets.debug.get('grasp_rpy_world_deg')}",
     )
 
 

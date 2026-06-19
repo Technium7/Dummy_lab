@@ -1,0 +1,46 @@
+{
+  "id": "000111",
+  "grasp_u": 230,
+  "grasp_v": 148,
+  "grasp_uv": [
+    230,
+    148
+  ],
+  "width": 640,
+  "height": 480,
+  "depth_m_at_grasp": 0.6490000308258459,
+  "valid_depth": true,
+  "note": "corrected_nn",
+  "timestamp": 1781894752.112399,
+  "device_name": "Intel RealSense D415",
+  "device_serial": "104122062828",
+  "intrinsics": {
+    "width": 640,
+    "height": 480,
+    "fx": 610.814697265625,
+    "fy": 610.5267944335938,
+    "ppx": 314.0621337890625,
+    "ppy": 234.38771057128906
+  },
+  "files": {
+    "image": "images/000111.png",
+    "depth": "depth/000111.npy"
+  },
+  "base_u": 235,
+  "base_v": 192,
+  "base_uv": [
+    235,
+    192
+  ],
+  "base_ellipse": {
+    "center_uv": [
+      235,
+      192
+    ],
+    "axis_a_px": 14.16,
+    "axis_b_px": 10.79,
+    "angle_deg": 0.86
+  },
+  "depth_m_at_base": 0.6930000329157338,
+  "valid_base_depth": true
+}

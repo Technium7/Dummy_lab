@@ -6,8 +6,8 @@ Use this to add or fix base ellipse labels on existing dataset images — no cam
 For new live captures (grasp + base together), use live_label instead.
 
 Usage (from software/):
-  python -m high_level_jobs.subtasks.grab_sensor.detection.label_base
-  python -m high_level_jobs.subtasks.grab_sensor.detection.label_base --data-dir dataset/grasp_keypoints
+  python -m high_level_jobs.subtasks.grab_sensor.detection.relabel
+  python -m high_level_jobs.subtasks.grab_sensor.detection.relabel --data-dir dataset/grasp_keypoints
 
 Keys:
   Left drag         draw ellipse box; drag handles to move/resize/rotate
@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from .base_ellipse import BaseEllipse, draw_label_grasp, parse_label_base_ellipse
+from .base_ellipse import BaseEllipse, draw_label_grasp, parse_base_ellipse
 from .capture import update_sample_base_label
 from .ellipse_editor import EllipseEditor, draw_ellipse_editor
 from .grasp_point_net import list_labeled_samples
@@ -36,7 +36,7 @@ from .cv2_gui import PANEL_H, init_cv2_window, require_cv2_gui as _require_cv2_g
 
 def _has_full_ellipse(label_path: Path) -> bool:
     data = json.loads(label_path.read_text(encoding="utf-8"))
-    ell = parse_label_base_ellipse(data)
+    ell = parse_base_ellipse(data)
     if ell is None:
         return False
     stored = data.get("base_ellipse") or {}
@@ -56,7 +56,7 @@ def _load_sample_entries(data_dir: Path) -> list[dict]:
                 "label_path": label_path,
                 "image_rgb": rgb,
                 "grasp_uv": sample["grasp_uv"],
-                "base_ellipse": parse_label_base_ellipse(data),
+                "base_ellipse": parse_base_ellipse(data),
                 "has_ellipse": _has_full_ellipse(label_path),
             }
         )
@@ -103,7 +103,7 @@ def _draw_label_ui(
     return np.vstack([panel, bgr])
 
 
-def run_label_base_gui(
+def run_relabel_gui(
     *,
     data_dir: Path,
     start_unlabeled: bool = True,
@@ -240,7 +240,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
-    return run_label_base_gui(
+    return run_relabel_gui(
         data_dir=args.data_dir.resolve(),
         start_unlabeled=not args.start_first,
     )

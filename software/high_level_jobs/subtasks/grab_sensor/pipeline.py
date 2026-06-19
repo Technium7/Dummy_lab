@@ -19,7 +19,7 @@ from .detection import (
 )
 from .config_loader import apply_runtime_calibrations, load_grab_sensor_config
 from .execute import execute_on_robot
-from .grasp import compute_grasp_targets, prepare_fixed_robot_grasp_targets
+from .grasp import build_grasp_targets
 from .ik_debug import show_ik_goal_debug_gui
 from .plan_motion import plan_approach_and_grasp
 from .models import GrabSensorConfig, GraspTargets, VisionMode
@@ -134,8 +134,7 @@ def run_detection(
         save_debug_capture(capture, cfg.save_debug_dir, stem="grab_sensor")
 
     mask, detection, vision_debug = _run_vision(cfg, capture, params)
-    targets = compute_grasp_targets(cfg, detection)
-    targets.debug.update(vision_debug)
+    targets = build_grasp_targets(cfg, detection, vision_debug=vision_debug)
 
     if vision_debug.get("vision_mode") == "yolo_grasp":
         grasp_uv = vision_debug.get("grasp_uv")
@@ -149,11 +148,6 @@ def run_detection(
                 "camera frame. For a match with live_review, run without --offline or press O "
                 "in live_review to save grasp_overlay.png from the current frame."
             )
-
-    if cfg.grasp_position_from_table_base:
-        from .grasp import apply_table_base_grasp_position
-
-        apply_table_base_grasp_position(cfg, targets, targets.debug)
 
     if cfg.save_debug_dir is not None:
         _save_detection_debug(cfg, capture, mask, detection, targets)
@@ -234,7 +228,6 @@ def run_grab_sensor_pipeline(
         start_joints_deg = list(HOME_JOINTS_DEG)
 
     if bool(params.get("ik_gui", False)):
-        prepare_fixed_robot_grasp_targets(cfg, targets)
         show_ik_goal_debug_gui(cfg, targets)
         return {
             "targets": targets,

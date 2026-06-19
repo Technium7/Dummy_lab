@@ -164,21 +164,6 @@ def pixel_to_cam_m(
     return np.array([x, y, z], dtype=np.float64)
 
 
-def crop_with_padding(
-    color_rgb: np.ndarray,
-    bbox_xy: tuple[int, int, int, int],
-    padding_px: int,
-) -> tuple[np.ndarray, tuple[int, int]]:
-    x, y, bw, bh = bbox_xy
-    pad = max(0, int(padding_px))
-    img_h, img_w = color_rgb.shape[:2]
-    x0 = max(0, x - pad)
-    y0 = max(0, y - pad)
-    x1 = min(img_w, x + bw + pad)
-    y1 = min(img_h, y + bh + pad)
-    return color_rgb[y0:y1, x0:x1].copy(), (x0, y0)
-
-
 def map_crop_uv_to_full(
     grasp_uv_crop: tuple[int, int],
     crop_origin: tuple[int, int],
@@ -348,4 +333,4 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
     )
 
 
-detect_yolo_grasp = detect_with_yolo_grasp
+detect_yolo_grasp = detect_with_yolo_grasp  # backward-compatible alias

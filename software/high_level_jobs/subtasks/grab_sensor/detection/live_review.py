@@ -4,16 +4,16 @@ Live GUI: show current YOLO + grasp/base CNN predictions, correct and save.
 
 Usage (from software/):
   python -m high_level_jobs.subtasks.grab_sensor.detection.live_review
-  python -m high_level_jobs.subtasks.grab_sensor.detection.train_grasp_model --review
+  python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --review
 
 Keys:
-  Left click     override grasp (red)
-  Right click    override base (green)
-  Y / Enter / S  save current grasp + base (NN or corrected)
-  R              clear overrides — back to live NN proposals
-  T              retrain model on updated dataset
-  O              save grasp_overlay.png from this live frame (same NN as above)
-  Q / Esc        quit
+  G                 grasp mode — left-click grasp point (red)
+  B                 base mode — left-drag ellipse box; drag handles to adjust
+  Y / Enter / S     save current grasp + base (NN or corrected)
+  R                 clear overrides — back to live NN proposals
+  T                 retrain model on updated dataset
+  O                 save grasp_overlay.png from this live frame (same NN as above)
+  Q / Esc           quit
 """
 
 from __future__ import annotations
@@ -21,21 +21,26 @@ from __future__ import annotations
 import argparse
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 import numpy as np
 
 _SOFTWARE_DIR = Path(__file__).resolve().parents[4]
 
 from ..config_loader import apply_runtime_calibrations, default_config_path, load_grab_sensor_config
-from ..grasp import apply_table_base_grasp_position, compute_grasp_targets
+from ..grasp import build_grasp_targets
 from ..models import GrabSensorConfig
-from .base_ellipse import BaseEllipse, draw_base_ellipse, EDIT_BASE_BGR
+from .base_ellipse import BaseEllipse, draw_base_ellipse, draw_label_grasp
 from ..table_position import NN_BASE_BGR
 from .capture import AlignedFrame, CaptureResult, RealSenseStreamer, next_sample_id, save_labeled_sample
 from .cv2_gui import PANEL_H, init_cv2_window, require_cv2_gui
-from .grasp_point_net import default_model_path, train_base_model, train_grasp_model
+from .ellipse_editor import EllipseEditor, draw_ellipse_editor
+from .grasp_point_net import default_model_path
+from .train_model import make_train_kwargs, run_training
 from .visualize import save_grasp_overlay
 from .yolo_grasp import infer_yolo_grasp_points
+
+LabelMode = Literal["grasp", "base"]
 
 
 @dataclass
@@ -82,10 +87,7 @@ def _export_grasp_overlay(
         device_serial=frame.device_serial,
     )
     result = detect_with_yolo_grasp(capture, cfg)
-    targets = compute_grasp_targets(cfg, result.detection)
-    targets.debug.update(result.debug)
-    if cfg.grasp_position_from_table_base:
-        apply_table_base_grasp_position(cfg, targets, targets.debug)
+    targets = build_grasp_targets(cfg, result.detection, vision_debug=result.debug)
     save_grasp_overlay(capture, result.mask, result.detection, targets, cfg, out_path)
     return result.base_uv
 
@@ -97,13 +99,27 @@ def _effective_uv(
     return override_uv if override_uv is not None else nn_uv
 
 
+def _mode_label(mode: LabelMode) -> str:
+    return "GRASP" if mode == "grasp" else "BASE"
+
+
+def _seed_base_editor(editor: EllipseEditor, proposal: NnProposal) -> None:
+    if editor.is_valid():
+        return
+    if proposal.base_ellipse is not None:
+        editor.set_ellipse(proposal.base_ellipse)
+    elif proposal.base_uv is not None:
+        editor.set_ellipse(BaseEllipse.from_center_uv(proposal.base_uv))
+
+
 def _draw_review_ui(
     cv2,
     frame_rgb: np.ndarray,
     proposal: NnProposal,
     override_grasp: tuple[int, int] | None,
-    override_base: tuple[int, int] | None,
+    editor: EllipseEditor,
     *,
+    label_mode: LabelMode,
     saved_count: int,
     status: str,
     mode: str,
@@ -111,6 +127,7 @@ def _draw_review_ui(
 ) -> np.ndarray:
     bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
     h, w = bgr.shape[:2]
+    editing_base = label_mode == "base" or editor.is_valid()
 
     if proposal.bbox_xy is not None:
         x, y, bw, bh = proposal.bbox_xy
@@ -131,7 +148,11 @@ def _draw_review_ui(
             cv2.LINE_AA,
         )
 
-    if predict_base and proposal.base_ellipse is not None and override_base is None:
+    if (
+        predict_base
+        and not editing_base
+        and proposal.base_ellipse is not None
+    ):
         draw_base_ellipse(bgr, proposal.base_ellipse)
         bu, bv = proposal.base_ellipse.center_uv
         cv2.putText(
@@ -144,7 +165,7 @@ def _draw_review_ui(
             1,
             cv2.LINE_AA,
         )
-    elif predict_base and proposal.base_uv is not None and override_base is None:
+    elif predict_base and not editing_base and proposal.base_uv is not None:
         bu, bv = proposal.base_uv
         draw_base_ellipse(bgr, BaseEllipse.from_center_uv((bu, bv)))
         cv2.putText(
@@ -159,43 +180,26 @@ def _draw_review_ui(
         )
 
     if override_grasp is not None:
-        u, v = override_grasp
-        cv2.drawMarker(bgr, (u, v), (0, 0, 255), cv2.MARKER_CROSS, 22, 2)
-        cv2.circle(bgr, (u, v), 12, (0, 0, 255), 2)
-        cv2.putText(
-            bgr,
-            f"edit grasp ({u}, {v})",
-            (min(u + 14, w - 200), max(v + 18, 36)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            (0, 0, 255),
-            1,
-            cv2.LINE_AA,
-        )
+        draw_label_grasp(bgr, override_grasp[0], override_grasp[1])
 
-    if override_base is not None:
-        bu, bv = override_base
-        draw_base_ellipse(
-            bgr,
-            BaseEllipse.from_center_uv((bu, bv)),
-            color=EDIT_BASE_BGR,
-            center_color=EDIT_BASE_BGR,
-        )
-        cv2.putText(
-            bgr,
-            f"edit base ({bu}, {bv})",
-            (min(bu + 14, w - 200), min(bv + 40, h - 10)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
-            EDIT_BASE_BGR,
-            1,
-            cv2.LINE_AA,
-        )
+    if editing_base:
+        draw_ellipse_editor(bgr, editor.ellipse, preview_ellipse=editor.preview_ellipse)
 
     panel = np.zeros((PANEL_H, w, 3), dtype=np.uint8)
     panel[:] = (40, 40, 40)
+    mode_color = (0, 120, 255) if label_mode == "grasp" else (0, 220, 0)
+    cv2.putText(
+        panel,
+        f"Mode: {_mode_label(label_mode)}",
+        (w - 140, 26),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
+        mode_color,
+        1,
+        cv2.LINE_AA,
+    )
     lines = [
-        "Left=fix grasp  Right=fix base  |  Y/S=save  |  R=reset  |  T=retrain  |  O=overlay  |  Q=quit",
+        "G=grasp (left-click)  B=base (left-drag ellipse)  |  Y/S=save  R=reset  T=retrain  O=overlay  Q=quit",
         f"{mode}  |  saved {saved_count}  |  {status}",
         "Yellow box=YOLO  cyan/green=NN  red/green=your edits",
     ]
@@ -205,7 +209,7 @@ def _draw_review_ui(
             line,
             (10, 28 + i * 28),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.5,
+            0.46 if i == 0 else 0.5,
             (220, 220, 220),
             1,
             cv2.LINE_AA,
@@ -245,15 +249,16 @@ def run_live_review_gui(
         print("No separate base_point.pt — using legacy combined grasp model if available")
     print(f"YOLO: {cfg.yolo.model_path}")
 
+    editor = EllipseEditor()
     state = {
         "proposal": NnProposal(),
         "override_grasp": None,
-        "override_base": None,
+        "label_mode": "grasp",
         "mode": "propose",
         "saved_count": len(list((data_dir / "labels").glob("*.json")))
         if (data_dir / "labels").is_dir()
         else 0,
-        "status": "Live NN — Y/S to confirm, click to fix bad points",
+        "status": "Live NN — Y/S to confirm, G/B to fix bad points",
         "predict_every": 3,
         "frame_idx": 0,
     }
@@ -262,14 +267,19 @@ def run_live_review_gui(
         if y < PANEL_H:
             return
         uv = (int(x), int(y - PANEL_H))
-        if event == cv2.EVENT_LBUTTONDOWN:
-            state["override_grasp"] = uv
+        label_mode: LabelMode = state["label_mode"]
+
+        if label_mode == "grasp":
+            if event == cv2.EVENT_LBUTTONDOWN:
+                state["override_grasp"] = uv
+                state["mode"] = "edit"
+                state["status"] = f"Grasp ({uv[0]}, {uv[1]}) — B for base or Y/S to save"
+            return
+
+        msg = editor.on_mouse(event, uv, cv2)
+        if msg:
+            state["status"] = msg
             state["mode"] = "edit"
-            state["status"] = f"Grasp edit {uv} — click base or Y/S to save"
-        elif event == cv2.EVENT_RBUTTONDOWN:
-            state["override_base"] = uv
-            state["mode"] = "edit"
-            state["status"] = f"Base edit {uv} — Y/S to save, R to reset to NN"
 
     window = "Live review (NN grasp + base)"
     init_cv2_window(cv2, window, width, height + PANEL_H, on_mouse)
@@ -280,20 +290,20 @@ def run_live_review_gui(
     print("Camera ready.", flush=True)
 
     def save_sample(frame: AlignedFrame, note: str) -> None:
-        grasp_uv = _effective_uv(state["proposal"].grasp_uv, state["override_grasp"])
-        base_uv = _effective_uv(state["proposal"].base_uv, state["override_base"])
+        proposal = state["proposal"]
+        grasp_uv = _effective_uv(proposal.grasp_uv, state["override_grasp"])
         if grasp_uv is None:
-            state["status"] = "No grasp to save — wait for NN or click to fix"
-            return
-        if predict_base and base_uv is None:
-            state["status"] = "No base to save — wait for NN or right-click to fix"
+            state["status"] = "No grasp to save — wait for NN or press G and click to fix"
             return
 
-        base_ellipse = state["proposal"].base_ellipse
-        if state["override_base"] is not None:
-            base_ellipse = BaseEllipse.from_center_uv(state["override_base"])
-        elif base_ellipse is None and base_uv is not None:
-            base_ellipse = BaseEllipse.from_center_uv(base_uv)
+        base_ellipse = editor.ellipse if editor.is_valid() else proposal.base_ellipse
+        if predict_base and base_ellipse is None:
+            base_uv = _effective_uv(proposal.base_uv, None)
+            if base_uv is not None:
+                base_ellipse = BaseEllipse.from_center_uv(base_uv)
+        if predict_base and base_ellipse is None:
+            state["status"] = "No base to save — wait for NN or press B and draw ellipse"
+            return
 
         save_frame = streamer.read(with_depth=True)
         sid = next_sample_id(data_dir)
@@ -307,7 +317,8 @@ def run_live_review_gui(
         )
         state["saved_count"] += 1
         state["override_grasp"] = None
-        state["override_base"] = None
+        editor.clear()
+        state["label_mode"] = "grasp"
         state["mode"] = "propose"
         state["status"] = f"Saved {sid} ({note}) — adjust scene for next"
         print(f"Saved {label_path} ({note})")
@@ -322,7 +333,8 @@ def run_live_review_gui(
                 frame.color_rgb,
                 state["proposal"],
                 state["override_grasp"],
-                state["override_base"],
+                editor,
+                label_mode=state["label_mode"],
                 saved_count=state["saved_count"],
                 status=state["status"],
                 mode=state["mode"],
@@ -331,24 +343,28 @@ def run_live_review_gui(
         )
         cv2.waitKey(1)
         yolo_path = cfg.yolo.model_path if cfg.yolo else None
-        kw = dict(
-            epochs=retrain_epochs,
-            yolo_model_path=yolo_path if yolo_path and yolo_path.is_file() else None,
-            crop_mode=True,
-            use_depth=True,
+        results = run_training(
+            data_dir,
+            grasp_path=model_path,
+            base_path=base_path or (model_path.parent / "base_point.pt"),
+            train_grasp=True,
+            train_base=predict_base or (base_path is not None and base_path.parent.exists()),
+            train_kwargs=make_train_kwargs(
+                epochs=retrain_epochs,
+                yolo_model_path=yolo_path if yolo_path and yolo_path.is_file() else None,
+                crop_mode=True,
+                use_depth=True,
+            ),
+            verbose=False,
         )
-        grasp_result = train_grasp_model(data_dir, model_path=model_path, target="grasp", **kw)
-        err = f"grasp ~ {grasp_result.best_val_px_error:.1f}px"
-        if predict_base or (base_path and base_path.parent.exists()):
-            base_result = train_base_model(
-                data_dir,
-                model_path=base_path or (model_path.parent / "base_point.pt"),
-                **kw,
-            )
-            base_err = base_result.best_val_base_px_error or base_result.best_val_px_error
+        err = ""
+        if results.grasp is not None:
+            err = f"grasp ~ {results.grasp.best_val_px_error:.1f}px"
+        if results.base is not None:
+            base_err = results.base.best_val_base_px_error or results.base.best_val_px_error
             err += f"  base ~ {base_err:.1f}px"
             predict_base = True
-        state["status"] = f"Retrained — val {err}"
+        state["status"] = f"Retrained — val {err.strip()}"
         print(state["status"])
 
     try:
@@ -364,14 +380,15 @@ def run_live_review_gui(
                     state["status"] = f"NN error: {proposal.error}"
                 elif state["mode"] == "propose":
                     conf = f" conf={proposal.yolo_conf:.2f}" if proposal.yolo_conf is not None else ""
-                    state["status"] = f"NN proposal{conf} — Y/S confirm or click to fix"
+                    state["status"] = f"NN proposal{conf} — Y/S confirm or G/B to fix"
 
             display = _draw_review_ui(
                 cv2,
                 frame.color_rgb,
                 state["proposal"],
                 state["override_grasp"],
-                state["override_base"],
+                editor,
+                label_mode=state["label_mode"],
                 saved_count=state["saved_count"],
                 status=state["status"],
                 mode=state["mode"],
@@ -382,9 +399,17 @@ def run_live_review_gui(
 
             if key in (ord("q"), ord("Q"), 27):
                 break
+            if key in (ord("g"), ord("G")):
+                state["label_mode"] = "grasp"
+                state["status"] = "Grasp mode — left-click grasp point"
+            if key in (ord("b"), ord("B")):
+                state["label_mode"] = "base"
+                _seed_base_editor(editor, state["proposal"])
+                state["status"] = "Base mode — left-drag box over counter, adjust handles"
             if key in (ord("r"), ord("R")):
                 state["override_grasp"] = None
-                state["override_base"] = None
+                editor.clear()
+                state["label_mode"] = "grasp"
                 state["mode"] = "propose"
                 state["status"] = "Reset — live NN proposals"
             if key in (ord("t"), ord("T")):
@@ -445,15 +470,20 @@ def main(argv: list[str] | None = None) -> int:
     if args.train_first or not model_path.is_file():
         print("Training models before review…")
         yolo_path = cfg.yolo.model_path if cfg.yolo else None
-        kw = dict(
-            epochs=args.retrain_epochs,
-            yolo_model_path=yolo_path if yolo_path and yolo_path.is_file() else None,
-            crop_mode=True,
-            use_depth=True,
+        base_path = cfg.grasp_net.base_model_path if cfg.grasp_net else None
+        run_training(
+            data_dir,
+            grasp_path=model_path,
+            base_path=base_path,
+            train_grasp=True,
+            train_base=base_path is not None,
+            train_kwargs=make_train_kwargs(
+                epochs=args.retrain_epochs,
+                yolo_model_path=yolo_path if yolo_path and yolo_path.is_file() else None,
+                crop_mode=True,
+                use_depth=True,
+            ),
         )
-        train_grasp_model(data_dir, model_path=model_path, target="grasp", **kw)
-        if cfg.grasp_net and cfg.grasp_net.base_model_path:
-            train_base_model(data_dir, model_path=cfg.grasp_net.base_model_path, **kw)
 
     if not model_path.is_file():
         print(f"No model at {model_path}. Collect labels with live_label and train first.")

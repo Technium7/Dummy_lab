@@ -122,10 +122,10 @@ class GrabSensorConfig:
     grasp_on_object: GraspOnObjectFrame
     approach: ApproachConfig
     segmentation: SegmentationConfig
-    vision_mode: VisionMode = "depth_segment"
+    vision_mode: VisionMode = "yolo_grasp"
     yolo: YoloConfig | None = None
     grasp_net: GraspNetConfig | None = None
-    grasp_orientation_mode: GraspOrientationMode = "follow_object"
+    grasp_orientation_mode: GraspOrientationMode = "fixed_robot"
     fixed_grasp_abc_input_deg: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     grasp_rpy_roll_offset_deg: float = 15.0
     grasp_rpy_yaw_base_deg: float = 180.0
@@ -181,7 +181,7 @@ class GrabSensorConfig:
                 p = (base / p).resolve()
             return p
 
-        vision_raw = str(data.get("vision_mode", "depth_segment")).strip().lower()
+        vision_raw = str(data.get("vision_mode", "yolo_grasp")).strip().lower()
         if vision_raw not in ("depth_segment", "yolo_grasp"):
             raise ValueError(
                 f"vision_mode must be 'depth_segment' or 'yolo_grasp', got {vision_raw!r}"

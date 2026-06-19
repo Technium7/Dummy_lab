@@ -40,7 +40,7 @@ grasp_position_from_table_base: true
 
 # Motion planning: tip height on sensor; TCP offset is in the grasp URDF (``grasp_tcp_link``)
 motion_planning:
-  grasp_height_above_table_mm: 80.0
+  grasp_height_above_table_mm: 88.0
 
 # Used when grasp_orientation_mode: fixed_robot
 # Taught input [a, b, c] (deg) -> planner world RPY:
@@ -56,7 +56,7 @@ grasp_position_tol_mm: 20.0
 # Robot base pose in optical table frame (inches, same convention as view_table_calibration)
 # Grasp robot GUI ≈ (-robot_x_in * 1in + table_x, -robot_y_in * 1in + table_y, table_z - robot_z_in)
 robot_in_table_frame:
-  translation_in: [-4.5, -3.4, 0.5]
+  translation_in: [-4.5, -3.4, 0.55]
   rpy_deg: [0, 0, 0]
 
 # --- Legacy depth segmentation (used when vision_mode: depth_segment) ------

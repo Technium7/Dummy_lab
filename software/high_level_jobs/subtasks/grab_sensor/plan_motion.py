@@ -32,7 +32,7 @@ from trajectory_planner.trajectory_utils import compress_duplicate_waypoints, re
 from manual_control.mapping import HOME_JOINTS_DEG  # noqa: E402
 
 from .models import GrabSensorConfig, GraspTargets
-from .grasp import prepare_fixed_robot_grasp_targets
+from .grasp import finalize_grasp_targets
 from .table_position import robot_point_table_display, format_planner_xyz_display
 from .tcp_ik import (
     TcpOffset,
@@ -792,7 +792,7 @@ def plan_approach_and_grasp(
     try:
         start_q = start_q_from_robot_joints_deg(scene, start_joints_deg)
 
-        prepare_fixed_robot_grasp_targets(cfg, targets)
+        finalize_grasp_targets(cfg, targets)
         targets.debug["pre_grasp_rpy_deg"] = [
             float(math.degrees(v)) for v in targets.pre_grasp_rpy_rad
         ]
