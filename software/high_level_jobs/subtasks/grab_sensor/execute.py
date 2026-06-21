@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import time
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 import numpy as np
 
@@ -15,16 +15,110 @@ from manual_control.mapping import HOME_JOINTS_DEG, clamp_firmware_joints_deg  #
 from manual_control.robot_session import apply_arm_current_limits  # noqa: E402
 from robot_ascii_interface import RobotAsciiInterface  # noqa: E402
 from trajectory_run.run_planned_trajectory import (  # noqa: E402
+    _hold_stream_speed,
     debug_robot_state,
+    ensure_robot_armed,
     ensure_robot_enabled,
-    firmware_home,
+    pin_to_joint_target,
     prepare_robot_trajectory,
     read_physical_joints,
     sim_trajectory_to_robot_deg,
     stream_waypoints_deg,
+    wait_until_joints,
 )
 
 from .models import GrabSensorConfig, GraspTargets
+
+
+def _init_robot_drives(
+    robot: RobotAsciiInterface,
+    *,
+    cmd_mode: int,
+    joint_current_limit_a: float,
+    label: str = "",
+) -> bool:
+    """Same init order as stable manual_control teleop: I_LIMIT before START."""
+    if joint_current_limit_a > 0.0:
+        print(f"{label}[Robot] I_LIMIT_J 1-6 -> {joint_current_limit_a:g}A (before START)")
+        apply_arm_current_limits(robot, joint_current_limit_a, label=label)
+    print(f"{label}!START...")
+    start_resp = robot.start()
+    print(f"{label}!START -> {start_resp}")
+    time.sleep(0.15)
+    if cmd_mode == 2:
+        robot.ensure_cmdmode_stream()
+        print(f"{label}#CMDMODE 2 -> stream armed")
+    else:
+        print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
+        time.sleep(0.2)
+    print(f"{label}HAND_EN -> {robot.hand_enable()}")
+    time.sleep(0.1)
+    if read_physical_joints(robot, retries=8) is None:
+        debug_robot_state(
+            robot,
+            step="init — no joint reads after !START",
+            label=label,
+            target_deg=HOME_JOINTS_DEG,
+        )
+        return False
+    return True
+
+
+def _stream_to_joint_target(
+    robot: RobotAsciiInterface,
+    target_deg: Sequence[float],
+    *,
+    cmd_mode: int = 2,
+    tol_deg: float = 0.5,
+    timeout_sec: float = 90.0,
+    speed_scale: float = 0.65,
+    label: str = "",
+    name: str = "HOME",
+) -> tuple[bool, list[float] | None]:
+    """Stream ``&`` waypoints to a joint target (teleop-style; avoids blocking ``!HOME``)."""
+    target = clamp_firmware_joints_deg([float(target_deg[j]) for j in range(6)])
+    current = read_physical_joints(robot)
+    if current is not None:
+        err = float(np.max(np.abs(np.asarray(current[:6]) - np.asarray(target))))
+        print(f"{label}{name}: max |Δ|={err:.2f} deg before move")
+        if err <= tol_deg:
+            print(f"{label}{name}: already within {tol_deg:.2f} deg.")
+            ensure_robot_armed(robot, cmd_mode=cmd_mode, label=label)
+            robot.hold_stream_pose(target, _hold_stream_speed())
+            time.sleep(0.2)
+            return True, current
+
+    start_q = clamp_firmware_joints_deg(current if current is not None else target)
+    err = float(np.max(np.abs(np.asarray(start_q[:6]) - np.asarray(target))))
+    n_pts = max(2, min(32, int(np.ceil(err / 2.0)) + 1))
+    waypoints = np.linspace(start_q, target, n_pts, dtype=np.float64)
+
+    print(f"{label}{name}: streaming {len(waypoints)} waypoints (max |Δ|={err:.1f} deg)...")
+    ensure_robot_armed(robot, cmd_mode=cmd_mode, label=label)
+    if not stream_waypoints_deg(
+        robot,
+        waypoints,
+        send_interval_ms=120.0,
+        speed_scale=speed_scale,
+        label=label,
+        arm=False,
+        seed_from_robot=True,
+        hold_end=True,
+    ):
+        return False, read_physical_joints(robot)
+
+    ok, final = wait_until_joints(
+        robot,
+        target,
+        timeout_sec=timeout_sec,
+        tol_deg=tol_deg,
+        label=label,
+        name=name,
+    )
+    if ok and final is not None:
+        robot.hold_stream_pose(clamp_firmware_joints_deg(final), _hold_stream_speed())
+        time.sleep(0.2)
+    return ok, final
 
 
 def ensure_robot_ready(
@@ -36,30 +130,32 @@ def ensure_robot_ready(
     joint_current_limit_a: float = 0.0,
     label: str = "",
 ) -> bool:
-    apply_arm_current_limits(robot, joint_current_limit_a, label=label)
-    print(f"{label}!START -> {robot.start()}")
-    time.sleep(0.15)
-    print(f"{label}HAND_EN -> {robot.hand_enable()}")
-    time.sleep(0.1)
+    if not _init_robot_drives(
+        robot,
+        cmd_mode=cmd_mode,
+        joint_current_limit_a=joint_current_limit_a,
+        label=label,
+    ):
+        return False
+
     if open_hand:
         robot.hand_open()
         time.sleep(0.3)
 
     if not home_first:
-        print(f"{label}#CMDMODE {cmd_mode} -> {robot.set_command_mode(cmd_mode)}")
-        time.sleep(0.2)
         return True
 
-    ok, at_home = firmware_home(
+    ok, at_home = _stream_to_joint_target(
         robot,
         HOME_JOINTS_DEG,
         cmd_mode=cmd_mode,
         label=label,
+        name="HOME",
     )
     if not ok:
         debug_robot_state(
             robot,
-            step="ensure_robot_ready — initial firmware HOME failed",
+            step="ensure_robot_ready — stream HOME failed",
             label=label,
             target_deg=HOME_JOINTS_DEG,
         )
@@ -67,10 +163,7 @@ def ensure_robot_ready(
 
     hold_q = at_home if at_home is not None else read_physical_joints(robot)
     if hold_q is not None:
-        from trajectory_run.run_planned_trajectory import _hold_stream_speed
-
-        hold_q = clamp_firmware_joints_deg(hold_q)
-        robot.hold_stream_pose(hold_q, _hold_stream_speed())
+        robot.hold_stream_pose(clamp_firmware_joints_deg(hold_q), _hold_stream_speed())
         time.sleep(0.3)
     return True
 
@@ -213,12 +306,17 @@ def _confirm_return_home(
     params: Mapping[str, Any],
     label: str = "",
 ) -> None:
-    """Finish with firmware ``!HOME`` (retry ``!START`` if drives dropped out)."""
-    settle = float(params.get("home_settle_timeout_sec", 120.0))
+    """Verify HOME after the streamed return segment; stream/pin correction only (no ``!HOME``)."""
+    tol_deg = float(params.get("home_arrive_tol_deg", 0.5))
     attempts = max(1, int(params.get("home_confirm_attempts", 3)))
     last_err: str | None = None
 
     for attempt in range(attempts):
+        err = _home_joint_error_deg(robot)
+        if err is not None and err <= tol_deg:
+            print(f"{label}At HOME (max |Δ|={err:.3f} deg).")
+            return
+
         if attempt > 0:
             print(f"{label}HOME confirm retry {attempt + 1}/{attempts}...")
             if not ensure_robot_enabled(robot, label=label):
@@ -226,33 +324,41 @@ def _confirm_return_home(
                 continue
             time.sleep(0.3)
 
-        print(f"{label}Confirming firmware HOME...")
-        ok, final = firmware_home(
+        print(f"{label}Confirming HOME (stream)...")
+        ok, final = _stream_to_joint_target(
             robot,
             HOME_JOINTS_DEG,
             cmd_mode=cmd_mode,
-            settle_timeout_sec=settle,
+            tol_deg=tol_deg,
+            timeout_sec=float(params.get("home_settle_timeout_sec", 90.0)),
             label=label,
+            name="HOME confirm",
         )
         if ok and final is not None:
             err = float(np.max(np.abs(np.asarray(final[:6]) - np.asarray(HOME_JOINTS_DEG))))
             print(f"{label}At HOME (max |Δ|={err:.3f} deg).")
             return
 
-        if not ok and final is None:
-            reason = "firmware_home failed (no joint read)"
-        elif not ok:
-            reason = "firmware_home failed (not at HOME)"
-        else:
-            reason = "firmware_home ok but no final joints"
-        err = _home_joint_error_deg(robot)
-        last_err = f"{reason}; max |Δ|={err:.2f} deg" if err is not None else reason
+        pin_ok, pinned = pin_to_joint_target(
+            robot,
+            HOME_JOINTS_DEG,
+            tol_deg=tol_deg,
+            label=label,
+            name="HOME",
+        )
+        if pin_ok and pinned is not None:
+            pin_err = float(np.max(np.abs(np.asarray(pinned[:6]) - np.asarray(HOME_JOINTS_DEG))))
+            print(f"{label}At HOME after pin (max |Δ|={pin_err:.3f} deg).")
+            return
+
+        err_now = _home_joint_error_deg(robot)
+        last_err = f"stream/pin failed; max |Δ|={err_now:.2f} deg" if err_now is not None else "no joint reads"
         print(f"{label}[debug] HOME attempt {attempt + 1}/{attempts}: {last_err}")
         debug_robot_state(robot, step=f"HOME attempt {attempt + 1} failed", label=label, target_deg=HOME_JOINTS_DEG)
 
     raise RuntimeError(
         f"{label}Failed to reach HOME after {attempts} attempt(s) ({last_err}). "
-        "Motors may have disabled during lift; check the arm and serial link."
+        "Check the arm and serial link; avoid Ctrl+Z (stopped jobs hold the port)."
     )
 
 

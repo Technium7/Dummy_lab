@@ -71,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         default=0.0,
         help="Set motor current limit (A) for J1-J6 at connect via #I_LIMIT_J (default 0=skip).",
     )
+    parser.add_argument(
+        "--record-demos",
+        action="store_true",
+        help="Arm insert_sensor demo recording (R/C keys; teleop unchanged until R).",
+    )
     return parser.parse_args()
 
 
@@ -89,6 +94,13 @@ def main() -> None:
         if len(re.findall(r"<joint\b", urdf_text)) == 0:
             print("Warning: resolved URDF has 0 joints. IK control will not work.")
     search_paths = {root, selected.parent, urdf_path.parent, *package_map.values()}
+    teleop_hook = None
+    on_shutdown = None
+    if args.record_demos:
+        from high_level_jobs.subtasks.insert_sensor.record import create_manual_control_record_hook
+
+        teleop_hook, recorder = create_manual_control_record_hook()
+        on_shutdown = recorder.shutdown
     try:
         launch_controller(
             urdf_path=urdf_path,
@@ -111,6 +123,8 @@ def main() -> None:
             sim_only=args.sim_only,
             debug_serial=args.debug_serial,
             joint_current_limit_a=args.joint_current_limit_a,
+            teleop_hook=teleop_hook,
+            on_shutdown=on_shutdown,
         )
     finally:
         if temp_file and temp_file.exists():

@@ -286,6 +286,8 @@ def run_grab_sensor_pipeline(
             result["executed"] = True
         finally:
             if own_robot and robot is not None:
-                robot.disconnect()
+                from manual_control.robot_session import disconnect_robot
+
+                disconnect_robot(robot)
 
     return result

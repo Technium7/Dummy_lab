@@ -102,8 +102,22 @@ def robot_home(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
         _v(ctx, "Motion settle complete.")
 
 
+def robot_disconnect(params: Mapping[str, Any], ctx: dict[str, Any]) -> None:
+    """Send ``!STOP`` and close serial. Safe if already disconnected."""
+    if ctx.get("dry_run"):
+        _v(ctx, "[dry-run] robot_disconnect: would send !STOP and close port")
+        return
+
+    from manual_control.robot_session import disconnect_robot
+
+    disconnect_robot(ctx.get("robot"))
+    ctx.pop("robot", None)
+    _v(ctx, "Robot disconnected.")
+
+
 ROBOT_SUBTASKS: dict[str, Callable[[Mapping[str, Any], Mapping[str, Any]], None]] = {
     "robot_check_connected": robot_check_connected,
     "robot_ensure_enabled": robot_ensure_enabled,
     "robot_home": robot_home,
+    "robot_disconnect": robot_disconnect,
 }

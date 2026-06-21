@@ -40,7 +40,7 @@ grasp_position_from_table_base: true
 
 # Motion planning: tip height on sensor; TCP offset is in the grasp URDF (``grasp_tcp_link``)
 motion_planning:
-  grasp_height_above_table_mm: 88.0
+  grasp_height_above_table_mm: 78.0
 
 # Used when grasp_orientation_mode: fixed_robot
 # Taught input [a, b, c] (deg) -> planner world RPY:
@@ -90,7 +90,7 @@ approach:
   plan_return_home: true                # after lift: iLQR back to HOME joints
   retreat_after_close_mm: 40.0
 
-# Robot execution (#I_LIMIT_J before !START; 0 = skip)
+# Robot execution (#I_LIMIT_J before !START; 0 = skip). Init HOME uses stream waypoints, not ``!HOME``.
 execute:
   joint_current_limit_a: 1.2
   home_confirm_attempts: 3

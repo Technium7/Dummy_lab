@@ -152,6 +152,7 @@ def wait_until_joints(
     deadline = time.perf_counter() + max(1.0, float(timeout_sec))
     stable = 0
     last: List[float] | None = None
+    next_log_s = time.perf_counter() + 5.0
 
     while time.perf_counter() < deadline:
         current = read_physical_joints(robot)
@@ -166,6 +167,12 @@ def wait_until_joints(
                 return True, current
         else:
             stable = 0
+        if time.perf_counter() >= next_log_s:
+            print(
+                f"{label}Waiting for {name}... max |Δ|={err:.2f} deg "
+                f"(tol={tol_deg:.2f}, stable={stable}/{stable_reads})"
+            )
+            next_log_s = time.perf_counter() + 5.0
         time.sleep(poll_interval_s)
 
     if last is not None:

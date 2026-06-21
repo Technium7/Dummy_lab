@@ -75,6 +75,7 @@ def run_teleop_session(
     hook: TeleopLoopHook | None = None,
     stop_check: Callable[[], bool] | None = None,
     on_scene_ready: Callable[[int, int], None] | None = None,
+    on_shutdown: Callable[[], None] | None = None,
     use_status_gui: bool = True,
 ) -> None:
     """Shared PyBullet + robot teleop loop used by manual_control and calibration."""
@@ -167,7 +168,7 @@ def run_teleop_session(
 
     status_update_stride = max(1, int(round(float(config.sim_hz) / 25.0)))
     sim_frame = 0
-    include_joint_telemetry = hook is not None
+    include_joint_telemetry = hook is not None and getattr(hook, "needs_joint_telemetry", True)
     teleop_config = TeleopConfig(
         linear_speed=max(0.0, float(config.linear_speed)),
         angular_speed_deg=max(0.0, float(config.angular_speed_deg)),
@@ -234,6 +235,11 @@ def run_teleop_session(
             if step_sleep > 0.0:
                 time.sleep(step_sleep)
     finally:
+        if on_shutdown is not None:
+            try:
+                on_shutdown()
+            except Exception:
+                pass
         robot_control.request_stop()
         robot_control.join(timeout=1.0)
         if status_gui is not None:

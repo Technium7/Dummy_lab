@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import sys
 from pathlib import Path
-from typing import Iterable
+from typing import Callable, Iterable
 
-from teleop_runtime import TeleopLaunchConfig, run_teleop_session
+from teleop_runtime import TeleopLaunchConfig, TeleopLoopHook, run_teleop_session
 from teleop_tick import PyBulletKeyInput
 
 _SOFTWARE_DIR = Path(__file__).resolve().parents[1]
@@ -37,6 +37,9 @@ def launch_controller(
     sim_only: bool = False,
     debug_serial: bool = False,
     joint_current_limit_a: float = 0.0,
+    *,
+    teleop_hook: TeleopLoopHook | None = None,
+    on_shutdown: Callable[[], None] | None = None,
 ) -> None:
     run_teleop_session(
         TeleopLaunchConfig(
@@ -60,5 +63,7 @@ def launch_controller(
             sim_only=sim_only,
             debug_serial=debug_serial,
             joint_current_limit_a=joint_current_limit_a,
-        )
+        ),
+        hook=teleop_hook,
+        on_shutdown=on_shutdown,
     )

@@ -141,7 +141,11 @@ def main() -> int:
         print("Grasp RPY (world deg):", rpy)
         return 0
 
-    run_grab_sensor_pipeline(cfg, params, robot=robot)
+    try:
+        run_grab_sensor_pipeline(cfg, params, robot=robot)
+    except KeyboardInterrupt:
+        print("\n[grab_sensor] Interrupted — robot shutdown runs in finally (!STOP + disconnect).")
+        raise
     return 0
 
 

@@ -70,8 +70,24 @@ python -m high_level_jobs.subtasks.grab_sensor --detect-only --visualize
 # Plan offline (no robot)
 python -m high_level_jobs.subtasks.grab_sensor --offline --visualize
 
-# Full execute (use Ctrl+C to abort — not Ctrl+Z; stopped jobs hold /dev/ttyACM0)
+# Full execute (Ctrl+C to abort — not Ctrl+Z; stopped jobs hold the serial port)
 python -m high_level_jobs.subtasks.grab_sensor --execute --visualize
+# Port auto-detects; override with --port or ROBOT_PORT if needed
+```
+
+**Shutdown:** execute ends with ``!STOP`` then ``Disconnected`` (via ``disconnect_robot``). Use **Ctrl+C** to abort mid-run — same cleanup runs. Do **not** use Ctrl+Z (stopped jobs keep the port open). If the port is stuck:
+
+```bash
+jobs -l && kill %1          # clear Ctrl+Z job
+lsof /dev/ttyACM*           # find holder
+cd software && python -c "
+from robot_config import default_robot_port
+from manual_control.robot_session import disconnect_robot
+from robot_ascii_interface import RobotAsciiInterface
+r = RobotAsciiInterface(port=default_robot_port())
+if r.connect():
+    disconnect_robot(r)
+"
 ```
 
 Legacy `vision_mode: depth_segment` uses depth band + blob + PCA instead of YOLO + CNN.

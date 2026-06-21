@@ -1,0 +1,39 @@
+# Insert sensor: imitation learning to place sensor back in holder.
+# Uses grab_sensor vision (YOLO + base_point.pt) for weak hole-base keypoints.
+
+grasp_config: software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml
+
+dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
+
+# --- Model ---
+history_len: 8
+temporal: gru          # gru | transformer
+latent_dim: 256
+img_width: 160
+img_height: 120
+depth_min_m: 0.25
+depth_max_m: 0.85
+
+lambda_world: 0.5
+lambda_smooth: 0.05
+lambda_aux: 0.0
+
+# --- Training ---
+epochs: 80
+batch_size: 16
+lr: 0.0003
+val_frac: 0.15
+seed: 42
+num_workers: 0
+
+# --- Recording (teleop + D415) ---
+record_hz: 15.0
+record_camera_serial: ""
+# Keep false during teleop — YOLO in the record thread can starve robot serial I/O.
+record_keypoint_online: false
+
+# --- Deployment ---
+deploy_hz: 15.0
+action_scale: 1.0
+gripper_close_threshold: 0.5

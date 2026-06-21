@@ -114,9 +114,10 @@ def main(argv: list[str] | None = None) -> int:
             robot_baudrate=args.robot_baudrate,
         )
         if args.execute:
+            from manual_control.robot_session import disconnect_robot
+
             robot = ctx_out.get("robot")
-            if robot is not None and getattr(robot, "ser", None) and robot.ser.is_open:
-                robot.disconnect()
+            disconnect_robot(robot)
         return 0
 
     if args.cmd == "demo":
@@ -144,9 +145,10 @@ def main(argv: list[str] | None = None) -> int:
         }
         ctx = run_job(spec, default_registry(), ctx=ctx)
         if not args.dry_run:
+            from manual_control.robot_session import disconnect_robot
+
             robot = ctx.get("robot")
-            if robot is not None and getattr(robot, "ser", None) and robot.ser.is_open:
-                robot.disconnect()
+            disconnect_robot(robot)
         return 0
 
     if args.cmd == "compile":

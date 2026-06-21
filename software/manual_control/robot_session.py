@@ -74,11 +74,16 @@ def apply_arm_current_limits(
     time.sleep(0.25)
 
 
-def disconnect_robot(robot: RobotAsciiInterface | None) -> None:
+def disconnect_robot(robot: RobotAsciiInterface | None, *, label: str = "") -> None:
+    """Send ``!STOP`` then close serial (safe shutdown — do not call ``disconnect()`` alone)."""
     if robot is None:
         return
     try:
-        print(f"[Robot] STOP -> {robot.stop()}")
-    except Exception:
-        pass
-    robot.disconnect()
+        resp = robot.stop()
+        print(f"{label}[Robot] STOP -> {resp}")
+    except Exception as exc:
+        print(f"{label}[Robot] STOP failed: {exc}", file=sys.stderr)
+    try:
+        robot.disconnect()
+    except Exception as exc:
+        print(f"{label}[Robot] disconnect failed: {exc}", file=sys.stderr)

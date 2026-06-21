@@ -13,9 +13,11 @@ CUSTOM_SUBTASKS: dict[str, Callable[[Mapping[str, Any], Mapping[str, Any]], None
 
 def default_registry() -> dict[str, Callable[[Mapping[str, Any], Mapping[str, Any]], None]]:
     from high_level_jobs.subtasks.grab_sensor.actions import GRAB_SENSOR_SUBTASKS
+    from high_level_jobs.subtasks.insert_sensor.actions import INSERT_SENSOR_SUBTASKS
 
     merged = dict(BUILTIN_SUBTASKS)
     merged.update(ROBOT_SUBTASKS)
     merged.update(GRAB_SENSOR_SUBTASKS)
+    merged.update(INSERT_SENSOR_SUBTASKS)
     merged.update(CUSTOM_SUBTASKS)
     return merged
