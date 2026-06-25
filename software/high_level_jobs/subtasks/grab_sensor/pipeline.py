@@ -139,9 +139,13 @@ def run_detection(
     if vision_debug.get("vision_mode") == "yolo_grasp":
         grasp_uv = vision_debug.get("grasp_uv")
         base_uv = vision_debug.get("base_uv")
-        print(
-            f"[grab_sensor] NN pixels: grasp_uv={grasp_uv} base_uv={base_uv}"
-        )
+        profile = vision_debug.get("detection_profile", "side")
+        if profile == "top" or cfg.grasp_net and cfg.grasp_net.base_only:
+            print(f"[grab_sensor] top_detection NN: base_uv={base_uv}")
+        else:
+            print(
+                f"[grab_sensor] NN pixels: grasp_uv={grasp_uv} base_uv={base_uv}"
+            )
         if offline:
             print(
                 "[grab_sensor] offline mode — overlay uses saved debug capture, not the live "

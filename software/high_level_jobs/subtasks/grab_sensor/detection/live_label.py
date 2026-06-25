@@ -254,7 +254,7 @@ def run_live_label_gui(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    default_out = Path(__file__).resolve().parent / "dataset" / "grasp_keypoints"
+    default_out = Path(__file__).resolve().parent / "side_detection" / "dataset" / "grasp_keypoints"
     p = argparse.ArgumentParser(description="Live D415 GUI: label grasp + sensor base and save training samples.")
     p.add_argument("--out-dir", type=Path, default=default_out, help="Dataset output directory")
     p.add_argument("--width", type=int, default=640)

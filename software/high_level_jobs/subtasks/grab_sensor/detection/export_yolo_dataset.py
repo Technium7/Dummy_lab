@@ -49,6 +49,8 @@ def export_yolo_dataset(
     bbox_half_h: int = 80,
     val_frac: float = 0.15,
     seed: int = 0,
+    point_key: str = "grasp",
+    base_only: bool = False,
 ) -> Path:
     grasp_data_dir = grasp_data_dir.resolve()
     out_dir = out_dir.resolve()
@@ -58,9 +60,17 @@ def export_yolo_dataset(
         (out_dir / "images" / split).mkdir(parents=True, exist_ok=True)
         (out_dir / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    samples = list_labeled_samples(grasp_data_dir)
+    samples = list_labeled_samples(grasp_data_dir, base_only=base_only)
     if len(samples) < 2:
-        raise ValueError(f"Need at least 2 grasp labels in {grasp_data_dir}, found {len(samples)}")
+        raise ValueError(f"Need at least 2 labels in {grasp_data_dir}, found {len(samples)}")
+
+    def _sample_uv(sample: dict) -> tuple[int, int]:
+        if point_key == "base":
+            uv = sample.get("base_uv")
+            if uv is None:
+                raise ValueError(f"Sample {sample.get('id')} missing base_uv")
+            return uv
+        return sample["grasp_uv"]
 
     rng = random.Random(seed)
     shuffled = samples[:]
@@ -77,7 +87,7 @@ def export_yolo_dataset(
         shutil.copy2(src, dst_img)
 
         cx, cy, nw, nh = _grasp_to_yolo_bbox(
-            sample["grasp_uv"],
+            _sample_uv(sample),
             sample["width"],
             sample["height"],
             half_w=bbox_half_w,
@@ -100,8 +110,8 @@ def export_yolo_dataset(
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    default_grasp = Path(__file__).resolve().parent / "dataset" / "grasp_keypoints"
-    default_out = Path(__file__).resolve().parent / "dataset" / "sensor_yolo"
+    default_grasp = Path(__file__).resolve().parent / "side_detection" / "dataset" / "grasp_keypoints"
+    default_out = Path(__file__).resolve().parent / "side_detection" / "dataset" / "sensor_yolo"
     p = argparse.ArgumentParser(description="Export YOLO dataset from grasp keypoint labels.")
     p.add_argument("--grasp-data-dir", type=Path, default=default_grasp)
     p.add_argument("--out-dir", type=Path, default=default_out)
@@ -110,6 +120,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--bbox-half-h", type=int, default=80)
     p.add_argument("--val-frac", type=float, default=0.15)
     p.add_argument("--seed", type=int, default=0)
+    p.add_argument("--point-key", choices=("grasp", "base"), default="grasp")
+    p.add_argument(
+        "--base-only",
+        action="store_true",
+        help="Dataset has base point labels only (top/overhead view)",
+    )
     return p.parse_args(argv)
 
 
@@ -123,6 +139,8 @@ def main(argv: list[str] | None = None) -> int:
         bbox_half_h=args.bbox_half_h,
         val_frac=args.val_frac,
         seed=args.seed,
+        point_key=args.point_key,
+        base_only=args.base_only,
     )
     return 0
 

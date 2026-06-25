@@ -1,0 +1,8499 @@
+{
+  "method": "optical_table_grid_pnp",
+  "description": "Camera extrinsics relative to optical table grid. Table origin is the chosen hole (0,0); +X/+Y follow grid column/row (same sense as robot base XY); +Z is up from the table. Use transform_table_cam / transform_cam_table for geometry; rpy_deg is XYZ Euler decomposition only.",
+  "captured_utc": "2026-06-25T00:55:47.608432+00:00",
+  "grid_config": {
+    "pitch_m": 0.0254,
+    "pitch_in": 1.0,
+    "hole_diameter_m": 0.00635,
+    "min_holes_for_pose": 6,
+    "nn_confidence": 0.38,
+    "use_nn_filter": false,
+    "grid_snap_max_frac": 0.5
+  },
+  "metrics": {
+    "holes_detected": 599,
+    "reprojection_error_px": 0.5106520505768811,
+    "pitch_px": 16.376456398775336
+  },
+  "table_to_camera": {
+    "translation_m": [
+      0.13956106132510487,
+      0.22447667077901517,
+      0.9510901033761859
+    ],
+    "rpy_deg": [
+      178.91465690588436,
+      -1.5967667815825362,
+      -2.6130650421456867
+    ],
+    "transform_cam_table": [
+      [
+        0.9985722926288255,
+        -0.04610986617461172,
+        0.026967696145026115,
+        0.13956106132510487
+      ],
+      [
+        -0.04557307681333916,
+        -0.9987569132060868,
+        -0.020192151762868767,
+        0.22447667077901517
+      ],
+      [
+        0.027865230373649297,
+        0.01893432239106098,
+        -0.9994323490721194,
+        0.9510901033761859
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ],
+    "rvec": [
+      3.1209065411751156,
+      -0.07159143535445082,
+      0.04281677470446174
+    ],
+    "tvec": [
+      0.13956106132510487,
+      0.22447667077901517,
+      0.9510901033761859
+    ]
+  },
+  "camera_in_table_frame": {
+    "translation_m": [
+      -0.15563406124558274,
+      0.21262452201464332,
+      0.951319242904607
+    ],
+    "rpy_deg": [
+      -178.84257528659225,
+      -1.545322518587435,
+      -2.6438000067929446
+    ],
+    "transform_table_cam": [
+      [
+        0.9985722926288255,
+        -0.04557307681333916,
+        0.027865230373649297,
+        -0.15563406124558274
+      ],
+      [
+        -0.04610986617461172,
+        -0.9987569132060868,
+        0.01893432239106098,
+        0.21262452201464332
+      ],
+      [
+        0.026967696145026115,
+        -0.020192151762868767,
+        -0.9994323490721194,
+        0.951319242904607
+      ],
+      [
+        0.0,
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "holes": [
+    {
+      "grid_col": -8,
+      "grid_row": 10,
+      "image_px": [
+        266.5,
+        221.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 10,
+      "image_px": [
+        249.62984466552734,
+        222.0
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.2286,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 11,
+      "image_px": [
+        265.5,
+        205.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 10,
+      "image_px": [
+        282.3302068710327,
+        221.0847988128662
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 9,
+      "image_px": [
+        266.5,
+        237.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 10,
+      "image_px": [
+        298.7914733886719,
+        219.5
+      ],
+      "radius_px": 2.4118365049362183,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 10,
+      "image_px": [
+        315.0,
+        219.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.127,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 10,
+      "image_px": [
+        331.1065979003906,
+        218.89340209960938
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.1016,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 10,
+      "image_px": [
+        347.5,
+        217.5
+      ],
+      "radius_px": 1.8106601238250732,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 10,
+      "image_px": [
+        363.0,
+        217.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 10,
+      "image_px": [
+        378.9254455566406,
+        216.55166625976562
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.0254,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 10,
+      "image_px": [
+        395.4483337402344,
+        216.07455444335938
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.0,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 10,
+      "image_px": [
+        411.5,
+        215.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 10,
+      "image_px": [
+        427.5,
+        214.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 10,
+      "image_px": [
+        443.5,
+        213.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 10,
+      "image_px": [
+        459.5,
+        213.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 10,
+      "image_px": [
+        476.5,
+        212.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 10,
+      "image_px": [
+        233.53548336029053,
+        223.3262758255005
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.254,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 10,
+      "image_px": [
+        217.36952209472656,
+        224.25575256347656
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        -0.2794,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 10,
+      "image_px": [
+        200.6737241744995,
+        224.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 10,
+      "image_px": [
+        184.25761127471924,
+        225.15151405334473
+      ],
+      "radius_px": 2.051891326904297,
+      "table_xy_m": [
+        -0.3302,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 10,
+      "image_px": [
+        168.0,
+        226.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 10,
+      "image_px": [
+        151.5,
+        226.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 10,
+      "image_px": [
+        134.5,
+        227.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.4064,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 10,
+      "image_px": [
+        118.0,
+        228.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 10,
+      "image_px": [
+        101.11709213256836,
+        229.4313259124756
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.4572,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 10,
+      "image_px": [
+        84.05529022216797,
+        230.13219928741455
+      ],
+      "radius_px": 2.3532840609550476,
+      "table_xy_m": [
+        -0.4826,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 10,
+      "image_px": [
+        67.1289291381836,
+        230.37249755859375
+      ],
+      "radius_px": 2.4786187410354614,
+      "table_xy_m": [
+        -0.508,
+        0.254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 8,
+      "image_px": [
+        267.5,
+        253.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 7,
+      "image_px": [
+        268.5,
+        270.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 6,
+      "image_px": [
+        269.0,
+        286.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 5,
+      "image_px": [
+        270.0,
+        302.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 4,
+      "image_px": [
+        270.44320011138916,
+        318.90888500213623
+      ],
+      "radius_px": 1.9453272223472595,
+      "table_xy_m": [
+        -0.2032,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 3,
+      "image_px": [
+        271.0,
+        335.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 2,
+      "image_px": [
+        272.0,
+        352.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.2032,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 1,
+      "image_px": [
+        272.4483337402344,
+        367.9254455566406
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.2032,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 12,
+      "image_px": [
+        264.5,
+        189.21705532073975
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        -0.2032,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 13,
+      "image_px": [
+        263.74238872528076,
+        173.15151405334473
+      ],
+      "radius_px": 2.051891326904297,
+      "table_xy_m": [
+        -0.2032,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 14,
+      "image_px": [
+        262.91935634613037,
+        157.05658721923828
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.2032,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 15,
+      "image_px": [
+        262.5,
+        141.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 16,
+      "image_px": [
+        262.0,
+        124.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 17,
+      "image_px": [
+        261.0,
+        108.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 18,
+      "image_px": [
+        260.0,
+        92.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.2032,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 19,
+      "image_px": [
+        259.5,
+        76.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2032,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 20,
+      "image_px": [
+        258.5,
+        59.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 21,
+      "image_px": [
+        257.5,
+        43.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2032,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -8,
+      "grid_row": 22,
+      "image_px": [
+        256.9254455566406,
+        27.551658630371094
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.2032,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 9,
+      "image_px": [
+        250.5,
+        238.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2286,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 11,
+      "image_px": [
+        249.33020687103271,
+        206.0847988128662
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.2286,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 11,
+      "image_px": [
+        281.7914733886719,
+        204.5
+      ],
+      "radius_px": 2.4118365049362183,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 9,
+      "image_px": [
+        282.62984466552734,
+        237.0
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 9,
+      "image_px": [
+        299.16278076171875,
+        236.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 11,
+      "image_px": [
+        297.541748046875,
+        204.27597045898438
+      ],
+      "radius_px": 2.5573372840881348,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 9,
+      "image_px": [
+        234.5,
+        239.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.254,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 11,
+      "image_px": [
+        232.7354736328125,
+        206.7486572265625
+      ],
+      "radius_px": 1.9994977116584778,
+      "table_xy_m": [
+        -0.254,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 8,
+      "image_px": [
+        283.5,
+        253.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 8,
+      "image_px": [
+        251.5,
+        255.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2286,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 12,
+      "image_px": [
+        280.9425354003906,
+        188.5452880859375
+      ],
+      "radius_px": 2.3266210556030273,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 12,
+      "image_px": [
+        248.5,
+        189.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2286,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 9,
+      "image_px": [
+        315.83721923828125,
+        235.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.127,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 11,
+      "image_px": [
+        313.5808410644531,
+        203.4191436767578
+      ],
+      "radius_px": 2.628907084465027,
+      "table_xy_m": [
+        -0.127,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 9,
+      "image_px": [
+        217.81347179412842,
+        239.66054248809814
+      ],
+      "radius_px": 2.1005581617355347,
+      "table_xy_m": [
+        -0.2794,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 11,
+      "image_px": [
+        216.2857208251953,
+        207.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2794,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 7,
+      "image_px": [
+        284.5,
+        269.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 7,
+      "image_px": [
+        252.2857208251953,
+        270.71429443359375
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 13,
+      "image_px": [
+        279.9425354003906,
+        172.5452880859375
+      ],
+      "radius_px": 2.3266210556030273,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 13,
+      "image_px": [
+        247.5,
+        173.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2286,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 9,
+      "image_px": [
+        331.5,
+        235.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 11,
+      "image_px": [
+        329.83721923828125,
+        203.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.1016,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 9,
+      "image_px": [
+        201.5,
+        240.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 11,
+      "image_px": [
+        200.2857208251953,
+        208.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 6,
+      "image_px": [
+        285.0,
+        285.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 6,
+      "image_px": [
+        252.7142791748047,
+        287.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 14,
+      "image_px": [
+        279.16278076171875,
+        156.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 14,
+      "image_px": [
+        247.2857208251953,
+        157.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 9,
+      "image_px": [
+        347.5,
+        234.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 11,
+      "image_px": [
+        346.5,
+        201.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 9,
+      "image_px": [
+        185.0512113571167,
+        241.06475448608398
+      ],
+      "radius_px": 2.048799157142639,
+      "table_xy_m": [
+        -0.3302,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 11,
+      "image_px": [
+        183.5,
+        208.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.3302,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 5,
+      "image_px": [
+        285.62984466552734,
+        302.0
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 5,
+      "image_px": [
+        253.5,
+        303.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2286,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 15,
+      "image_px": [
+        278.5,
+        140.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 15,
+      "image_px": [
+        246.5,
+        141.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2286,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 9,
+      "image_px": [
+        364.0,
+        233.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 11,
+      "image_px": [
+        362.5,
+        201.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 9,
+      "image_px": [
+        168.5,
+        242.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 11,
+      "image_px": [
+        167.5,
+        209.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 4,
+      "image_px": [
+        286.5,
+        318.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 4,
+      "image_px": [
+        254.2857208251953,
+        319.71429443359375
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 16,
+      "image_px": [
+        278.0,
+        124.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 16,
+      "image_px": [
+        245.5,
+        125.0
+      ],
+      "radius_px": 2.1573066115379333,
+      "table_xy_m": [
+        -0.2286,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 9,
+      "image_px": [
+        380.0,
+        232.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.0254,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 11,
+      "image_px": [
+        378.28570556640625,
+        200.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0254,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 9,
+      "image_px": [
+        152.15494060516357,
+        242.98470211029053
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.381,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 11,
+      "image_px": [
+        150.74226188659668,
+        210.25773811340332
+      ],
+      "radius_px": 2.0555501580238342,
+      "table_xy_m": [
+        -0.381,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 3,
+      "image_px": [
+        287.5,
+        334.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 3,
+      "image_px": [
+        254.61268615722656,
+        336.2708435058594
+      ],
+      "radius_px": 1.9916899800300598,
+      "table_xy_m": [
+        -0.2286,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 17,
+      "image_px": [
+        277.5,
+        107.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 17,
+      "image_px": [
+        244.55679988861084,
+        108.90888500213623
+      ],
+      "radius_px": 1.9453272223472595,
+      "table_xy_m": [
+        -0.2286,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 9,
+      "image_px": [
+        396.0745544433594,
+        232.55166625976562
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.0,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 11,
+      "image_px": [
+        394.4483337402344,
+        200.07455444335938
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.0,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 9,
+      "image_px": [
+        135.01529788970947,
+        243.84505939483643
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.4064,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 11,
+      "image_px": [
+        134.0870065689087,
+        211.26024913787842
+      ],
+      "radius_px": 2.141613006591797,
+      "table_xy_m": [
+        -0.4064,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 2,
+      "image_px": [
+        288.0,
+        351.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 2,
+      "image_px": [
+        255.5,
+        352.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2286,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 18,
+      "image_px": [
+        276.5,
+        91.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 18,
+      "image_px": [
+        243.7142791748047,
+        92.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 9,
+      "image_px": [
+        412.5,
+        231.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 11,
+      "image_px": [
+        410.8666887283325,
+        199.03827571868896
+      ],
+      "radius_px": 2.0785731077194214,
+      "table_xy_m": [
+        0.0254,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 9,
+      "image_px": [
+        118.91299295425415,
+        244.73975086212158
+      ],
+      "radius_px": 2.141613006591797,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 11,
+      "image_px": [
+        117.5,
+        211.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 1,
+      "image_px": [
+        288.71429443359375,
+        367.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 1,
+      "image_px": [
+        255.74424743652344,
+        368.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        -0.2286,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 19,
+      "image_px": [
+        275.5,
+        75.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 19,
+      "image_px": [
+        243.0,
+        76.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2286,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 9,
+      "image_px": [
+        428.5,
+        230.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 11,
+      "image_px": [
+        426.6737241744995,
+        198.46451663970947
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        0.0508,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 9,
+      "image_px": [
+        101.5,
+        245.5
+      ],
+      "radius_px": 2.0645728707313538,
+      "table_xy_m": [
+        -0.4572,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 11,
+      "image_px": [
+        100.1065902709961,
+        212.89340209960938
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.4572,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 20,
+      "image_px": [
+        274.5755615234375,
+        59.06059265136719
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 20,
+      "image_px": [
+        242.2857208251953,
+        60.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 9,
+      "image_px": [
+        444.5,
+        229.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 11,
+      "image_px": [
+        443.0,
+        197.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 9,
+      "image_px": [
+        85.0,
+        246.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.4826,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 11,
+      "image_px": [
+        83.5,
+        213.5
+      ],
+      "radius_px": 2.915475845336914,
+      "table_xy_m": [
+        -0.4826,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 21,
+      "image_px": [
+        273.5755615234375,
+        42.93940734863281
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 9,
+      "image_px": [
+        460.71429443359375,
+        229.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 11,
+      "image_px": [
+        459.28570556640625,
+        196.7142791748047
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 9,
+      "image_px": [
+        68.53548336029053,
+        246.6737241744995
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.508,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 11,
+      "image_px": [
+        66.91935634613037,
+        214.05658721923828
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.508,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 22,
+      "image_px": [
+        273.1065979003906,
+        26.106590270996094
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.17779999999999999,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 11,
+      "image_px": [
+        475.5,
+        196.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 8,
+      "image_px": [
+        300.5,
+        252.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 12,
+      "image_px": [
+        297.0,
+        187.5
+      ],
+      "radius_px": 2.5693167448043823,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 8,
+      "image_px": [
+        234.92544555664062,
+        255.55166625976562
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.254,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 12,
+      "image_px": [
+        232.0,
+        190.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.254,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 8,
+      "image_px": [
+        316.5,
+        251.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.127,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 12,
+      "image_px": [
+        313.0,
+        187.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.127,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 8,
+      "image_px": [
+        218.5,
+        256.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.2794,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 7,
+      "image_px": [
+        300.5,
+        268.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 7,
+      "image_px": [
+        235.7142791748047,
+        271.71429443359375
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.254,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 13,
+      "image_px": [
+        296.4191589355469,
+        171.5808563232422
+      ],
+      "radius_px": 2.628907084465027,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 13,
+      "image_px": [
+        231.5,
+        174.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.254,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 8,
+      "image_px": [
+        332.5,
+        251.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 12,
+      "image_px": [
+        329.0,
+        186.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 8,
+      "image_px": [
+        202.5,
+        257.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 12,
+      "image_px": [
+        199.2857208251953,
+        192.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 6,
+      "image_px": [
+        301.5755615234375,
+        284.9394226074219
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 6,
+      "image_px": [
+        236.5,
+        288.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.254,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 14,
+      "image_px": [
+        295.5,
+        155.5
+      ],
+      "radius_px": 2.5495097637176514,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 14,
+      "image_px": [
+        230.5,
+        158.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.254,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 8,
+      "image_px": [
+        348.5,
+        250.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 12,
+      "image_px": [
+        345.5,
+        185.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 8,
+      "image_px": [
+        185.5,
+        257.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 12,
+      "image_px": [
+        182.88290786743164,
+        192.5686740875244
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.3302,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 5,
+      "image_px": [
+        302.5,
+        301.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 5,
+      "image_px": [
+        237.2857208251953,
+        304.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.254,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 15,
+      "image_px": [
+        295.0,
+        139.8372344970703
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 15,
+      "image_px": [
+        229.7354736328125,
+        142.2513427734375
+      ],
+      "radius_px": 1.9994977116584778,
+      "table_xy_m": [
+        -0.254,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 8,
+      "image_px": [
+        365.0,
+        249.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 12,
+      "image_px": [
+        361.5,
+        185.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 8,
+      "image_px": [
+        169.3262758255005,
+        258.5354833602905
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 12,
+      "image_px": [
+        166.5,
+        193.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 4,
+      "image_px": [
+        303.2085266113281,
+        317.5
+      ],
+      "radius_px": 2.4118365049362183,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 4,
+      "image_px": [
+        238.0,
+        320.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.254,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 16,
+      "image_px": [
+        294.0,
+        123.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 16,
+      "image_px": [
+        229.0,
+        126.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.254,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 8,
+      "image_px": [
+        381.2557373046875,
+        248.63047790527344
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        -0.0254,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 12,
+      "image_px": [
+        377.71429443359375,
+        184.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0254,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 8,
+      "image_px": [
+        152.5,
+        259.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 12,
+      "image_px": [
+        150.0,
+        194.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.381,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 3,
+      "image_px": [
+        303.5755615234375,
+        333.9394226074219
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 3,
+      "image_px": [
+        238.5,
+        337.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.254,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 17,
+      "image_px": [
+        293.5,
+        107.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 17,
+      "image_px": [
+        228.5,
+        109.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.254,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 8,
+      "image_px": [
+        396.71429443359375,
+        248.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 12,
+      "image_px": [
+        393.71429443359375,
+        183.7142791748047
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 8,
+      "image_px": [
+        135.82384157180786,
+        260.2037000656128
+      ],
+      "radius_px": 2.103444516658783,
+      "table_xy_m": [
+        -0.4064,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 12,
+      "image_px": [
+        133.35215282440186,
+        195.0
+      ],
+      "radius_px": 2.209982991218567,
+      "table_xy_m": [
+        -0.4064,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 2,
+      "image_px": [
+        304.4483337402344,
+        349.9254455566406
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 2,
+      "image_px": [
+        239.0,
+        353.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.254,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 18,
+      "image_px": [
+        292.5,
+        91.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 18,
+      "image_px": [
+        227.5,
+        93.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.254,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 8,
+      "image_px": [
+        413.28570556640625,
+        247.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0254,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 12,
+      "image_px": [
+        410.0,
+        183.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        0.0254,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 8,
+      "image_px": [
+        119.24732398986816,
+        261.0652914047241
+      ],
+      "radius_px": 2.268030285835266,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 12,
+      "image_px": [
+        116.67372417449951,
+        195.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 1,
+      "image_px": [
+        305.0,
+        366.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -7,
+      "grid_row": 0,
+      "image_px": [
+        289.5,
+        384.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.17779999999999999,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 1,
+      "image_px": [
+        239.89340209960938,
+        370.1065979003906
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.254,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": 0,
+      "image_px": [
+        256.71429443359375,
+        385.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.2286,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 19,
+      "image_px": [
+        291.5,
+        75.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 19,
+      "image_px": [
+        226.60649347305298,
+        77.2059440612793
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.254,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 8,
+      "image_px": [
+        429.5,
+        246.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 12,
+      "image_px": [
+        426.0,
+        182.37015533447266
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        0.0508,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 8,
+      "image_px": [
+        102.56867408752441,
+        261.88290786743164
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.4572,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 12,
+      "image_px": [
+        100.0,
+        196.0
+      ],
+      "radius_px": 2.049127697944641,
+      "table_xy_m": [
+        -0.4572,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 20,
+      "image_px": [
+        291.0,
+        58.16276550292969
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 20,
+      "image_px": [
+        226.0,
+        61.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.254,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 8,
+      "image_px": [
+        445.5,
+        245.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 12,
+      "image_px": [
+        442.5,
+        181.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 8,
+      "image_px": [
+        86.28884887695312,
+        262.5
+      ],
+      "radius_px": 3.0547326803207397,
+      "table_xy_m": [
+        -0.4826,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 12,
+      "image_px": [
+        83.0,
+        197.18576526641846
+      ],
+      "radius_px": 2.0792888402938843,
+      "table_xy_m": [
+        -0.4826,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 21,
+      "image_px": [
+        290.0,
+        42.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 8,
+      "image_px": [
+        461.5,
+        245.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        0.1016,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 12,
+      "image_px": [
+        458.28570556640625,
+        180.7142791748047
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 9,
+      "image_px": [
+        51.5,
+        247.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.2286
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 8,
+      "image_px": [
+        68.58084869384766,
+        263.4191589355469
+      ],
+      "radius_px": 2.628907084465027,
+      "table_xy_m": [
+        -0.508,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 11,
+      "image_px": [
+        50.5,
+        214.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.2794
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 12,
+      "image_px": [
+        65.71115112304688,
+        197.5
+      ],
+      "radius_px": 3.0547326803207397,
+      "table_xy_m": [
+        -0.508,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 22,
+      "image_px": [
+        289.0,
+        26.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.15239999999999998,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 12,
+      "image_px": [
+        475.0745544433594,
+        179.44833374023438
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.127,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 7,
+      "image_px": [
+        317.0,
+        268.0
+      ],
+      "radius_px": 2.0000998973846436,
+      "table_xy_m": [
+        -0.127,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 13,
+      "image_px": [
+        312.2838439941406,
+        171.0
+      ],
+      "radius_px": 2.412722110748291,
+      "table_xy_m": [
+        -0.127,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 7,
+      "image_px": [
+        219.0,
+        272.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2794,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 13,
+      "image_px": [
+        215.0,
+        175.0
+      ],
+      "radius_px": 1.414313554763794,
+      "table_xy_m": [
+        -0.2794,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 7,
+      "image_px": [
+        333.5,
+        267.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.1016,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 13,
+      "image_px": [
+        328.16278076171875,
+        170.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.1016,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 7,
+      "image_px": [
+        202.9394073486328,
+        273.4244384765625
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 13,
+      "image_px": [
+        199.25575256347656,
+        175.63047790527344
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 6,
+      "image_px": [
+        317.5,
+        284.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.127,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 6,
+      "image_px": [
+        220.07455444335938,
+        288.5516662597656
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.2794,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 14,
+      "image_px": [
+        311.62750244140625,
+        155.12893676757812
+      ],
+      "radius_px": 2.4786187410354614,
+      "table_xy_m": [
+        -0.127,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 14,
+      "image_px": [
+        213.74424743652344,
+        158.63047790527344
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        -0.2794,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 7,
+      "image_px": [
+        349.5,
+        266.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 13,
+      "image_px": [
+        344.5,
+        169.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 7,
+      "image_px": [
+        186.5,
+        273.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 13,
+      "image_px": [
+        182.3262758255005,
+        176.46451663970947
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.3302,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 5,
+      "image_px": [
+        318.5,
+        300.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.127,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 5,
+      "image_px": [
+        220.5,
+        305.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.2794,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 15,
+      "image_px": [
+        311.0,
+        139.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.127,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 15,
+      "image_px": [
+        213.5,
+        142.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2794,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 7,
+      "image_px": [
+        365.5,
+        266.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 13,
+      "image_px": [
+        361.0,
+        168.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 7,
+      "image_px": [
+        170.05658721923828,
+        274.91935682296753
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 13,
+      "image_px": [
+        165.89405822753906,
+        177.10594177246094
+      ],
+      "radius_px": 2.154065251350403,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 4,
+      "image_px": [
+        319.0,
+        316.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.127,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 4,
+      "image_px": [
+        221.0,
+        321.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.2794,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 16,
+      "image_px": [
+        310.0,
+        123.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.127,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 16,
+      "image_px": [
+        212.5,
+        126.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2794,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 7,
+      "image_px": [
+        381.5,
+        265.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0254,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 13,
+      "image_px": [
+        376.71429443359375,
+        168.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0254,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 7,
+      "image_px": [
+        153.5,
+        275.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 13,
+      "image_px": [
+        149.5,
+        177.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 3,
+      "image_px": [
+        320.0,
+        333.0
+      ],
+      "radius_px": 2.1610140800476074,
+      "table_xy_m": [
+        -0.127,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 3,
+      "image_px": [
+        222.25575256347656,
+        337.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        -0.2794,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 17,
+      "image_px": [
+        309.5,
+        106.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.127,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 17,
+      "image_px": [
+        211.85591411590576,
+        110.11264705657959
+      ],
+      "radius_px": 2.075442910194397,
+      "table_xy_m": [
+        -0.2794,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 7,
+      "image_px": [
+        397.5,
+        264.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 13,
+      "image_px": [
+        392.6304626464844,
+        168.25575256347656
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.0,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 7,
+      "image_px": [
+        136.5,
+        277.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.4064,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 13,
+      "image_px": [
+        132.5,
+        178.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.4064,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 2,
+      "image_px": [
+        321.2425537109375,
+        349.5
+      ],
+      "radius_px": 2.732399344444275,
+      "table_xy_m": [
+        -0.127,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 2,
+      "image_px": [
+        222.5,
+        354.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2794,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 18,
+      "image_px": [
+        309.0,
+        90.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.127,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 18,
+      "image_px": [
+        211.5,
+        94.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2794,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 7,
+      "image_px": [
+        413.88909912109375,
+        263.4444274902344
+      ],
+      "radius_px": 1.8604761362075806,
+      "table_xy_m": [
+        0.0254,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 13,
+      "image_px": [
+        408.9330906867981,
+        166.894757270813
+      ],
+      "radius_px": 2.043875753879547,
+      "table_xy_m": [
+        0.0254,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 7,
+      "image_px": [
+        120.09669399261475,
+        277.5
+      ],
+      "radius_px": 2.328827977180481,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 13,
+      "image_px": [
+        116.0,
+        179.18576526641846
+      ],
+      "radius_px": 2.0792888402938843,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 1,
+      "image_px": [
+        321.5,
+        365.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.127,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -6,
+      "grid_row": 0,
+      "image_px": [
+        305.71429443359375,
+        383.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.15239999999999998,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 1,
+      "image_px": [
+        223.1930694580078,
+        370.7235107421875
+      ],
+      "radius_px": 1.9311373233795166,
+      "table_xy_m": [
+        -0.2794,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": 0,
+      "image_px": [
+        240.0,
+        386.5
+      ],
+      "radius_px": 2.5693167448043823,
+      "table_xy_m": [
+        -0.254,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -9,
+      "grid_row": -1,
+      "image_px": [
+        257.6126708984375,
+        402.2708435058594
+      ],
+      "radius_px": 1.9916898012161255,
+      "table_xy_m": [
+        -0.2286,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 19,
+      "image_px": [
+        307.83721923828125,
+        74.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.127,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 19,
+      "image_px": [
+        210.5,
+        78.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.2794,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 7,
+      "image_px": [
+        430.0152978897095,
+        262.8450593948364
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        0.0508,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 13,
+      "image_px": [
+        425.28570556640625,
+        166.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0508,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 7,
+      "image_px": [
+        103.11709213256836,
+        278.4313259124756
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.4572,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 13,
+      "image_px": [
+        99.0,
+        180.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.4572,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 20,
+      "image_px": [
+        307.16278076171875,
+        58.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.127,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 20,
+      "image_px": [
+        209.5,
+        61.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.2794,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 7,
+      "image_px": [
+        446.5,
+        262.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 13,
+      "image_px": [
+        441.5,
+        165.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 7,
+      "image_px": [
+        85.94341278076172,
+        279.08064365386963
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.4826,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 13,
+      "image_px": [
+        82.5,
+        180.5
+      ],
+      "radius_px": 2.915475845336914,
+      "table_xy_m": [
+        -0.4826,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 21,
+      "image_px": [
+        306.5,
+        41.5
+      ],
+      "radius_px": 2.5495097637176514,
+      "table_xy_m": [
+        -0.127,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 8,
+      "image_px": [
+        478.0,
+        244.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 7,
+      "image_px": [
+        462.5,
+        261.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.1016,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 13,
+      "image_px": [
+        457.5,
+        165.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 8,
+      "image_px": [
+        52.5,
+        264.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.2032
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 7,
+      "image_px": [
+        69.08558654785156,
+        279.6100158691406
+      ],
+      "radius_px": 2.9425110816955566,
+      "table_xy_m": [
+        -0.508,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 12,
+      "image_px": [
+        49.71428680419922,
+        198.2857208251953
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.5334,
+        0.30479999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 13,
+      "image_px": [
+        65.42304229736328,
+        181.09156799316406
+      ],
+      "radius_px": 2.6566684246063232,
+      "table_xy_m": [
+        -0.508,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 22,
+      "image_px": [
+        305.67431640625,
+        24.99945831298828
+      ],
+      "radius_px": 2.877394437789917,
+      "table_xy_m": [
+        -0.127,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 13,
+      "image_px": [
+        474.0,
+        163.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 6,
+      "image_px": [
+        334.0,
+        283.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.1016,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 14,
+      "image_px": [
+        327.16278076171875,
+        154.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.1016,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 6,
+      "image_px": [
+        203.5,
+        289.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 14,
+      "image_px": [
+        198.0,
+        159.62984466552734
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 6,
+      "image_px": [
+        350.0,
+        282.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 14,
+      "image_px": [
+        344.0,
+        153.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 6,
+      "image_px": [
+        186.57554626464844,
+        290.0605773925781
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.3302,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 14,
+      "image_px": [
+        181.39350700378418,
+        159.7940559387207
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.3302,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 5,
+      "image_px": [
+        334.5,
+        299.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.1016,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 5,
+      "image_px": [
+        203.93007278442383,
+        306.0
+      ],
+      "radius_px": 2.0983067750930786,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 15,
+      "image_px": [
+        327.0,
+        138.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.1016,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 15,
+      "image_px": [
+        197.11709213256836,
+        143.5686740875244
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 6,
+      "image_px": [
+        366.5,
+        282.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.0508,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 14,
+      "image_px": [
+        360.3695373535156,
+        153.25575256347656
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        -0.0508,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 6,
+      "image_px": [
+        170.5,
+        291.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 14,
+      "image_px": [
+        165.05658721923828,
+        160.91935634613037
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 4,
+      "image_px": [
+        335.16278076171875,
+        316.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.1016,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 4,
+      "image_px": [
+        204.5,
+        322.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 16,
+      "image_px": [
+        326.16278076171875,
+        122.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.1016,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 16,
+      "image_px": [
+        196.3262758255005,
+        127.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 6,
+      "image_px": [
+        382.4483337402344,
+        280.9254455566406
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.0254,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 14,
+      "image_px": [
+        375.7442626953125,
+        152.36952209472656
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        -0.0254,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 6,
+      "image_px": [
+        154.05658721923828,
+        291.91935634613037
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.381,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 14,
+      "image_px": [
+        148.5,
+        161.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 3,
+      "image_px": [
+        336.0,
+        332.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.1016,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 3,
+      "image_px": [
+        205.5,
+        339.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 17,
+      "image_px": [
+        325.5,
+        106.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 17,
+      "image_px": [
+        195.5,
+        111.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 6,
+      "image_px": [
+        398.5,
+        280.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 14,
+      "image_px": [
+        391.9254455566406,
+        151.55166625976562
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.0,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 6,
+      "image_px": [
+        137.01529788970947,
+        293.1549406051636
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.4064,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 14,
+      "image_px": [
+        131.5,
+        162.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.4064,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 2,
+      "image_px": [
+        337.0745544433594,
+        348.5516662597656
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.1016,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 2,
+      "image_px": [
+        206.11709213256836,
+        355.4313259124756
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 18,
+      "image_px": [
+        324.5,
+        90.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 18,
+      "image_px": [
+        195.0,
+        95.0
+      ],
+      "radius_px": 2.049127697944641,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 6,
+      "image_px": [
+        414.5,
+        279.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 14,
+      "image_px": [
+        408.5,
+        150.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 6,
+      "image_px": [
+        120.64784717559814,
+        294.0
+      ],
+      "radius_px": 2.209982991218567,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 14,
+      "image_px": [
+        115.53548336029053,
+        162.6737241744995
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 1,
+      "image_px": [
+        337.4483337402344,
+        364.9254455566406
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.1016,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -5,
+      "grid_row": 0,
+      "image_px": [
+        321.7442626953125,
+        382.3695373535156
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        -0.127,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 1,
+      "image_px": [
+        206.79132080078125,
+        371.8792676925659
+      ],
+      "radius_px": 2.1254278421401978,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": 0,
+      "image_px": [
+        223.5,
+        387.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2794,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -10,
+      "grid_row": -1,
+      "image_px": [
+        241.0,
+        403.5
+      ],
+      "radius_px": 2.5693167448043823,
+      "table_xy_m": [
+        -0.254,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 19,
+      "image_px": [
+        324.0,
+        73.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.1016,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 19,
+      "image_px": [
+        193.9152011871338,
+        78.33020687103271
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 6,
+      "image_px": [
+        430.9434127807617,
+        278.91935634613037
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        0.0508,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 14,
+      "image_px": [
+        424.5,
+        150.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 6,
+      "image_px": [
+        103.91935634613037,
+        295.0565872192383
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.4572,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 14,
+      "image_px": [
+        98.1289291381836,
+        163.62750244140625
+      ],
+      "radius_px": 2.4786187410354614,
+      "table_xy_m": [
+        -0.4572,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 20,
+      "image_px": [
+        323.1065979003906,
+        57.106590270996094
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.1016,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 20,
+      "image_px": [
+        193.56345462799072,
+        62.385802268981934
+      ],
+      "radius_px": 2.8066275119781494,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 6,
+      "image_px": [
+        447.28570556640625,
+        278.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 14,
+      "image_px": [
+        440.5,
+        149.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 6,
+      "image_px": [
+        86.67372417449951,
+        295.5354833602905
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.4826,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 14,
+      "image_px": [
+        81.88735294342041,
+        164.14408588409424
+      ],
+      "radius_px": 2.075442910194397,
+      "table_xy_m": [
+        -0.4826,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 21,
+      "image_px": [
+        322.1289367675781,
+        41.372501373291016
+      ],
+      "radius_px": 2.4786187410354614,
+      "table_xy_m": [
+        -0.1016,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 7,
+      "image_px": [
+        479.0,
+        260.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 6,
+      "image_px": [
+        463.28570556640625,
+        277.71429443359375
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 14,
+      "image_px": [
+        457.0,
+        148.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 7,
+      "image_px": [
+        53.0,
+        280.62984466552734
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.5334,
+        0.17779999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 6,
+      "image_px": [
+        70.0,
+        296.37015533447266
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.508,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 13,
+      "image_px": [
+        49.370155334472656,
+        182.0
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.5334,
+        0.3302
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 14,
+      "image_px": [
+        65.0,
+        165.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        -0.508,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 22,
+      "image_px": [
+        321.5808410644531,
+        24.58085060119629
+      ],
+      "radius_px": 2.628907084465027,
+      "table_xy_m": [
+        -0.1016,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 14,
+      "image_px": [
+        473.0,
+        147.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 5,
+      "image_px": [
+        351.17923164367676,
+        298.94245624542236
+      ],
+      "radius_px": 2.1085328459739685,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 15,
+      "image_px": [
+        343.5,
+        137.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 5,
+      "image_px": [
+        187.5,
+        306.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 15,
+      "image_px": [
+        180.5,
+        144.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.3302,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 5,
+      "image_px": [
+        367.28570556640625,
+        298.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0508,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 15,
+      "image_px": [
+        359.5,
+        136.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 5,
+      "image_px": [
+        171.0847988128662,
+        307.6697931289673
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 15,
+      "image_px": [
+        164.5,
+        144.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 4,
+      "image_px": [
+        351.5,
+        315.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 4,
+      "image_px": [
+        188.09111499786377,
+        323.44320011138916
+      ],
+      "radius_px": 1.9453272223472595,
+      "table_xy_m": [
+        -0.3302,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 16,
+      "image_px": [
+        342.5,
+        121.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 16,
+      "image_px": [
+        179.5,
+        127.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 5,
+      "image_px": [
+        383.28570556640625,
+        297.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0254,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 15,
+      "image_px": [
+        375.4483337402344,
+        135.92544555664062
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.0254,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 5,
+      "image_px": [
+        154.5,
+        308.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 15,
+      "image_px": [
+        147.57554626464844,
+        145.0605926513672
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.381,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 3,
+      "image_px": [
+        352.5,
+        331.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 3,
+      "image_px": [
+        188.5,
+        339.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 17,
+      "image_px": [
+        341.5,
+        105.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 17,
+      "image_px": [
+        179.0605926513672,
+        111.42444610595703
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.3302,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 5,
+      "image_px": [
+        398.7442626953125,
+        296.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.0,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 15,
+      "image_px": [
+        391.5,
+        135.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 5,
+      "image_px": [
+        137.5,
+        309.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.4064,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 15,
+      "image_px": [
+        131.03191471099854,
+        145.96808528900146
+      ],
+      "radius_px": 2.0996113419532776,
+      "table_xy_m": [
+        -0.4064,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 2,
+      "image_px": [
+        353.0,
+        348.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 2,
+      "image_px": [
+        189.16863441467285,
+        356.4473648071289
+      ],
+      "radius_px": 2.0866059064865112,
+      "table_xy_m": [
+        -0.3302,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 18,
+      "image_px": [
+        341.1065979003906,
+        89.1065902709961
+      ],
+      "radius_px": 2.1591535806655884,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 18,
+      "image_px": [
+        178.1627655029297,
+        95.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.3302,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 5,
+      "image_px": [
+        415.6697931289673,
+        296.0847988128662
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        0.0254,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 15,
+      "image_px": [
+        407.5,
+        134.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 5,
+      "image_px": [
+        121.07402801513672,
+        310.65761375427246
+      ],
+      "radius_px": 2.2339645624160767,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 15,
+      "image_px": [
+        114.5,
+        146.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -4,
+      "grid_row": 0,
+      "image_px": [
+        338.5,
+        381.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.1016,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 1,
+      "image_px": [
+        189.5,
+        372.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 0,
+      "image_px": [
+        207.0605926513672,
+        388.5755615234375
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.30479999999999996,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -11,
+      "grid_row": -1,
+      "image_px": [
+        224.5,
+        404.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.2794,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 19,
+      "image_px": [
+        340.4244384765625,
+        72.93940734863281
+      ],
+      "radius_px": 1.8491065502166748,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 19,
+      "image_px": [
+        177.5,
+        78.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 5,
+      "image_px": [
+        431.88290786743164,
+        295.4313259124756
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        0.0508,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 15,
+      "image_px": [
+        424.2557373046875,
+        134.36952209472656
+      ],
+      "radius_px": 2.1848626732826233,
+      "table_xy_m": [
+        0.0508,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 5,
+      "image_px": [
+        104.32627582550049,
+        311.5354833602905
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.4572,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 15,
+      "image_px": [
+        97.66979312896729,
+        147.0847988128662
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.4572,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 20,
+      "image_px": [
+        339.5,
+        56.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 20,
+      "image_px": [
+        176.5,
+        62.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": 21,
+      "image_px": [
+        192.0,
+        45.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.30479999999999996,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 5,
+      "image_px": [
+        448.21705532073975,
+        294.5
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 5,
+      "image_px": [
+        87.26628971099854,
+        312.35435009002686
+      ],
+      "radius_px": 2.067337155342102,
+      "table_xy_m": [
+        -0.4826,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 15,
+      "image_px": [
+        80.85591411590576,
+        147.8873529434204
+      ],
+      "radius_px": 2.075442910194397,
+      "table_xy_m": [
+        -0.4826,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 21,
+      "image_px": [
+        339.0,
+        40.0
+      ],
+      "radius_px": 2.2360680103302,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 5,
+      "image_px": [
+        464.5,
+        294.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 15,
+      "image_px": [
+        456.0,
+        132.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 6,
+      "image_px": [
+        53.5,
+        297.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.15239999999999998
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 5,
+      "image_px": [
+        70.5,
+        312.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.508,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 14,
+      "image_px": [
+        48.5,
+        165.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.35559999999999997
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 15,
+      "image_px": [
+        63.94246292114258,
+        148.12734985351562
+      ],
+      "radius_px": 3.1103456020355225,
+      "table_xy_m": [
+        -0.508,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 22,
+      "image_px": [
+        338.2822208404541,
+        24.2822208404541
+      ],
+      "radius_px": 2.001457989215851,
+      "table_xy_m": [
+        -0.07619999999999999,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 15,
+      "image_px": [
+        472.5,
+        131.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 4,
+      "image_px": [
+        367.5,
+        314.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 16,
+      "image_px": [
+        358.5,
+        121.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0508,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 4,
+      "image_px": [
+        171.6737241744995,
+        324.4645166397095
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 16,
+      "image_px": [
+        163.5,
+        128.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 4,
+      "image_px": [
+        384.0,
+        313.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0254,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 16,
+      "image_px": [
+        374.5,
+        120.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0254,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 4,
+      "image_px": [
+        155.11709213256836,
+        324.5686740875244
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.381,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 16,
+      "image_px": [
+        147.11709213256836,
+        128.5686740875244
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.381,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 3,
+      "image_px": [
+        368.5526351928711,
+        330.83136558532715
+      ],
+      "radius_px": 2.0866059064865112,
+      "table_xy_m": [
+        -0.0508,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 3,
+      "image_px": [
+        172.16863441467285,
+        340.5526351928711
+      ],
+      "radius_px": 2.0866059064865112,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 17,
+      "image_px": [
+        357.5,
+        104.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 17,
+      "image_px": [
+        162.5,
+        111.78294467926025
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 4,
+      "image_px": [
+        400.2758483886719,
+        313.1405944824219
+      ],
+      "radius_px": 1.9949343800544739,
+      "table_xy_m": [
+        0.0,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 16,
+      "image_px": [
+        390.71429443359375,
+        119.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 4,
+      "image_px": [
+        138.3262758255005,
+        326.4645166397095
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.4064,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 16,
+      "image_px": [
+        130.3262758255005,
+        129.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.4064,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 2,
+      "image_px": [
+        369.5,
+        347.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 2,
+      "image_px": [
+        173.0,
+        357.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 18,
+      "image_px": [
+        357.5,
+        88.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 18,
+      "image_px": [
+        161.79405641555786,
+        95.60649299621582
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 4,
+      "image_px": [
+        416.5,
+        312.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 16,
+      "image_px": [
+        406.7940559387207,
+        118.60649347305298
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        0.0254,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 4,
+      "image_px": [
+        121.84695243835449,
+        326.8615708351135
+      ],
+      "radius_px": 2.2017544507980347,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 16,
+      "image_px": [
+        113.7940559387207,
+        130.39350700378418
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -3,
+      "grid_row": 0,
+      "image_px": [
+        355.0,
+        380.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.07619999999999999,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 1,
+      "image_px": [
+        173.0862331390381,
+        374.2178544998169
+      ],
+      "radius_px": 2.1605963706970215,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 0,
+      "image_px": [
+        190.5,
+        389.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.3302,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -12,
+      "grid_row": -1,
+      "image_px": [
+        207.5,
+        405.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.30479999999999996,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 19,
+      "image_px": [
+        356.5,
+        72.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 19,
+      "image_px": [
+        161.11709213256836,
+        79.43132591247559
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 4,
+      "image_px": [
+        432.88290786743164,
+        311.5686740875244
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        0.0508,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 16,
+      "image_px": [
+        422.71429443359375,
+        117.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0508,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 4,
+      "image_px": [
+        104.98470211029053,
+        328.1549406051636
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.4572,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 16,
+      "image_px": [
+        97.05658721923828,
+        130.91935634613037
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.4572,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 20,
+      "image_px": [
+        355.5,
+        56.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.0508,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 20,
+      "image_px": [
+        160.06570434570312,
+        63.23167610168457
+      ],
+      "radius_px": 2.037820339202881,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": 21,
+      "image_px": [
+        175.5,
+        46.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.3302,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 4,
+      "image_px": [
+        449.2059440612793,
+        310.606493473053
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 4,
+      "image_px": [
+        88.07257556915283,
+        328.92742443084717
+      ],
+      "radius_px": 2.237592339515686,
+      "table_xy_m": [
+        -0.4826,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 16,
+      "image_px": [
+        80.5,
+        131.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.4826,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 21,
+      "image_px": [
+        355.053129196167,
+        40.0
+      ],
+      "radius_px": 2.1642202138900757,
+      "table_xy_m": [
+        -0.0508,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 5,
+      "image_px": [
+        480.5,
+        293.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 4,
+      "image_px": [
+        465.28570556640625,
+        310.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 16,
+      "image_px": [
+        454.7442626953125,
+        116.3695297241211
+      ],
+      "radius_px": 2.18486350774765,
+      "table_xy_m": [
+        0.1016,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 5,
+      "image_px": [
+        54.247971534729004,
+        313.67359924316406
+      ],
+      "radius_px": 2.1257025003433228,
+      "table_xy_m": [
+        -0.5334,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 4,
+      "image_px": [
+        70.65176391601562,
+        329.3482360839844
+      ],
+      "radius_px": 3.9215426445007324,
+      "table_xy_m": [
+        -0.508,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 15,
+      "image_px": [
+        48.381160736083984,
+        149.1533660888672
+      ],
+      "radius_px": 2.394564926624298,
+      "table_xy_m": [
+        -0.5334,
+        0.381
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 16,
+      "image_px": [
+        63.669793128967285,
+        131.9152011871338
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        -0.508,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 22,
+      "image_px": [
+        354.5,
+        23.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0508,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 16,
+      "image_px": [
+        471.5516662597656,
+        114.9254379272461
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.127,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 3,
+      "image_px": [
+        384.4483337402344,
+        329.9254455566406
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        -0.0254,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 17,
+      "image_px": [
+        373.878080368042,
+        103.81528663635254
+      ],
+      "radius_px": 2.096242368221283,
+      "table_xy_m": [
+        -0.0254,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 3,
+      "image_px": [
+        155.5,
+        341.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 17,
+      "image_px": [
+        146.2059440612793,
+        112.39350700378418
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.381,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 3,
+      "image_px": [
+        401.0745544433594,
+        329.4483337402344
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.0,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 17,
+      "image_px": [
+        389.71429443359375,
+        103.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 3,
+      "image_px": [
+        138.97619533538818,
+        342.74595737457275
+      ],
+      "radius_px": 2.162963390350342,
+      "table_xy_m": [
+        -0.4064,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 17,
+      "image_px": [
+        129.5,
+        113.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.4064,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 2,
+      "image_px": [
+        385.5,
+        346.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0254,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 1,
+      "image_px": [
+        370.16278076171875,
+        363.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.0508,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 2,
+      "image_px": [
+        156.5,
+        358.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.381,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 18,
+      "image_px": [
+        373.28570556640625,
+        87.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.0254,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 18,
+      "image_px": [
+        145.5,
+        96.21705532073975
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        -0.381,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 3,
+      "image_px": [
+        417.5,
+        328.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 17,
+      "image_px": [
+        406.3262758255005,
+        102.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        0.0254,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 3,
+      "image_px": [
+        122.2059440612793,
+        343.6064929962158
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 17,
+      "image_px": [
+        112.87031650543213,
+        113.91000080108643
+      ],
+      "radius_px": 2.0470784306526184,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -2,
+      "grid_row": 0,
+      "image_px": [
+        371.5,
+        380.0
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.0508,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 1,
+      "image_px": [
+        156.89405822753906,
+        374.89405822753906
+      ],
+      "radius_px": 2.154065251350403,
+      "table_xy_m": [
+        -0.381,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 0,
+      "image_px": [
+        174.0,
+        390.8357152938843
+      ],
+      "radius_px": 2.3084479570388794,
+      "table_xy_m": [
+        -0.35559999999999997,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -13,
+      "grid_row": -1,
+      "image_px": [
+        190.94341278076172,
+        406.08064365386963
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.3302,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 19,
+      "image_px": [
+        372.0,
+        71.5
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0254,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 19,
+      "image_px": [
+        144.5,
+        79.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.381,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 3,
+      "image_px": [
+        433.9152011871338,
+        328.3302068710327
+      ],
+      "radius_px": 2.0010509490966797,
+      "table_xy_m": [
+        0.0508,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 16,
+      "image_px": [
+        439.4483337402344,
+        117.0745620727539
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 17,
+      "image_px": [
+        421.7442626953125,
+        101.6304702758789
+      ],
+      "radius_px": 2.18486350774765,
+      "table_xy_m": [
+        0.0508,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 3,
+      "image_px": [
+        105.0,
+        344.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.4572,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 17,
+      "image_px": [
+        95.79566192626953,
+        114.01576232910156
+      ],
+      "radius_px": 3.0471174716949463,
+      "table_xy_m": [
+        -0.4572,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 20,
+      "image_px": [
+        371.5,
+        55.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0254,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 20,
+      "image_px": [
+        143.67372465133667,
+        63.46451663970947
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.381,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": 21,
+      "image_px": [
+        159.5,
+        46.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.35559999999999997,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 3,
+      "image_px": [
+        450.0,
+        327.37015533447266
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 3,
+      "image_px": [
+        89.0,
+        345.16278076171875
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.4826,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 17,
+      "image_px": [
+        79.88351440429688,
+        114.86546325683594
+      ],
+      "radius_px": 1.9793232679367065,
+      "table_xy_m": [
+        -0.4826,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 21,
+      "image_px": [
+        370.91935634613037,
+        38.94341278076172
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.0254,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 6,
+      "grid_row": 5,
+      "image_px": [
+        497.0,
+        292.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.15239999999999998,
+        0.127
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 4,
+      "image_px": [
+        481.71429443359375,
+        309.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.127,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 3,
+      "image_px": [
+        465.7442626953125,
+        326.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.1016,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 17,
+      "image_px": [
+        454.5,
+        100.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 4,
+      "image_px": [
+        54.5,
+        330.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 3,
+      "image_px": [
+        71.91935634613037,
+        346.0565872192383
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.508,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 16,
+      "image_px": [
+        47.5,
+        132.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.5334,
+        0.4064
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 17,
+      "image_px": [
+        63.0,
+        115.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.508,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 22,
+      "image_px": [
+        370.5,
+        23.0
+      ],
+      "radius_px": 1.2803300619125366,
+      "table_xy_m": [
+        -0.0254,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 17,
+      "image_px": [
+        471.0,
+        99.0
+      ],
+      "radius_px": 1.414313554763794,
+      "table_xy_m": [
+        0.127,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 2,
+      "image_px": [
+        402.2557373046875,
+        345.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.0,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 18,
+      "image_px": [
+        389.28570556640625,
+        87.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 2,
+      "image_px": [
+        139.3262758255005,
+        359.4645166397095
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.4064,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 18,
+      "image_px": [
+        128.5,
+        97.0
+      ],
+      "radius_px": 2.1573066115379333,
+      "table_xy_m": [
+        -0.4064,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 1,
+      "image_px": [
+        386.5,
+        362.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.0254,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 2,
+      "image_px": [
+        418.3935070037842,
+        345.2059440612793
+      ],
+      "radius_px": 2.053317666053772,
+      "table_xy_m": [
+        0.0254,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 18,
+      "image_px": [
+        405.5,
+        86.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 2,
+      "image_px": [
+        123.05658721923828,
+        360.08064365386963
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 18,
+      "image_px": [
+        112.32627582550049,
+        97.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -1,
+      "grid_row": 0,
+      "image_px": [
+        387.16278076171875,
+        379.0
+      ],
+      "radius_px": 2.1095566749572754,
+      "table_xy_m": [
+        -0.0254,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 1,
+      "image_px": [
+        139.98470211029053,
+        376.1549406051636
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.4064,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 0,
+      "image_px": [
+        157.5,
+        391.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.381,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -14,
+      "grid_row": -1,
+      "image_px": [
+        174.5,
+        407.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.35559999999999997,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 19,
+      "image_px": [
+        388.5,
+        70.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 19,
+      "image_px": [
+        127.88290786743164,
+        80.56867408752441
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        -0.4064,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 2,
+      "image_px": [
+        434.5,
+        344.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 17,
+      "image_px": [
+        438.4483337402344,
+        101.0745620727539
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 18,
+      "image_px": [
+        421.5,
+        85.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 2,
+      "image_px": [
+        105.5,
+        361.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.4572,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 18,
+      "image_px": [
+        95.5,
+        98.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.4572,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 20,
+      "image_px": [
+        387.71429443359375,
+        54.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 20,
+      "image_px": [
+        127.10560607910156,
+        63.529115200042725
+      ],
+      "radius_px": 2.6651179790496826,
+      "table_xy_m": [
+        -0.4064,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": 21,
+      "image_px": [
+        143.05658721923828,
+        47.08064365386963
+      ],
+      "radius_px": 2.133853793144226,
+      "table_xy_m": [
+        -0.381,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 2,
+      "image_px": [
+        450.78294467926025,
+        343.5
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 2,
+      "image_px": [
+        89.01529788970947,
+        362.1549406051636
+      ],
+      "radius_px": 2.194918215274811,
+      "table_xy_m": [
+        -0.4826,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 18,
+      "image_px": [
+        79.13453674316406,
+        98.88351440429688
+      ],
+      "radius_px": 1.9793232679367065,
+      "table_xy_m": [
+        -0.4826,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 21,
+      "image_px": [
+        387.0,
+        38.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.0,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 6,
+      "grid_row": 4,
+      "image_px": [
+        498.0,
+        309.0
+      ],
+      "radius_px": 1.414313554763794,
+      "table_xy_m": [
+        0.15239999999999998,
+        0.1016
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 3,
+      "image_px": [
+        483.2557373046875,
+        325.6304626464844
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.127,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 2,
+      "image_px": [
+        467.0745544433594,
+        343.4483337402344
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.1016,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 18,
+      "image_px": [
+        453.5,
+        84.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 3,
+      "image_px": [
+        55.11845684051514,
+        347.08304023742676
+      ],
+      "radius_px": 2.1212276220321655,
+      "table_xy_m": [
+        -0.5334,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 2,
+      "image_px": [
+        72.5,
+        362.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.508,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 17,
+      "image_px": [
+        46.71428680419922,
+        116.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.5334,
+        0.43179999999999996
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -20,
+      "grid_row": 18,
+      "image_px": [
+        62.5,
+        99.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        -0.508,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 22,
+      "image_px": [
+        386.28570556640625,
+        22.285715103149414
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 18,
+      "image_px": [
+        470.5,
+        83.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 1,
+      "image_px": [
+        402.5,
+        362.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        0.0,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 1,
+      "image_px": [
+        419.5,
+        361.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        0.0254,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 19,
+      "image_px": [
+        404.71429443359375,
+        70.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0254,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 1,
+      "image_px": [
+        123.35324096679688,
+        376.7043151855469
+      ],
+      "radius_px": 2.1734355688095093,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 19,
+      "image_px": [
+        111.62984466552734,
+        81.0
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 0,
+      "grid_row": 0,
+      "image_px": [
+        403.5,
+        378.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        0.0,
+        -0.0
+      ],
+      "is_origin": true
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 0,
+      "image_px": [
+        140.7142791748047,
+        392.71429443359375
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.4064,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -15,
+      "grid_row": -1,
+      "image_px": [
+        158.0,
+        408.0
+      ],
+      "radius_px": 1.9909206628799438,
+      "table_xy_m": [
+        -0.381,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 1,
+      "image_px": [
+        435.5686740875244,
+        360.88290786743164
+      ],
+      "radius_px": 2.0873716473579407,
+      "table_xy_m": [
+        0.0508,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 18,
+      "image_px": [
+        438.0,
+        84.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.4572
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 19,
+      "image_px": [
+        421.0,
+        69.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.0508,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 19,
+      "image_px": [
+        97.16666412353516,
+        82.0
+      ],
+      "radius_px": 3.2609593868255615,
+      "table_xy_m": [
+        -0.4572,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 20,
+      "image_px": [
+        403.96808528900146,
+        53.968085289001465
+      ],
+      "radius_px": 2.0996113419532776,
+      "table_xy_m": [
+        0.0254,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 20,
+      "image_px": [
+        110.35198211669922,
+        64.64801788330078
+      ],
+      "radius_px": 2.812479853630066,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": 21,
+      "image_px": [
+        126.15304756164551,
+        48.138428688049316
+      ],
+      "radius_px": 2.2017544507980347,
+      "table_xy_m": [
+        -0.4064,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 19,
+      "image_px": [
+        78.28571319580078,
+        82.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.4826,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 21,
+      "image_px": [
+        403.5,
+        37.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 6,
+      "grid_row": 3,
+      "image_px": [
+        499.0,
+        325.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.15239999999999998,
+        0.07619999999999999
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 2,
+      "image_px": [
+        483.5,
+        342.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 1,
+      "image_px": [
+        467.71429443359375,
+        359.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 19,
+      "image_px": [
+        453.2173767089844,
+        67.6956558227539
+      ],
+      "radius_px": 1.6329544186592102,
+      "table_xy_m": [
+        0.1016,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -21,
+      "grid_row": 2,
+      "image_px": [
+        55.5,
+        363.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        -0.5334,
+        0.0508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 22,
+      "image_px": [
+        402.5,
+        21.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0254,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 19,
+      "image_px": [
+        469.5,
+        67.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": 0,
+      "image_px": [
+        420.0,
+        378.0
+      ],
+      "radius_px": 2.1712405681610107,
+      "table_xy_m": [
+        0.0254,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 0,
+      "image_px": [
+        124.0,
+        393.5
+      ],
+      "radius_px": 1.8997375965118408,
+      "table_xy_m": [
+        -0.43179999999999996,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -16,
+      "grid_row": -1,
+      "image_px": [
+        141.0,
+        409.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        -0.4064,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 0,
+      "image_px": [
+        436.5,
+        377.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 19,
+      "image_px": [
+        437.0,
+        68.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.4826
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 20,
+      "image_px": [
+        419.8866672515869,
+        52.707722187042236
+      ],
+      "radius_px": 1.9838287830352783,
+      "table_xy_m": [
+        0.0508,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 20,
+      "image_px": [
+        94.28571319580078,
+        65.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.4572,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -17,
+      "grid_row": 21,
+      "image_px": [
+        110.32627582550049,
+        48.53548336029053
+      ],
+      "radius_px": 1.971666932106018,
+      "table_xy_m": [
+        -0.43179999999999996,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 20,
+      "image_px": [
+        77.71428680419922,
+        66.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.4826,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 21,
+      "image_px": [
+        419.71429443359375,
+        36.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.0508,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 1,
+      "image_px": [
+        484.71429443359375,
+        358.28570556640625
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.127,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 0,
+      "image_px": [
+        469.2557373046875,
+        376.3695373535156
+      ],
+      "radius_px": 2.184864342212677,
+      "table_xy_m": [
+        0.1016,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 20,
+      "image_px": [
+        452.71429443359375,
+        51.71428680419922
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        0.1016,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": 22,
+      "image_px": [
+        418.5,
+        20.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.0508,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 20,
+      "image_px": [
+        469.0,
+        50.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 1,
+      "grid_row": -1,
+      "image_px": [
+        421.21705532073975,
+        394.5
+      ],
+      "radius_px": 2.022009551525116,
+      "table_xy_m": [
+        0.0254,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 0,
+      "image_px": [
+        452.5,
+        376.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.07619999999999999,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 2,
+      "grid_row": -1,
+      "image_px": [
+        437.5,
+        393.5
+      ],
+      "radius_px": 1.5811388492584229,
+      "table_xy_m": [
+        0.0508,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 20,
+      "image_px": [
+        436.4483337402344,
+        51.925437927246094
+      ],
+      "radius_px": 1.85302072763443,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.508
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -18,
+      "grid_row": 21,
+      "image_px": [
+        93.28571319580078,
+        49.28571319580078
+      ],
+      "radius_px": 1.9848430752754211,
+      "table_xy_m": [
+        -0.4572,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": -19,
+      "grid_row": 21,
+      "image_px": [
+        76.96363067626953,
+        49.95205307006836
+      ],
+      "radius_px": 2.105665147304535,
+      "table_xy_m": [
+        -0.4826,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 21,
+      "image_px": [
+        435.5,
+        36.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 6,
+      "grid_row": 1,
+      "image_px": [
+        501.0,
+        358.0
+      ],
+      "radius_px": 1.414313554763794,
+      "table_xy_m": [
+        0.15239999999999998,
+        0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 0,
+      "image_px": [
+        485.5,
+        375.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": -1,
+      "image_px": [
+        470.0,
+        392.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 21,
+      "image_px": [
+        452.4649353027344,
+        35.551902770996094
+      ],
+      "radius_px": 2.0588185787200928,
+      "table_xy_m": [
+        0.1016,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": 22,
+      "image_px": [
+        435.2557373046875,
+        19.63047218322754
+      ],
+      "radius_px": 2.1848633885383606,
+      "table_xy_m": [
+        0.07619999999999999,
+        0.5588
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": 21,
+      "image_px": [
+        468.0,
+        34.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.127,
+        0.5334
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 3,
+      "grid_row": -1,
+      "image_px": [
+        454.0,
+        392.62984466552734
+      ],
+      "radius_px": 2.0255136489868164,
+      "table_xy_m": [
+        0.07619999999999999,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 6,
+      "grid_row": 0,
+      "image_px": [
+        502.0,
+        374.5
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.15239999999999998,
+        -0.0
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 5,
+      "grid_row": -1,
+      "image_px": [
+        486.5,
+        391.5
+      ],
+      "radius_px": 2.12142014503479,
+      "table_xy_m": [
+        0.127,
+        -0.0254
+      ],
+      "is_origin": false
+    },
+    {
+      "grid_col": 4,
+      "grid_row": 22,
+      "image_px": [
+        450.5,
+        19.0
+      ],
+      "radius_px": 1.8028756380081177,
+      "table_xy_m": [
+        0.1016,
+        0.5588
+      ],
+      "is_origin": false
+    }
+  ],
+  "camera": {
+    "lock_exposure": true,
+    "gain": 64.0,
+    "exposure_us": 166.0,
+    "white_balance": 4600.0
+  }
+}

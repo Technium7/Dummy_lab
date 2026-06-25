@@ -194,6 +194,28 @@ def draw_label_grasp(bgr: np.ndarray, u: int, v: int, *, alpha: float = LABEL_OV
     _blend_layer(bgr, layer, alpha)
 
 
+def draw_label_base(bgr: np.ndarray, u: int, v: int, *, alpha: float = LABEL_OVERLAY_ALPHA) -> None:
+    cv2 = _require_cv2()
+
+    def _draw(layer: np.ndarray) -> None:
+        cv2.drawMarker(layer, (u, v), NN_BASE_BGR, cv2.MARKER_CROSS, 14, 2, cv2.LINE_AA)
+        cv2.circle(layer, (u, v), 6, NN_BASE_BGR, 2, cv2.LINE_AA)
+        cv2.putText(
+            layer,
+            "base",
+            (u + 10, v - 8),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.45,
+            NN_BASE_BGR,
+            1,
+            cv2.LINE_AA,
+        )
+
+    layer = np.zeros_like(bgr)
+    _draw(layer)
+    _blend_layer(bgr, layer, alpha)
+
+
 def draw_base_ellipse(
     bgr: np.ndarray,
     ellipse: BaseEllipse,

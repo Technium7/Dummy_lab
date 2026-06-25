@@ -26,7 +26,14 @@ from .grasp_point_net import (
 
 
 def default_yolo_model() -> Path:
-    return Path(__file__).resolve().parent / "dataset" / "grasp_keypoints" / "model" / "sensor_yolo.pt"
+    return (
+        Path(__file__).resolve().parent
+        / "side_detection"
+        / "dataset"
+        / "grasp_keypoints"
+        / "model"
+        / "sensor_yolo.pt"
+    )
 
 
 def make_train_kwargs(
@@ -154,7 +161,9 @@ def _resolve_targets(args: argparse.Namespace) -> tuple[bool, bool]:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    default_data = Path(__file__).resolve().parent / "dataset" / "grasp_keypoints"
+    default_data = (
+        Path(__file__).resolve().parent / "side_detection" / "dataset" / "grasp_keypoints"
+    )
     p = argparse.ArgumentParser(
         description="Train grasp and/or base CNNs (separate nets, crop + RGBD). Default: both.",
     )

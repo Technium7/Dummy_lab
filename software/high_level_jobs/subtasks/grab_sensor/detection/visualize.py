@@ -190,12 +190,22 @@ def render_grasp_overlay(
 
     _draw_target(img, object_px, (255, 180, 0), "object center", radius=7)
     _draw_target(img, pre_px, (255, 120, 0), "pre-grasp", radius=8)
+    top_view = bool(cfg.grasp_net and cfg.grasp_net.base_only)
+    nn_label = "BASE (NN)" if top_view else "GRASP (NN)"
     if targets.debug.get("vision_mode") == "yolo_grasp" and nn_grasp_px is not None:
-        _draw_target(img, nn_grasp_px, (0, 0, 255), "GRASP (NN)", radius=12)
-        if grasp_px is not None and (
-            abs(grasp_px[0] - nn_grasp_px[0]) > 8 or abs(grasp_px[1] - nn_grasp_px[1]) > 8
+        _draw_target(img, nn_grasp_px, (0, 0, 255), nn_label, radius=12)
+        if (
+            not top_view
+            and grasp_px is not None
+            and (
+                abs(grasp_px[0] - nn_grasp_px[0]) > 8 or abs(grasp_px[1] - nn_grasp_px[1]) > 8
+            )
         ):
             _draw_target(img, grasp_px, (255, 0, 255), "robot IK", radius=8)
+        elif top_view and grasp_px is not None and (
+            abs(grasp_px[0] - nn_grasp_px[0]) > 8 or abs(grasp_px[1] - nn_grasp_px[1]) > 8
+        ):
+            _draw_target(img, grasp_px, (255, 0, 255), "grasp plan", radius=8)
     else:
         _draw_target(img, grasp_px, (0, 0, 255), "GRASP", radius=12)
 
@@ -299,14 +309,22 @@ def render_grasp_overlay(
             grasp_uv_dbg = targets.debug.get("grasp_uv")
             base_uv_dbg = targets.debug.get("base_uv")
             coord_bits = []
-            if grasp_uv_dbg and len(grasp_uv_dbg) == 2:
-                coord_bits.append(f"grasp {tuple(grasp_uv_dbg)}")
-            if base_uv_dbg and len(base_uv_dbg) == 2:
+            if top_view and base_uv_dbg and len(base_uv_dbg) == 2:
                 coord_bits.append(f"base {tuple(base_uv_dbg)}")
+            else:
+                if grasp_uv_dbg and len(grasp_uv_dbg) == 2:
+                    coord_bits.append(f"grasp {tuple(grasp_uv_dbg)}")
+                if base_uv_dbg and len(base_uv_dbg) == 2:
+                    coord_bits.append(f"base {tuple(base_uv_dbg)}")
             coord_line = "NN px: " + "  |  ".join(coord_bits) if coord_bits else ""
-            caption_lines = [
-                ("Yellow box = YOLO | green ellipse = base counter | red = NN grasp", (200, 200, 200)),
-            ]
+            if top_view:
+                caption_lines = [
+                    ("Yellow box = YOLO | red = NN base center | magenta = planned grasp", (200, 200, 200)),
+                ]
+            else:
+                caption_lines = [
+                    ("Yellow box = YOLO | green ellipse = base counter | red = NN grasp", (200, 200, 200)),
+                ]
             if coord_line:
                 caption_lines.append((coord_line, (180, 220, 180)))
         else:

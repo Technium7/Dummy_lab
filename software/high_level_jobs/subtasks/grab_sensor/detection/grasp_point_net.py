@@ -243,6 +243,7 @@ def list_labeled_samples(
     data_dir: Path,
     *,
     require_base: bool = False,
+    base_only: bool = False,
 ) -> list[dict[str, Any]]:
     labels_dir = data_dir / "labels"
     if not labels_dir.is_dir():
@@ -258,8 +259,6 @@ def list_labeled_samples(
             continue
         depth_rel = data.get("files", {}).get("depth")
         depth_path = data_dir / str(depth_rel) if depth_rel else data_dir / "depth" / f"{label_path.stem}.npy"
-        u = int(data.get("grasp_u", data.get("grasp_uv", [0, 0])[0]))
-        v = int(data.get("grasp_v", data.get("grasp_uv", [0, 0])[1]))
         w = int(data.get("width", 640))
         h = int(data.get("height", 480))
 
@@ -269,12 +268,21 @@ def list_labeled_samples(
             base_uv = (int(data["base_u"]), int(data["base_v"]))
         elif "base_uv" in data and len(data["base_uv"]) >= 2:
             base_uv = (int(data["base_uv"][0]), int(data["base_uv"][1]))
-        base_ellipse = parse_base_ellipse(data)
-        if base_ellipse is not None:
-            base_uv = base_ellipse.center_uv
+        if not base_only:
+            base_ellipse = parse_base_ellipse(data)
+            if base_ellipse is not None:
+                base_uv = base_ellipse.center_uv
 
         if require_base and base_uv is None:
             continue
+        if base_only:
+            if base_uv is None:
+                continue
+            grasp_uv = base_uv
+        else:
+            u = int(data.get("grasp_u", data.get("grasp_uv", [0, 0])[0]))
+            v = int(data.get("grasp_v", data.get("grasp_uv", [0, 0])[1]))
+            grasp_uv = (u, v)
 
         samples.append(
             {
@@ -282,9 +290,9 @@ def list_labeled_samples(
                 "label_path": label_path,
                 "image_path": image_path,
                 "depth_path": depth_path,
-                "grasp_uv": (u, v),
+                "grasp_uv": grasp_uv,
                 "base_uv": base_uv,
-                "base_ellipse": base_ellipse,
+                "base_ellipse": base_ellipse if not base_only else None,
                 "width": w,
                 "height": h,
             }
@@ -385,11 +393,15 @@ class GraspPointCropDataset(Dataset):
         bootstrap_half_h: int = 80,
         depth_min_m: float = DEFAULT_DEPTH_MIN_M,
         depth_max_m: float = DEFAULT_DEPTH_MAX_M,
+        base_label_mode: str = "ellipse",
     ) -> None:
         if target not in ("grasp", "base"):
             raise ValueError(f"target must be 'grasp' or 'base', got {target!r}")
+        if base_label_mode not in ("ellipse", "point"):
+            raise ValueError(f"base_label_mode must be 'ellipse' or 'point', got {base_label_mode!r}")
         self.samples = samples
         self.target = target
+        self.base_label_mode = base_label_mode
         self.augment = augment
         self.use_depth = use_depth
         self.yolo_model_path = yolo_model_path
@@ -413,11 +425,15 @@ class GraspPointCropDataset(Dataset):
         base_uv = sample.get("base_uv")
         base_ellipse: BaseEllipse | None = sample.get("base_ellipse")
         if self.target == "base":
-            if base_ellipse is None and base_uv is None:
+            if base_uv is None and base_ellipse is None:
                 raise ValueError(f"Sample {sample.get('id')} missing base label")
-            if base_ellipse is None:
-                base_ellipse = BaseEllipse.from_center_uv(base_uv)
-            label_uv = base_ellipse.center_uv
+            if self.base_label_mode == "point" or base_ellipse is None:
+                if base_uv is None:
+                    base_uv = base_ellipse.center_uv if base_ellipse is not None else grasp_uv
+                label_uv = base_uv
+                base_ellipse = None
+            else:
+                label_uv = base_ellipse.center_uv
         else:
             label_uv = grasp_uv
 
@@ -436,7 +452,13 @@ class GraspPointCropDataset(Dataset):
         crop_depth, _ = crop_region(depth_m, bbox, self.crop_padding_px)
         crop_h, crop_w = crop_rgb.shape[:2]
 
-        if self.target == "base":
+        u_crop = int(label_uv[0]) - origin[0]
+        v_crop = int(label_uv[1]) - origin[1]
+        u_crop = int(np.clip(u_crop, 0, crop_w - 1))
+        v_crop = int(np.clip(v_crop, 0, crop_h - 1))
+
+        crop_ellipse: BaseEllipse | None = None
+        if self.target == "base" and self.base_label_mode == "ellipse" and base_ellipse is not None:
             ox, oy = origin
             crop_ellipse = BaseEllipse(
                 center_uv=(
@@ -447,16 +469,12 @@ class GraspPointCropDataset(Dataset):
                 axis_b_px=base_ellipse.axis_b_px,
                 angle_deg=base_ellipse.angle_deg,
             )
-        else:
-            u_crop = int(label_uv[0]) - origin[0]
-            v_crop = int(label_uv[1]) - origin[1]
-            u_crop = int(np.clip(u_crop, 0, crop_w - 1))
-            v_crop = int(np.clip(v_crop, 0, crop_h - 1))
+            u_crop, v_crop = crop_ellipse.center_uv
 
         if self.augment and random.random() < 0.5:
             crop_rgb = np.ascontiguousarray(crop_rgb[:, ::-1, :])
             crop_depth = np.ascontiguousarray(crop_depth[:, ::-1])
-            if self.target == "base":
+            if crop_ellipse is not None:
                 cu, cv = crop_ellipse.center_uv
                 crop_ellipse = BaseEllipse(
                     center_uv=(crop_w - 1 - cu, cv),
@@ -464,6 +482,7 @@ class GraspPointCropDataset(Dataset):
                     axis_b_px=crop_ellipse.axis_b_px,
                     angle_deg=-crop_ellipse.angle_deg,
                 )
+                u_crop, v_crop = crop_ellipse.center_uv
             else:
                 u_crop = crop_w - 1 - u_crop
 
@@ -474,7 +493,7 @@ class GraspPointCropDataset(Dataset):
             depth_min_m=self.depth_min_m,
             depth_max_m=self.depth_max_m,
         )
-        if self.target == "base":
+        if crop_ellipse is not None:
             target = ellipse_to_norm_crop(crop_ellipse, (0, 0), (crop_h, crop_w), meta)
         else:
             target = np.array(uv_to_norm_letterbox((u_crop, v_crop), meta), dtype=np.float32)
@@ -665,9 +684,13 @@ def train_point_model(
     bootstrap_half_h: int = 80,
     depth_min_m: float = DEFAULT_DEPTH_MIN_M,
     depth_max_m: float = DEFAULT_DEPTH_MAX_M,
+    base_label_mode: str = "ellipse",
+    base_only: bool = False,
 ) -> TrainResult:
     if target not in ("grasp", "base"):
         raise ValueError(f"target must be 'grasp' or 'base', got {target!r}")
+    if base_label_mode not in ("ellipse", "point"):
+        raise ValueError(f"base_label_mode must be 'ellipse' or 'point', got {base_label_mode!r}")
     data_dir = data_dir.resolve()
     if model_path is None:
         model_path = default_base_model_path(data_dir) if target == "base" else default_model_path(data_dir)
@@ -675,7 +698,7 @@ def train_point_model(
     model_path.parent.mkdir(parents=True, exist_ok=True)
 
     require_base = target == "base"
-    samples = list_labeled_samples(data_dir, require_base=require_base)
+    samples = list_labeled_samples(data_dir, require_base=require_base, base_only=base_only)
     if len(samples) < 2:
         if target == "base":
             total = len(list_labeled_samples(data_dir))
@@ -688,38 +711,27 @@ def train_point_model(
 
     train_samples, val_samples = _split_samples(samples, val_frac, seed)
     in_channels = 4 if use_depth else 3
-    num_outputs = NUM_OUTPUTS_BASE_ELLIPSE if target == "base" else NUM_OUTPUTS_GRASP_ONLY
+    use_ellipse_base = target == "base" and base_label_mode == "ellipse"
+    num_outputs = NUM_OUTPUTS_BASE_ELLIPSE if use_ellipse_base else NUM_OUTPUTS_GRASP_ONLY
+
+    crop_ds_kw = dict(
+        target=target,
+        use_depth=use_depth,
+        yolo_model_path=yolo_model_path,
+        yolo_class=yolo_class,
+        yolo_confidence=yolo_confidence,
+        crop_padding_px=crop_padding_px,
+        bootstrap_half_w=bootstrap_half_w,
+        bootstrap_half_h=bootstrap_half_h,
+        depth_min_m=depth_min_m,
+        depth_max_m=depth_max_m,
+        base_label_mode=base_label_mode,
+    )
 
     if crop_mode:
-        train_ds = GraspPointCropDataset(
-            train_samples,
-            target=target,
-            augment=True,
-            use_depth=use_depth,
-            yolo_model_path=yolo_model_path,
-            yolo_class=yolo_class,
-            yolo_confidence=yolo_confidence,
-            crop_padding_px=crop_padding_px,
-            bootstrap_half_w=bootstrap_half_w,
-            bootstrap_half_h=bootstrap_half_h,
-            depth_min_m=depth_min_m,
-            depth_max_m=depth_max_m,
-        )
+        train_ds = GraspPointCropDataset(train_samples, augment=True, **crop_ds_kw)
         val_ds = (
-            GraspPointCropDataset(
-                val_samples,
-                target=target,
-                augment=False,
-                use_depth=use_depth,
-                yolo_model_path=yolo_model_path,
-                yolo_class=yolo_class,
-                yolo_confidence=yolo_confidence,
-                crop_padding_px=crop_padding_px,
-                bootstrap_half_w=bootstrap_half_w,
-                bootstrap_half_h=bootstrap_half_h,
-                depth_min_m=depth_min_m,
-                depth_max_m=depth_max_m,
-            )
+            GraspPointCropDataset(val_samples, augment=False, **crop_ds_kw)
             if val_samples
             else None
         )
@@ -814,7 +826,12 @@ def train_point_model(
         "num_outputs": num_outputs,
         "use_depth": use_depth,
         "crop_mode": crop_mode,
-        "target": "base_ellipse" if target == "base" else target,
+        "target": (
+            "base_ellipse"
+            if use_ellipse_base
+            else ("base_point" if target == "base" else target)
+        ),
+        "base_label_mode": base_label_mode if target == "base" else None,
         "predict_base": False,
         "depth_min_m": depth_min_m,
         "depth_max_m": depth_max_m,

@@ -69,6 +69,11 @@ def infer_yolo_grasp_points(
     if cfg.yolo is None or cfg.grasp_net is None:
         raise ValueError("yolo_grasp requires yolo and grasp_net in config.")
 
+    if cfg.grasp_net.base_only:
+        from .top_detection.yolo_base import infer_to_yolo_grasp_compat
+
+        return infer_to_yolo_grasp_compat(color_rgb, depth_m, cfg)
+
     yolo = detect_sensor_bbox(color_rgb, cfg.yolo)
     crop_rgb, crop_origin = crop_region(
         color_rgb,
@@ -216,6 +221,166 @@ def _estimate_orientation(
         return np.zeros(3, dtype=np.float64), 0.0
 
 
+def _table_base_grasp_mode(cfg: GrabSensorConfig) -> bool:
+    """Top view: grasp robot XYZ from base table XY + fixed height (no grasp-pixel depth)."""
+    return bool(
+        cfg.grasp_position_from_table_base
+        and cfg.grasp_net is not None
+        and cfg.grasp_net.base_only
+    )
+
+
+def _optional_pixel_to_cam_m(
+    u: int,
+    v: int,
+    depth_m: np.ndarray,
+    intrinsics: Any,
+    *,
+    patch_radius_px: int = 3,
+    max_patch_radius_px: int = 20,
+    depth_min_m: float = 0.0,
+    depth_max_m: float = 10.0,
+) -> np.ndarray | None:
+    try:
+        return pixel_to_cam_m(
+            u,
+            v,
+            depth_m,
+            intrinsics,
+            patch_radius_px=patch_radius_px,
+            max_patch_radius_px=max_patch_radius_px,
+            depth_min_m=depth_min_m,
+            depth_max_m=depth_max_m,
+        )
+    except RuntimeError:
+        return None
+
+
+def _bbox_center_uv(bbox_xy: tuple[int, int, int, int]) -> tuple[int, int]:
+    x, y, bw, bh = bbox_xy
+    return int(x + bw // 2), int(y + bh // 2)
+
+
+def _resolve_cam_centroid_m(
+    capture: CaptureResult,
+    cfg: GrabSensorConfig,
+    *,
+    primary_uv: tuple[int, int],
+    bbox_xy: tuple[int, int, int, int],
+) -> np.ndarray:
+    """Camera-frame centroid for detection; may be a placeholder when depth is missing."""
+    gn = cfg.grasp_net
+    patch_r = gn.depth_patch_radius_px if gn else 3
+    dmin = gn.depth_min_m if gn else 0.25
+    dmax = gn.depth_max_m if gn else 0.85
+    intr = capture.color_intrinsics
+    depth = capture.depth_m
+
+    cam = _optional_pixel_to_cam_m(
+        primary_uv[0],
+        primary_uv[1],
+        depth,
+        intr,
+        patch_radius_px=patch_r,
+        max_patch_radius_px=20,
+        depth_min_m=dmin,
+        depth_max_m=dmax,
+    )
+    if cam is not None:
+        return cam
+
+    cx, cy = _bbox_center_uv(bbox_xy)
+    cam = _optional_pixel_to_cam_m(
+        cx,
+        cy,
+        depth,
+        intr,
+        patch_radius_px=max(patch_r, 8),
+        max_patch_radius_px=40,
+        depth_min_m=dmin,
+        depth_max_m=dmax,
+    )
+    if cam is not None:
+        return cam
+
+    # Robot XYZ will come from table homography + grasp_height_above_table_mm.
+    return np.array([0.0, 0.0, float(dmin)], dtype=np.float64)
+
+
+def _fill_table_pose_debug(
+    debug: dict[str, Any],
+    cfg: GrabSensorConfig,
+    *,
+    base_uv: tuple[int, int],
+    base_cam_m: np.ndarray | None,
+    grasp_cam_m: np.ndarray | None,
+    table_base_mode: bool,
+) -> None:
+    from ..table_position import (
+        infer_base_table_pose,
+        infer_cam_point_table_pose,
+        infer_pixel_table_pose,
+        resolve_table_calib_path,
+        table_pose_offset_mm,
+    )
+
+    table_calib = resolve_table_calib_path(cfg.table_calib_path)
+    if table_calib is None:
+        return
+
+    pose = infer_pixel_table_pose(base_uv, table_calib, z_m=0.0)
+    if pose is None and base_cam_m is not None:
+        pose = infer_base_table_pose(base_cam_m, table_calib)
+    if pose is None:
+        if table_base_mode:
+            raise RuntimeError(
+                "Could not map base pixel to table frame. Check table_calib and that "
+                f"base_uv={base_uv} lies on the calibrated table surface."
+            )
+        return
+
+    debug["base_table_xyz_m"] = [round(v, 4) for v in pose["table_xyz_m"]]
+    debug["base_table_xy_mm"] = [round(v, 2) for v in pose["table_xy_mm"]]
+    debug["base_table_xy_in"] = [round(v, 3) for v in pose.get("table_xy_in", [])]
+    debug["base_grid_col"] = pose.get("grid_col")
+    debug["base_grid_row"] = pose.get("grid_row")
+    debug["table_calib_path"] = pose["table_calib_path"]
+    debug["base_table_pose_source"] = pose.get("table_pose_source", "transform_table_cam")
+
+    if table_base_mode:
+        height_m = float(cfg.grasp_motion.grasp_height_above_table_mm) * 1e-3
+        grasp_table = (
+            float(pose["table_xyz_m"][0]),
+            float(pose["table_xyz_m"][1]),
+            height_m,
+        )
+        debug["grasp_table_xyz_m"] = [round(v, 4) for v in grasp_table]
+        debug["grasp_table_xy_mm"] = [
+            round(float(pose["table_xy_mm"][0]), 2),
+            round(float(pose["table_xy_mm"][1]), 2),
+        ]
+        if "table_xy_in" in pose:
+            debug["grasp_table_xy_in"] = [round(v, 3) for v in pose["table_xy_in"]]
+        debug["grasp_grid_col"] = pose.get("grid_col")
+        debug["grasp_grid_row"] = pose.get("grid_row")
+        debug["grasp_table_pose_source"] = "table_base_xy_height"
+        debug["grasp_position_source"] = "table_base_xy_height"
+        debug["grasp_height_above_table_mm"] = float(cfg.grasp_motion.grasp_height_above_table_mm)
+        return
+
+    if grasp_cam_m is None:
+        return
+    grasp_pose = infer_cam_point_table_pose(grasp_cam_m, table_calib)
+    offset = table_pose_offset_mm(pose, grasp_pose)
+    debug["grasp_table_xyz_m"] = [round(v, 4) for v in grasp_pose["table_xyz_m"]]
+    debug["grasp_table_xy_mm"] = [round(v, 2) for v in grasp_pose["table_xy_mm"]]
+    debug["grasp_table_xy_in"] = [round(v, 3) for v in grasp_pose.get("table_xy_in", [])]
+    debug["grasp_grid_col"] = grasp_pose.get("grid_col")
+    debug["grasp_grid_row"] = grasp_pose.get("grid_row")
+    debug["grasp_table_pose_source"] = "transform_table_cam"
+    debug["grasp_offset_from_base_mm"] = {k: round(v, 2) for k, v in offset.items()}
+
+
 def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> YoloGraspResult:
     """YOLO full frame -> RGB+depth crop -> grasp net -> 3D grasp point."""
     nn = infer_yolo_grasp_points(capture.color_rgb, capture.depth_m, cfg)
@@ -228,16 +393,32 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
     base_ellipse_crop = nn.base_ellipse_crop
     grasp_source = nn.grasp_source
     img_h, img_w = capture.color_rgb.shape[:2]
+    table_base_mode = _table_base_grasp_mode(cfg)
 
-    grasp_cam_m = pixel_to_cam_m(
-        grasp_uv[0],
-        grasp_uv[1],
-        capture.depth_m,
-        capture.color_intrinsics,
-        patch_radius_px=cfg.grasp_net.depth_patch_radius_px,
-        depth_min_m=cfg.grasp_net.depth_min_m,
-        depth_max_m=cfg.grasp_net.depth_max_m,
+    if table_base_mode and base_uv is None:
+        raise RuntimeError("top detection requires a base point (base_uv) from vision.")
+
+    depth_uv = base_uv if table_base_mode and base_uv is not None else grasp_uv
+    grasp_cam_m = _resolve_cam_centroid_m(
+        capture,
+        cfg,
+        primary_uv=depth_uv,
+        bbox_xy=yolo.bbox_xy,
     )
+
+    base_cam_m: np.ndarray | None = None
+    if base_uv is not None:
+        gn = cfg.grasp_net
+        base_cam_m = _optional_pixel_to_cam_m(
+            base_uv[0],
+            base_uv[1],
+            capture.depth_m,
+            capture.color_intrinsics,
+            patch_radius_px=gn.depth_patch_radius_px if gn else 3,
+            depth_min_m=gn.depth_min_m if gn else 0.25,
+            depth_max_m=gn.depth_max_m if gn else 0.85,
+        )
+
     mask = bbox_mask(yolo.bbox_xy, (img_h, img_w), capture.depth_m)
     object_rpy, yaw = _estimate_orientation(
         cfg,
@@ -258,6 +439,7 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
 
     debug = {
         "vision_mode": "yolo_grasp",
+        "detection_profile": "top" if cfg.grasp_net.base_only else "side",
         "yolo_confidence": yolo.confidence,
         "yolo_class": yolo.class_name,
         "yolo_bbox_xy": yolo.bbox_xy,
@@ -266,61 +448,24 @@ def detect_with_yolo_grasp(capture: CaptureResult, cfg: GrabSensorConfig) -> Yol
         "crop_origin": list(crop_origin),
         "grasp_uv_crop": list(grasp_uv_crop),
         "grasp_source": grasp_source,
+        "grasp_position_from_table_base": table_base_mode,
     }
     if base_uv is not None:
-        try:
-            base_cam_m = pixel_to_cam_m(
-                base_uv[0],
-                base_uv[1],
-                capture.depth_m,
-                capture.color_intrinsics,
-                patch_radius_px=cfg.grasp_net.depth_patch_radius_px,
-                depth_min_m=cfg.grasp_net.depth_min_m,
-                depth_max_m=cfg.grasp_net.depth_max_m,
-            )
-            debug["base_uv"] = list(base_uv)
-            if base_ellipse is not None:
-                debug["base_ellipse"] = base_ellipse.as_dict()
-            if base_ellipse_crop is not None:
-                debug["base_ellipse_crop"] = base_ellipse_crop.as_dict()
+        debug["base_uv"] = list(base_uv)
+        if base_ellipse is not None:
+            debug["base_ellipse"] = base_ellipse.as_dict()
+        if base_ellipse_crop is not None:
+            debug["base_ellipse_crop"] = base_ellipse_crop.as_dict()
+        if base_cam_m is not None:
             debug["base_cam_m"] = base_cam_m.round(4).tolist()
-            from ..table_position import (
-                infer_base_table_pose,
-                infer_cam_point_table_pose,
-                infer_pixel_table_pose,
-                resolve_table_calib_path,
-                table_pose_offset_mm,
-            )
-
-            table_calib = resolve_table_calib_path(cfg.table_calib_path)
-            if table_calib is not None:
-                pose = infer_pixel_table_pose(base_uv, table_calib, z_m=0.0)
-                if pose is None:
-                    pose = infer_base_table_pose(base_cam_m, table_calib)
-                debug["base_table_xyz_m"] = [round(v, 4) for v in pose["table_xyz_m"]]
-                debug["base_table_xy_mm"] = [round(v, 2) for v in pose["table_xy_mm"]]
-                debug["base_table_xy_in"] = [round(v, 3) for v in pose.get("table_xy_in", [])]
-                debug["base_grid_col"] = pose.get("grid_col")
-                debug["base_grid_row"] = pose.get("grid_row")
-                debug["table_calib_path"] = pose["table_calib_path"]
-                debug["base_table_pose_source"] = pose.get("table_pose_source", "transform_table_cam")
-                grasp_pose = infer_cam_point_table_pose(grasp_cam_m, table_calib)
-                offset = table_pose_offset_mm(pose, grasp_pose)
-                debug["grasp_table_xyz_m"] = [round(v, 4) for v in grasp_pose["table_xyz_m"]]
-                debug["grasp_table_xy_mm"] = [round(v, 2) for v in grasp_pose["table_xy_mm"]]
-                debug["grasp_table_xy_in"] = [round(v, 3) for v in grasp_pose.get("table_xy_in", [])]
-                debug["grasp_grid_col"] = grasp_pose.get("grid_col")
-                debug["grasp_grid_row"] = grasp_pose.get("grid_row")
-                debug["grasp_table_pose_source"] = "transform_table_cam"
-                debug["grasp_offset_from_base_mm"] = {
-                    k: round(v, 2) for k, v in offset.items()
-                }
-        except RuntimeError:
-            debug["base_uv"] = list(base_uv)
-            if base_ellipse is not None:
-                debug["base_ellipse"] = base_ellipse.as_dict()
-            if base_ellipse_crop is not None:
-                debug["base_ellipse_crop"] = base_ellipse_crop.as_dict()
+        _fill_table_pose_debug(
+            debug,
+            cfg,
+            base_uv=base_uv,
+            base_cam_m=base_cam_m,
+            grasp_cam_m=grasp_cam_m if not table_base_mode else None,
+            table_base_mode=table_base_mode,
+        )
     return YoloGraspResult(
         mask=mask,
         detection=detection,

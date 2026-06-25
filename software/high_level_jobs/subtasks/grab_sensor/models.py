@@ -15,6 +15,7 @@ from robot_config import DEFAULT_ROBOT_NAME  # noqa: E402
 
 GraspOrientationMode = Literal["follow_object", "fixed_robot"]
 VisionMode = Literal["depth_segment", "yolo_grasp"]
+DetectionProfile = Literal["top", "side"]
 
 
 @dataclass(frozen=True)
@@ -79,8 +80,9 @@ class YoloConfig:
 
 @dataclass(frozen=True)
 class GraspNetConfig:
-    model_path: Path
+    model_path: Path | None = None
     base_model_path: Path | None = None
+    base_only: bool = False
     depth_patch_radius_px: int = 3
     predict_on: Literal["full_frame", "crop"] = "crop"
     bbox_margin_px: int = 12
@@ -123,6 +125,7 @@ class GrabSensorConfig:
     approach: ApproachConfig
     segmentation: SegmentationConfig
     vision_mode: VisionMode = "yolo_grasp"
+    detection_profile: DetectionProfile = "top"
     yolo: YoloConfig | None = None
     grasp_net: GraspNetConfig | None = None
     grasp_orientation_mode: GraspOrientationMode = "fixed_robot"
@@ -170,7 +173,14 @@ class GrabSensorConfig:
         paths_raw = data.get("paths", {})
 
         package_dir = Path(__file__).resolve().parent
-        default_model_dir = package_dir / "detection" / "dataset" / "grasp_keypoints" / "model"
+        profile_raw = str(data.get("detection_profile", "top")).strip().lower()
+        if profile_raw not in ("top", "side"):
+            raise ValueError(f"detection_profile must be 'top' or 'side', got {profile_raw!r}")
+        detection_profile: DetectionProfile = profile_raw  # type: ignore[assignment]
+
+        from .paths import SIDE_MODEL_DIR, TOP_MODEL_DIR
+
+        default_model_dir = TOP_MODEL_DIR if detection_profile == "top" else SIDE_MODEL_DIR
 
         def _resolve_model_path(raw_path: str | None, default_name: str) -> Path:
             if raw_path:
@@ -233,6 +243,13 @@ class GrabSensorConfig:
         robot_rpy = tuple(float(v) for v in robot_table_raw.get("rpy_deg", [0.0, 0.0, 0.0])[:3])
 
         predict_on_raw = str(grasp_net_raw.get("predict_on", "full_frame")).strip().lower()
+        base_only = bool(grasp_net_raw.get("base_only", detection_profile == "top"))
+        grasp_model_raw = grasp_net_raw.get("model_path")
+        grasp_model_path = (
+            None
+            if base_only and not grasp_model_raw
+            else _resolve_model_path(grasp_model_raw, "grasp_point.pt")
+        )
         if predict_on_raw not in ("full_frame", "crop"):
             raise ValueError(
                 f"grasp_net.predict_on must be 'full_frame' or 'crop', got {predict_on_raw!r}"
@@ -266,6 +283,7 @@ class GrabSensorConfig:
                 morph_kernel_px=int(seg_raw.get("morph_kernel_px", 5)),
             ),
             vision_mode=vision_raw,  # type: ignore[arg-type]
+            detection_profile=detection_profile,
             yolo=YoloConfig(
                 model_path=_resolve_model_path(yolo_raw.get("model_path"), "sensor_yolo.pt"),
                 class_name=str(yolo_raw.get("class_name", "sensor")),
@@ -274,11 +292,12 @@ class GrabSensorConfig:
                 crop_padding_px=int(yolo_raw.get("crop_padding_px", 16)),
             ),
             grasp_net=GraspNetConfig(
-                model_path=_resolve_model_path(grasp_net_raw.get("model_path"), "grasp_point.pt"),
+                model_path=grasp_model_path,
                 base_model_path=_resolve_model_path(
                     grasp_net_raw.get("base_model_path"),
                     "base_point.pt",
                 ),
+                base_only=base_only,
                 depth_patch_radius_px=int(grasp_net_raw.get("depth_patch_radius_px", 3)),
                 predict_on=predict_on_raw,  # type: ignore[arg-type]
                 bbox_margin_px=int(grasp_net_raw.get("bbox_margin_px", 12)),

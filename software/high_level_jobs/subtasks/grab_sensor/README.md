@@ -9,9 +9,9 @@ flowchart LR
   A[D415 RGB + depth] --> B[YOLO full frame]
   B --> C[Sensor bounding box]
   C --> D[Crop RGB + depth]
-  D --> E[Grasp CNN RGBD]
-  E --> F[Grasp pixel in full image]
-  F --> G[Depth → 3D camera frame]
+  D --> E[base_point.pt CNN]
+  E --> F[Base center pixel]
+  F --> G[Table XY + fixed Z]
   G --> H[camera_to_robot]
   H --> I[Pre-grasp + grasp poses]
   I --> J[iLQR plan + execute]
@@ -21,14 +21,16 @@ flowchart LR
 
 - **Input:** full 640×480 color frame  
 - **Output:** bounding box for class `sensor`  
-- **Model:** `detection/dataset/grasp_keypoints/model/sensor_yolo.pt` (Ultralytics YOLOv8n, fine-tuned locally)
+- **Model:** `detection/top_detection/dataset/base_keypoints/model/sensor_yolo.pt`
 
-### Stage 2 — Grasp point (RGB + depth CNN)
+### Stage 2 — Base point (RGB + depth CNN, top view)
 
 - **Input:** crop inside YOLO box (+ padding), **4 channels** (RGB + normalized depth)  
-- **Output:** grasp pixel `(u, v)` in crop space → mapped to full image  
-- **Models:** `grasp_point.pt` (grasp) + `base_point.pt` (base) — separate CNNs after YOLO crop
-- Depth at that pixel → 3D point in the camera frame  
+- **Output:** base center pixel `(u, v)` — grasp XY uses this same point  
+- **Model:** `detection/top_detection/dataset/base_keypoints/model/base_point.pt` (2-output point CNN)  
+- Table calib maps base pixel → grasp XY; `motion_planning.grasp_height_above_table_mm` sets Z  
+
+Side/oblique cameras use `detection_profile: side` and `detection/side_detection/` models (grasp + base ellipse).
 
 ### Stage 3 — Robot grasp
 
@@ -56,8 +58,8 @@ Production defaults in `config/default_grasp.yaml`:
 
 | Stage | What |
 |-------|------|
-| Vision | `yolo_grasp` — YOLO → crop RGBD → `grasp_point.pt` + `base_point.pt` |
-| Position | `grasp_position_from_table_base` — base ellipse → table XY + fixed height |
+| Vision | `detection_profile: top` — YOLO + `base_point.pt` (`detection/top_detection/`) |
+| Position | `grasp_position_from_table_base` — base center → table XY + fixed height |
 | Orientation | `fixed_robot` — taught `[a,b,c]` → world RPY at grasp XY |
 | Motion | pre-grasp → grasp → lift → return HOME |
 
@@ -120,7 +122,7 @@ python -m high_level_jobs.subtasks.grab_sensor --offline --visualize
 
 Debug outputs (local only, not in git):
 
-- `grab_sensor/debug/grasp_overlay.png` — YOLO box, NN grasp (red), robot reprojection (magenta if miscalibrated)  
+- `grab_sensor/debug/grasp_overlay.png` — YOLO box, NN base center (red), planned grasp (magenta)  
 - `grab_sensor/debug/detection.json` — numeric results  
 
 ## Configuration
@@ -129,16 +131,18 @@ Primary file: `config/default_grasp.yaml`
 
 | Key | Purpose |
 |-----|---------|
+| `detection_profile` | `top` (default, overhead) or `side` (oblique) — selects model defaults |
 | `vision_mode` | `yolo_grasp` (default) or `depth_segment` |
 | `camera_to_robot` | Fixed D415 mount (calibrate once) |
-| `yolo.*` | YOLO weights, confidence, crop padding |
-| `grasp_net.*` | Grasp CNN weights, depth normalization band |
+| `yolo.*` | YOLO weights under `detection/top_detection/`, confidence, crop padding |
+| `grasp_net.base_only` | `true` for top view (base point CNN only) |
+| `grasp_net.base_model_path` | `top_detection/.../base_point.pt` |
 | `grasp_orientation_mode` | `fixed_robot` or `follow_object` |
 | `fixed_grasp_abc_input_deg` | Taught `[a,b,c]` (deg); mapped to world RPY (see Stage 3) |
 | `grasp_rpy_roll_offset_deg` | Added after negating `a` for world roll |
 | `grasp_rpy_yaw_base_deg` | Base yaw before subtracting atan2 (default `180`) |
 | `grasp_c_from_xy` | If true: `yaw -= atan2(x,y)`; see Stage 3 |
-| `grasp_position_from_table_base` | Use base CNN + table calib for grasp XY (stable path) |
+| `grasp_position_from_table_base` | Base center + table calib → grasp XY (top view default) |
 | `grasp_motion.grasp_height_above_table_mm` | Grasp Z above table surface (mm) |
 | `load_environment` | `false` = robot-only PyBullet scene (default for grasp planning) |
 | `approach.*` | Pre-grasp offset, lift, return HOME |
@@ -146,24 +150,23 @@ Primary file: `config/default_grasp.yaml`
 
 ## Data collection & training
 
-Vision labeling and model training live under **`detection/`** — see [`detection/README.md`](detection/README.md).
+Vision labeling and model training live under **`detection/top_detection/`** (overhead) and **`detection/side_detection/`** (oblique) — see [`detection/README.md`](detection/README.md).
 
 ```powershell
-python -m high_level_jobs.subtasks.grab_sensor.detection.live_label
-python -m high_level_jobs.subtasks.grab_sensor.detection.relabel
-python -m high_level_jobs.subtasks.grab_sensor.detection.train_model --crop --depth --epochs 120
+python -m high_level_jobs.subtasks.grab_sensor.detection.top_detection.live_label
+python -m high_level_jobs.subtasks.grab_sensor.detection.top_detection.train_yolo_model --export-first
+python -m high_level_jobs.subtasks.grab_sensor.detection.top_detection.train_model --crop --depth --epochs 120
 ```
 
 ## Overlay legend (`grasp_overlay.png`)
 
-| Marker | Meaning |
-|--------|---------|
+| Marker | Meaning (top view) |
+|--------|---------------------|
 | Yellow box | YOLO sensor region |
-| Red **GRASP (NN)** | Grasp CNN pixel (trust this for vision accuracy) |
-| Cyan **object center** | 3D grasp point reprojected to the image |
+| Red **BASE (NN)** | Base point CNN (grasp XY source) |
+| Magenta **grasp plan** | Planned grasp on table (if differs from NN) |
+| Cyan **object center** | 3D point reprojected |
 | Orange **pre-grasp** | Approach point in image |
-| Magenta **robot IK** | Robot target reprojected — offset from red means fix `camera_to_robot` |
-| Pink arrow | Object +X axis (only meaningful in `follow_object` mode) |
 
 ## Dependencies
 

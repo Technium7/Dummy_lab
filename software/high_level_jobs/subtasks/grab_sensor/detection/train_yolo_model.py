@@ -62,9 +62,9 @@ def train_yolo_model(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     pkg = Path(__file__).resolve().parent
-    default_yaml = pkg / "dataset" / "sensor_yolo" / "data.yaml"
-    default_model = pkg / "dataset" / "grasp_keypoints" / "model" / "sensor_yolo.pt"
-    default_grasp = pkg / "dataset" / "grasp_keypoints"
+    default_yaml = pkg / "side_detection" / "dataset" / "sensor_yolo" / "data.yaml"
+    default_grasp = pkg / "side_detection" / "dataset" / "grasp_keypoints"
+    default_model = default_grasp / "model" / "sensor_yolo.pt"
     p = argparse.ArgumentParser(description="Train YOLO sensor detector.")
     p.add_argument("--data-yaml", type=Path, default=default_yaml)
     p.add_argument("--model-path", type=Path, default=default_model)

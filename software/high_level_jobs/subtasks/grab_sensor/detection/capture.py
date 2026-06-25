@@ -483,7 +483,6 @@ def capture_realsense_frame(
                 hardware_reset_realsense(serial)
     raise last_exc  # type: ignore[misc]
 
-
 def _dict_to_intrinsics(data: dict[str, float | int]) -> Any:
     class _Intr:
         pass
@@ -654,6 +653,126 @@ def save_labeled_sample(
         base_uv=base_ellipse.center_uv if base_ellipse is not None else base_uv,
         base_ellipse=base_ellipse,
     )
+    return label_path
+
+
+def save_base_labeled_sample(
+    out_dir: Path,
+    sample_id: str,
+    frame: AlignedFrame,
+    base_uv: tuple[int, int],
+    *,
+    note: str = "",
+) -> Path:
+    """Save RGB, aligned depth, and base point label (top/overhead view — no grasp)."""
+    out_dir = out_dir.resolve()
+    images_dir = out_dir / "images"
+    depth_dir = out_dir / "depth"
+    labels_dir = out_dir / "labels"
+    previews_dir = out_dir / "previews"
+    for d in (images_dir, depth_dir, labels_dir, previews_dir):
+        d.mkdir(parents=True, exist_ok=True)
+
+    bu, bv = int(base_uv[0]), int(base_uv[1])
+    h, w = frame.color_rgb.shape[:2]
+    depth_at_base = float(frame.depth_m[bv, bu]) if 0 <= bv < h and 0 <= bu < w else 0.0
+    valid_base_depth = depth_at_base > 1e-4
+
+    image_path = images_dir / f"{sample_id}.png"
+    depth_path = depth_dir / f"{sample_id}.npy"
+    label_path = labels_dir / f"{sample_id}.json"
+    preview_path = previews_dir / f"{sample_id}.png"
+
+    Image.fromarray(frame.color_rgb).save(image_path)
+    np.save(depth_path, frame.depth_m.astype(np.float32))
+
+    label = {
+        "id": sample_id,
+        "base_u": bu,
+        "base_v": bv,
+        "base_uv": [bu, bv],
+        "width": w,
+        "height": h,
+        "depth_m_at_base": depth_at_base if valid_base_depth else None,
+        "valid_base_depth": valid_base_depth,
+        "note": note,
+        "timestamp": frame.timestamp,
+        "device_name": frame.device_name,
+        "device_serial": frame.device_serial,
+        "intrinsics": _intrinsics_to_dict(frame.color_intrinsics),
+        "files": {
+            "image": str(image_path.relative_to(out_dir)).replace("\\", "/"),
+            "depth": str(depth_path.relative_to(out_dir)).replace("\\", "/"),
+        },
+    }
+    label_path.write_text(json.dumps(label, indent=2), encoding="utf-8")
+
+    manifest = out_dir / "manifest.jsonl"
+    with manifest.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(label, separators=(",", ":")) + "\n")
+
+    _save_preview(
+        preview_path,
+        frame.color_rgb,
+        base_uv,
+        sample_id,
+        base_uv=base_uv,
+    )
+    return label_path
+
+
+def update_sample_base_point(
+    label_path: Path,
+    base_uv: tuple[int, int],
+    *,
+    data_dir: Path | None = None,
+) -> Path:
+    """Update base point on an existing top-view label JSON (no ellipse)."""
+    label_path = label_path.resolve()
+    data = json.loads(label_path.read_text(encoding="utf-8"))
+    out_dir = (data_dir or label_path.parent.parent).resolve()
+    bu, bv = int(base_uv[0]), int(base_uv[1])
+    h = int(data.get("height", 480))
+    w = int(data.get("width", 640))
+
+    depth_at_base: float | None = None
+    valid_base_depth = False
+    depth_rel = data.get("files", {}).get("depth")
+    if depth_rel:
+        depth_path = out_dir / str(depth_rel)
+        if depth_path.is_file():
+            depth_m = np.load(depth_path)
+            if np.issubdtype(depth_m.dtype, np.integer):
+                depth_m = depth_m.astype(np.float32) * 0.001
+            else:
+                depth_m = depth_m.astype(np.float32)
+            if 0 <= bv < depth_m.shape[0] and 0 <= bu < depth_m.shape[1]:
+                depth_at_base = float(depth_m[bv, bu])
+                valid_base_depth = depth_at_base > 1e-4
+
+    data["base_u"] = bu
+    data["base_v"] = bv
+    data["base_uv"] = [bu, bv]
+    data.pop("base_ellipse", None)
+    data["depth_m_at_base"] = depth_at_base if valid_base_depth else None
+    data["valid_base_depth"] = valid_base_depth
+    label_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+    image_rel = data.get("files", {}).get("image")
+    if image_rel:
+        image_path = out_dir / str(image_rel)
+        if image_path.is_file():
+            color_rgb = np.asarray(Image.open(image_path).convert("RGB"))
+            preview_path = out_dir / "previews" / f"{data.get('id', label_path.stem)}.png"
+            preview_path.parent.mkdir(parents=True, exist_ok=True)
+            _save_preview(
+                preview_path,
+                color_rgb,
+                base_uv,
+                str(data.get("id", label_path.stem)),
+                base_uv=base_uv,
+            )
+
     return label_path
 
 
