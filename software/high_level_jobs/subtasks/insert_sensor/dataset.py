@@ -1,4 +1,4 @@
-"""Episode dataset for insert_sensor imitation learning."""
+"""Episode dataset for insert_sensor ACT (obs history + action chunk)."""
 
 from __future__ import annotations
 
@@ -10,12 +10,12 @@ from typing import Any
 
 import numpy as np
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
 from manual_control.mapping import transformed_deg_to_sim_rad
 
-from .model import ACTION_DIM, KEYPOINT_DIM, STATE_DIM, InsertionPolicyConfig, preprocess_rgbd_batch
+from .cameras import OVERHEAD_ROLE, SIDE_ROLE, load_rgbd_pair
+from .model import InsertionPolicyConfig, preprocess_rgbd_batch
 
 
 @dataclass(frozen=True)
@@ -71,25 +71,20 @@ def build_action_vector(frame: dict[str, Any]) -> np.ndarray:
 def compute_norm_stats(episodes: list[EpisodeInfo]) -> dict[str, Any]:
     states: list[np.ndarray] = []
     actions: list[np.ndarray] = []
-    keypoints: list[np.ndarray] = []
     for ep in episodes:
         for frame_path in sorted(ep.path.glob("*.frame.json")):
             data = _load_frame_json(frame_path)
             states.append(build_state_vector(data))
             actions.append(build_action_vector(data))
-            keypoints.append(np.asarray(data.get("keypoint", [0.0] * KEYPOINT_DIM), dtype=np.float32))
     if not states:
         return {}
     s = np.stack(states)
     a = np.stack(actions)
-    k = np.stack(keypoints)
     return {
         "state_mean": s.mean(axis=0).tolist(),
         "state_std": (s.std(axis=0) + 1e-6).tolist(),
         "action_mean": a.mean(axis=0).tolist(),
         "action_std": (a.std(axis=0) + 1e-6).tolist(),
-        "keypoint_mean": k.mean(axis=0).tolist(),
-        "keypoint_std": (k.std(axis=0) + 1e-6).tolist(),
     }
 
 
@@ -100,7 +95,7 @@ def normalize(x: np.ndarray, mean: list[float], std: list[float]) -> np.ndarray:
 
 
 class InsertSensorSequenceDataset(Dataset):
-    """Sliding-window sequences over teleop episodes."""
+    """Obs window [i, i+H) + action chunk starting at i+H-1 of length Ta."""
 
     def __init__(
         self,
@@ -113,16 +108,18 @@ class InsertSensorSequenceDataset(Dataset):
     ) -> None:
         self.episodes = episodes
         self.history_len = history_len
+        self.action_horizon = int(policy_cfg.action_horizon)
         self.policy_cfg = policy_cfg
         self.norm_stats = norm_stats or {}
         self.augment = augment
         self._windows: list[tuple[Path, int]] = []
+        need = history_len + self.action_horizon - 1
         for ep in episodes:
             frames = sorted(ep.path.glob("*.frame.json"))
             n = len(frames)
-            if n < history_len:
+            if n < need:
                 continue
-            for start in range(0, n - history_len + 1):
+            for start in range(0, n - need + 1):
                 self._windows.append((ep.path, start))
 
     def __len__(self) -> int:
@@ -130,52 +127,67 @@ class InsertSensorSequenceDataset(Dataset):
 
     def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         ep_dir, start = self._windows[idx]
-        frame_paths = sorted(ep_dir.glob("*.frame.json"))[start : start + self.history_len]
+        all_paths = sorted(ep_dir.glob("*.frame.json"))
+        obs_paths = all_paths[start : start + self.history_len]
+        act_start = start + self.history_len - 1
+        act_paths = all_paths[act_start : act_start + self.action_horizon]
+
         cfg = self.policy_cfg
+        n_cam = int(cfg.num_cameras)
+        roles = (OVERHEAD_ROLE,) if n_cam <= 1 else (OVERHEAD_ROLE, SIDE_ROLE)
+        flip = self.augment and random.random() < 0.5
 
-        colors: list[np.ndarray] = []
-        depths: list[np.ndarray] = []
+        per_cam_colors: list[list[np.ndarray]] = [[] for _ in roles]
+        per_cam_depths: list[list[np.ndarray]] = [[] for _ in roles]
         states: list[np.ndarray] = []
-        actions: list[np.ndarray] = []
-        keypoints: list[np.ndarray] = []
 
-        for fp in frame_paths:
+        for fp in obs_paths:
             data = _load_frame_json(fp)
             stem = _frame_stem(fp)
-            color_path = ep_dir / f"{stem}.color.png"
-            depth_path = ep_dir / f"{stem}.depth.npy"
-            color = np.asarray(Image.open(color_path).convert("RGB"))
-            depth = np.load(depth_path).astype(np.float32)
-            if self.augment and random.random() < 0.5:
-                color = np.ascontiguousarray(color[:, ::-1, :])
-                depth = np.ascontiguousarray(depth[:, ::-1])
-            colors.append(color)
-            depths.append(depth)
-
+            for cam_i, role in enumerate(roles):
+                color, depth = load_rgbd_pair(ep_dir, stem, role)
+                if color is None or depth is None:
+                    if cam_i == 0:
+                        raise FileNotFoundError(f"Missing overhead RGB-D for {ep_dir}/{stem}")
+                    h, w = per_cam_colors[0][-1].shape[:2]
+                    color = np.zeros((h, w, 3), dtype=np.uint8)
+                    depth = np.zeros((h, w), dtype=np.float32)
+                if flip:
+                    color = np.ascontiguousarray(color[:, ::-1, :])
+                    depth = np.ascontiguousarray(depth[:, ::-1])
+                per_cam_colors[cam_i].append(color)
+                per_cam_depths[cam_i].append(depth)
             st = build_state_vector(data)
-            ac = build_action_vector(data)
-            kp = np.asarray(data.get("keypoint", [0.0] * KEYPOINT_DIM), dtype=np.float32)
             if self.norm_stats:
                 st = normalize(st, self.norm_stats["state_mean"], self.norm_stats["state_std"])
-                ac = normalize(ac, self.norm_stats["action_mean"], self.norm_stats["action_std"])
-                kp = normalize(kp, self.norm_stats["keypoint_mean"], self.norm_stats["keypoint_std"])
             states.append(st)
-            actions.append(ac)
-            keypoints.append(kp)
 
-        rgbd = preprocess_rgbd_batch(
-            np.stack(colors),
-            np.stack(depths),
-            out_w=cfg.img_width,
-            out_h=cfg.img_height,
-            depth_min_m=cfg.depth_min_m,
-            depth_max_m=cfg.depth_max_m,
-        )
+        cam_tensors = [
+            preprocess_rgbd_batch(
+                np.stack(per_cam_colors[cam_i]),
+                np.stack(per_cam_depths[cam_i]),
+                out_w=cfg.img_width,
+                out_h=cfg.img_height,
+                depth_min_m=cfg.depth_min_m,
+                depth_max_m=cfg.depth_max_m,
+                use_depth=cfg.use_depth,
+            )
+            for cam_i in range(len(roles))
+        ]
+        rgbd = np.stack(cam_tensors, axis=1)  # (T, N, C, H, W)
+
+        actions: list[np.ndarray] = []
+        for fp in act_paths:
+            data = _load_frame_json(fp)
+            ac = build_action_vector(data)
+            if self.norm_stats:
+                ac = normalize(ac, self.norm_stats["action_mean"], self.norm_stats["action_std"])
+            actions.append(ac)
+
         return {
             "rgbd": torch.from_numpy(rgbd),
             "state": torch.from_numpy(np.stack(states)),
             "action": torch.from_numpy(np.stack(actions)),
-            "keypoint": torch.from_numpy(np.stack(keypoints)),
         }
 
 
@@ -218,10 +230,9 @@ def make_dataloaders(
         if val_eps
         else None
     )
+    need = policy_cfg.history_len + policy_cfg.action_horizon - 1
     if len(train_ds) == 0:
-        raise ValueError(
-            f"No training windows (need episodes with >= {policy_cfg.history_len} frames)"
-        )
+        raise ValueError(f"No training windows (need episodes with >= {need} frames)")
 
     train_loader = DataLoader(
         train_ds,

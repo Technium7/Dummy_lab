@@ -1,6 +1,24 @@
-# Camera calibration
+# Camera
 
-Two ways to estimate fixed RealSense extrinsics for `grab_sensor`:
+Utilities for RealSense capture and extrinsics for `grab_sensor` / robot vision jobs.
+
+## Live view (all cameras)
+
+Tile every connected RealSense into one window — useful when mounting or identifying cameras:
+
+```bash
+python software/camera/live_view.py
+python software/camera/live_view.py --list
+python software/camera/live_view.py --serial 104122062828 --serial 024122062290
+```
+
+**Q** / **Esc** quits. Each tile is labeled with the device serial.
+
+One-shot capture (no GUI): [`single_shot.py`](single_shot.py).
+
+## Calibration
+
+Two ways to estimate fixed RealSense extrinsics:
 
 | Package | When to use | Output frame |
 |---------|-------------|--------------|
@@ -9,7 +27,7 @@ Two ways to estimate fixed RealSense extrinsics for `grab_sensor`:
 
 Both solve full **6-DOF** pose from vision (OpenCV `solvePnP` or joint SE(3) fit). Prefer the **4×4 transforms** in JSON for robot chaining; `rpy_deg` fields are human-readable XYZ Euler labels, not individual bracket angles.
 
-## Quick start (table grid)
+### Quick start (table grid)
 
 ```bash
 python software/camera/calibration_table/table_calib_app.py
@@ -17,7 +35,7 @@ python software/camera/calibration_table/table_calib_app.py
 
 See [calibration_table/README.md](calibration_table/README.md).
 
-## Reference (hand-eye)
+### Reference (hand-eye)
 
 ```bash
 python software/camera/calibration/calibration_app.py

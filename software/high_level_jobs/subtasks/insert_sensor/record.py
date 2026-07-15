@@ -1,4 +1,4 @@
-"""Record teleop demonstrations with RGB-D, robot state, and base keypoint stream."""
+"""Record teleop demonstrations with multi-camera RGB-D and robot state."""
 
 from __future__ import annotations
 
@@ -18,8 +18,16 @@ from PIL import Image
 from manual_control.mapping import sim_vel_rad_to_transformed_deg_s
 from manual_control.teleop_tick import TeleopTickResult
 
+from .cameras import (
+    OVERHEAD_ROLE,
+    CameraSpec,
+    color_filename,
+    depth_filename,
+    make_streamer,
+    resolve_camera_serials,
+    stop_streamer,
+)
 from .config_loader import InsertSensorConfig
-from .model import KEYPOINT_DIM
 
 
 class _RecordPhase(Enum):
@@ -47,15 +55,13 @@ def _key_triggered(events: dict[int, int], char: str) -> bool:
     )
 
 
-def _placeholder_keypoint() -> list[float]:
-    return [0.0] * KEYPOINT_DIM
-
-
 def _save_frame_job(job: dict[str, Any]) -> None:
     staging_dir = Path(str(job["staging_dir"]))
     stem = str(job["stem"])
-    Image.fromarray(job["color_rgb"]).save(staging_dir / f"{stem}.color.png")
-    np.save(staging_dir / f"{stem}.depth.npy", job["depth_m"])
+    for cam in job["cameras"]:
+        role = str(cam["role"])
+        Image.fromarray(cam["color_rgb"]).save(staging_dir / color_filename(stem, role))
+        np.save(staging_dir / depth_filename(stem, role), cam["depth_m"])
     (staging_dir / f"{stem}.frame.json").write_text(
         json.dumps(job["payload"], indent=2),
         encoding="utf-8",
@@ -80,7 +86,6 @@ def _disk_writer_main(job_queue: queue.Queue, stop_event: threading.Event) -> No
 class EpisodeRecorder:
     cfg: InsertSensorConfig
     dataset_dir: Path
-    _grasp_cfg: Any | None = field(default=None, init=False)
     _staging_dir: Path | None = field(default=None, init=False)
     _frame_idx: int = field(default=0, init=False)
     _phase: _RecordPhase = field(default=_RecordPhase.IDLE, init=False)
@@ -92,6 +97,7 @@ class EpisodeRecorder:
     _service_thread: threading.Thread | None = field(default=None, init=False)
     _phase_lock: threading.Lock = field(default_factory=threading.Lock, init=False)
     _next_snapshot_s: float = field(default=0.0, init=False)
+    _resolved_cameras: list[CameraSpec] = field(default_factory=list, init=False)
 
     def __post_init__(self) -> None:
         self.dataset_dir = self.dataset_dir.resolve()
@@ -112,13 +118,6 @@ class EpisodeRecorder:
     def has_pending(self) -> bool:
         with self._phase_lock:
             return self._phase is _RecordPhase.PENDING
-
-    def _get_grasp_cfg(self) -> Any:
-        if self._grasp_cfg is None:
-            from .config_loader import load_grasp_config
-
-            self._grasp_cfg = load_grasp_config(self.cfg)
-        return self._grasp_cfg
 
     def _set_phase(self, phase: _RecordPhase) -> None:
         with self._phase_lock:
@@ -144,11 +143,13 @@ class EpisodeRecorder:
         self._staging_dir = self._staging_root() / "current"
         self._staging_dir.mkdir(parents=True, exist_ok=True)
         self._frame_idx = 0
+        record_cams = self._resolved_cameras or list(self.cfg.record_cameras())
         meta = {
             "created": time.time(),
             "record_hz": self.cfg.record_hz,
-            "grasp_config": str(self.cfg.grasp_config_path),
-            "record_keypoint_online": self.cfg.record_keypoint_online,
+            "num_cameras": len(record_cams),
+            "policy_num_cameras": self.cfg.num_cameras,
+            "cameras": [{"role": c.role, "serial": c.serial} for c in record_cams],
         }
         (self._staging_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
@@ -185,9 +186,10 @@ class EpisodeRecorder:
         self._begin_staging()
         self._set_phase(_RecordPhase.RECORDING)
         self._enqueue_cmd("start_io")
+        n = len(self.cfg.record_cameras())
         print(
-            "[insert_sensor] Recording...  "
-            "(opening D415 on background thread; robot teleop unchanged)",
+            f"[insert_sensor] Recording...  "
+            f"(opening {n} RealSense camera(s) on background thread; robot teleop unchanged)",
             flush=True,
         )
 
@@ -210,12 +212,6 @@ class EpisodeRecorder:
         staging_dir.rename(dest)
         self._staging_root().mkdir(parents=True, exist_ok=True)
         print(f"[insert_sensor] Saved {frame_idx} frames -> {dest.name}", flush=True)
-        if not self.cfg.record_keypoint_online:
-            print(
-                "[insert_sensor] Label keypoints before train:\n"
-                "  python -m high_level_jobs.subtasks.insert_sensor --label-keypoints",
-                flush=True,
-            )
         self._staging_dir = None
         self._frame_idx = 0
         self._set_phase(_RecordPhase.IDLE)
@@ -248,20 +244,28 @@ class EpisodeRecorder:
     def _make_frame_job(
         self,
         snap: _RecordSnapshot,
-        frame: Any,
-        *,
-        keypoint: list[float] | None = None,
-        keypoint_valid: bool = False,
+        frames_by_role: dict[str, Any],
     ) -> dict[str, Any] | None:
         if self._staging_dir is None:
+            return None
+        overhead = frames_by_role.get(OVERHEAD_ROLE)
+        if overhead is None:
             return None
         joint_vel_deg_s = [
             sim_vel_rad_to_transformed_deg_s(i, float(snap.commanded_velocity[i]))
             for i in range(6)
         ]
         stem = f"{self._frame_idx:06d}"
+        cam_payload = [
+            {
+                "role": role,
+                "serial": getattr(frame, "device_serial", ""),
+                "t": float(frame.timestamp),
+            }
+            for role, frame in frames_by_role.items()
+        ]
         payload = {
-            "t": frame.timestamp,
+            "t": float(overhead.timestamp),
             "joint_pos_deg": snap.joint_pos_deg,
             "joint_vel_deg_s": joint_vel_deg_s,
             "gripper": snap.gripper,
@@ -269,22 +273,25 @@ class EpisodeRecorder:
             "hand_close": snap.gripper > 0.5,
             "action_joint_vel_rad_s": list(snap.commanded_velocity[:6]),
             "action_gripper": snap.gripper,
-            "keypoint": keypoint if keypoint is not None else _placeholder_keypoint(),
-            "keypoint_valid": keypoint_valid,
             "twist": snap.twist,
             "home_latched": snap.home_latched,
+            "cameras": cam_payload,
         }
         return {
             "staging_dir": str(self._staging_dir),
             "stem": stem,
-            "color_rgb": np.asarray(frame.color_rgb, dtype=np.uint8),
-            "depth_m": np.asarray(frame.depth_m, dtype=np.float32),
+            "cameras": [
+                {
+                    "role": role,
+                    "color_rgb": np.asarray(frame.color_rgb, dtype=np.uint8),
+                    "depth_m": np.asarray(frame.depth_m, dtype=np.float32),
+                }
+                for role, frame in frames_by_role.items()
+            ],
             "payload": payload,
         }
 
     def _service_main(self) -> None:
-        from high_level_jobs.subtasks.grab_sensor.detection.capture import RealSenseStreamer
-
         disk_stop = threading.Event()
         disk_queue: queue.Queue = queue.Queue(maxsize=4)
         disk_thread = threading.Thread(
@@ -295,52 +302,58 @@ class EpisodeRecorder:
         )
         disk_thread.start()
 
-        streamer: RealSenseStreamer | None = None
+        streamers: dict[str, Any] = {}
         period = 1.0 / max(self.cfg.record_hz, 1.0)
         next_capture_s = 0.0
 
-        def _stop_streamer() -> None:
-            nonlocal streamer
-            if streamer is None:
-                return
-            try:
-                streamer.stop()
-            except Exception:
-                pass
-            streamer = None
-            print("[insert_sensor] Camera released.", flush=True)
+        def _stop_streamers() -> None:
+            nonlocal streamers
+            for role, streamer in list(streamers.items()):
+                stop_streamer(streamer, role=role)
+            streamers = {}
 
-        def _abort_recording_no_camera(self, reason: str) -> None:
-            nonlocal streamer
-            streamer = None
+        def _abort_recording_no_camera(reason: str) -> None:
+            nonlocal streamers
+            streamers = {}
             self._discard_staging()
             print(f"[insert_sensor] Recording cancelled (teleop unchanged): {reason}", flush=True)
             print(
-                "[insert_sensor] Camera tips: free a stuck process (`jobs -l` / kill live_label), "
-                "unplug/replug D415, use a different USB port than the robot serial device.",
+                "[insert_sensor] Camera tips: free stuck processes (`jobs -l`), "
+                "unplug/replug cameras, use separate USB ports from the robot serial. "
+                "List devices: python -m high_level_jobs.subtasks.insert_sensor --list-cameras",
                 flush=True,
             )
 
-        def _start_streamer() -> None:
-            nonlocal streamer, next_capture_s
-            _stop_streamer()
+        def _start_streamers() -> None:
+            nonlocal streamers, next_capture_s
+            _stop_streamers()
             try:
-                streamer = RealSenseStreamer(
-                    serial=self.cfg.record_camera_serial,
-                    lock_exposure=True,
-                    warmup=3,
+                wanted = list(self.cfg.record_cameras())
+                self.cfg.assert_cameras_pinned(for_recording=True)
+                resolved = resolve_camera_serials(
+                    wanted,
+                    require_pinned=self.cfg.require_camera_serials,
                 )
-                # Avoid USB hardware-reset retries during teleop — they can drop robot serial.
-                streamer.frame_timeout_ms = 4000
-                streamer.frame_retries = 2
-                streamer.start_retries = 1
-                streamer.reset_on_start_retry = False
-                streamer.start()
+                self._resolved_cameras = resolved
+                if self._staging_dir is not None and (self._staging_dir / "meta.json").is_file():
+                    meta = json.loads((self._staging_dir / "meta.json").read_text(encoding="utf-8"))
+                    meta["num_cameras"] = len(resolved)
+                    meta["policy_num_cameras"] = self.cfg.num_cameras
+                    meta["cameras"] = [{"role": c.role, "serial": c.serial} for c in resolved]
+                    (self._staging_dir / "meta.json").write_text(
+                        json.dumps(meta, indent=2), encoding="utf-8"
+                    )
+                for cam in resolved:
+                    streamers[cam.role] = make_streamer(
+                        cam.serial,
+                        role=cam.role,
+                        exposure_us=cam.exposure_us,
+                    )
             except Exception as exc:
+                _stop_streamers()
                 _abort_recording_no_camera(str(exc))
                 return
             next_capture_s = time.perf_counter()
-            print("[insert_sensor] Camera ready.", flush=True)
 
         try:
             while not self._service_stop.is_set():
@@ -358,13 +371,13 @@ class EpisodeRecorder:
                     self._commit()
                     continue
                 if cmd == "start_io":
-                    _start_streamer()
+                    _start_streamers()
                     continue
                 if cmd == "stop_io":
-                    _stop_streamer()
+                    _stop_streamers()
                     continue
 
-                if not self._recording_active.is_set() or streamer is None:
+                if not self._recording_active.is_set() or not streamers:
                     continue
 
                 now = time.perf_counter()
@@ -377,32 +390,15 @@ class EpisodeRecorder:
                 if snap is None:
                     continue
 
+                frames_by_role: dict[str, Any] = {}
                 try:
-                    frame = streamer.read()
+                    for role, streamer in streamers.items():
+                        frames_by_role[role] = streamer.read()
                 except Exception as exc:
                     print(f"[insert_sensor] capture error: {exc}", flush=True)
                     continue
 
-                keypoint: list[float] | None = None
-                keypoint_valid = False
-                if self.cfg.record_keypoint_online:
-                    from .base_keypoint import detect_base_keypoint
-
-                    kp = detect_base_keypoint(
-                        frame.color_rgb,
-                        frame.depth_m,
-                        self._get_grasp_cfg(),
-                        intrinsics=frame.color_intrinsics,
-                    )
-                    keypoint = kp.vector().tolist()
-                    keypoint_valid = kp.valid
-
-                job = self._make_frame_job(
-                    snap,
-                    frame,
-                    keypoint=keypoint,
-                    keypoint_valid=keypoint_valid,
-                )
+                job = self._make_frame_job(snap, frames_by_role)
                 if job is None:
                     continue
                 try:
@@ -411,7 +407,7 @@ class EpisodeRecorder:
                 except queue.Full:
                     pass
         finally:
-            _stop_streamer()
+            _stop_streamers()
             try:
                 disk_queue.put_nowait(None)
             except queue.Full:
@@ -477,10 +473,14 @@ def create_manual_control_record_hook(
 
         cfg = load_insert_sensor_config(default_config_path())
     recorder = EpisodeRecorder(cfg=cfg, dataset_dir=cfg.dataset_dir)
+    cams = cfg.record_cameras()
+    cam_lines = ", ".join(f"{c.role}={c.serial or 'auto'}" for c in cams)
     print(
-        "[insert_sensor] Demo recording armed (camera OFF until R).\n"
+        f"[insert_sensor] Demo recording armed ({len(cams)} camera(s) OFF until R; "
+        f"policy still uses {cfg.num_cameras}).\n"
+        f"  Cameras: {cam_lines}\n"
         "  Teleop/control: identical to manual_control (recording is a background thread).\n"
-        "  Use separate USB ports for robot serial and D415 if the arm stalls on R.\n"
+        "  Use separate USB ports for robot serial and each RealSense.\n"
         "  R = start/stop RGB-D capture  |  C = save  |  O/P = gripper",
         flush=True,
     )

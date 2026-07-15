@@ -1,4 +1,4 @@
-"""Train insert_sensor visuomotor policy from teleop episodes."""
+"""Train insert_sensor ACT policy from teleop episodes."""
 
 from __future__ import annotations
 
@@ -30,7 +30,8 @@ def train_policy(
     )
 
     model = InsertionPolicy(policy_cfg).to(torch_device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr)
+    trainable = [p for p in model.parameters() if p.requires_grad]
+    optimizer = torch.optim.Adam(trainable, lr=cfg.lr)
     out_path = (out_path or cfg.model_path).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     run_dir = out_path.parent
@@ -39,9 +40,21 @@ def train_policy(
     best_val = float("inf")
     best_state: dict | None = None
 
+    n_train = sum(p.numel() for p in trainable)
+    n_total = sum(p.numel() for p in model.parameters())
+    print(
+        f"[insert_sensor] Training ACT  "
+        f"backbone={policy_cfg.vision_backbone} freeze={policy_cfg.freeze_backbone}  "
+        f"obs_H={policy_cfg.history_len} act_H={policy_cfg.action_horizon}  "
+        f"temporal={policy_cfg.temporal}  kl_weight={policy_cfg.kl_weight}  "
+        f"use_depth={policy_cfg.use_depth}  params={n_train}/{n_total}",
+        flush=True,
+    )
     for epoch in range(cfg.epochs):
         model.train()
         train_losses: list[float] = []
+        train_action: list[float] = []
+        train_kl: list[float] = []
         for batch in train_loader:
             batch_t = {k: v.to(torch_device) for k, v in batch.items()}
             optimizer.zero_grad()
@@ -49,6 +62,8 @@ def train_policy(
             losses["total"].backward()
             optimizer.step()
             train_losses.append(float(losses["total"].item()))
+            train_action.append(float(losses["action"].item()))
+            train_kl.append(float(losses["kl"].item()))
 
         avg_train = sum(train_losses) / max(len(train_losses), 1)
         val_total = float("nan")
@@ -67,7 +82,9 @@ def train_policy(
 
         history.append({"epoch": epoch + 1, "train": avg_train, "val": val_total})
         print(
-            f"  epoch {epoch + 1}/{cfg.epochs}  train={avg_train:.6f}  val={val_total:.6f}",
+            f"  epoch {epoch + 1}/{cfg.epochs}  train={avg_train:.6f}  val={val_total:.6f}  "
+            f"action={sum(train_action)/max(len(train_action),1):.4f}  "
+            f"kl={sum(train_kl)/max(len(train_kl),1):.4f}",
             flush=True,
         )
 
@@ -83,6 +100,7 @@ def train_policy(
             "epochs": cfg.epochs,
             "n_episodes": len(list_episodes(cfg.dataset_dir)),
             "best_val": None if best_val == float("inf") else best_val,
+            "arch": "act_v1",
         },
     )
     (run_dir / "training_history.json").write_text(json.dumps(history, indent=2), encoding="utf-8")
@@ -93,7 +111,7 @@ def train_policy(
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    p = argparse.ArgumentParser(description="Train insert_sensor IL policy.")
+    p = argparse.ArgumentParser(description="Train insert_sensor ACT policy.")
     p.add_argument("--config", type=Path, default=default_config_path())
     p.add_argument("--device", default=None)
     p.add_argument("--out", type=Path, default=None)

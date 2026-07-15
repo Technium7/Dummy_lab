@@ -1,6 +1,0 @@
-{
-  "created": 1782256354.6005995,
-  "record_hz": 15.0,
-  "grasp_config": "/home/jack/Desktop/Dummy_lab/software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml",
-  "record_keypoint_online": false
-}

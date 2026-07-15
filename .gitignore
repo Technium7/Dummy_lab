@@ -12,6 +12,12 @@ firmware/**/build/
 # Local calibration captures and run outputs
 software/camera/calibration/runs/
 
+# insert_sensor — local demo episodes and training outputs (too large for git)
+software/high_level_jobs/subtasks/insert_sensor/dataset/episodes/
+software/high_level_jobs/subtasks/insert_sensor/dataset/_staging/
+software/high_level_jobs/subtasks/insert_sensor/runs/
+software/high_level_jobs/subtasks/insert_sensor/camera_previews/
+
 # grab_sensor — local training data, weights, and debug captures
 # software/high_level_jobs/subtasks/grab_sensor/dataset/**/*
 # !software/high_level_jobs/subtasks/grab_sensor/dataset/README.md

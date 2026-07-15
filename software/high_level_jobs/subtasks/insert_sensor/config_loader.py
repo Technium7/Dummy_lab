@@ -7,12 +7,13 @@ from typing import Any, Mapping
 
 import yaml
 
-from high_level_jobs.subtasks.grab_sensor.config_loader import (
-    apply_runtime_calibrations,
-    load_grab_sensor_config,
+from .cameras import (
+    OVERHEAD_ROLE,
+    POLICY_CAMERA_ROLES,
+    SIDE2_ROLE,
+    SIDE_ROLE,
+    CameraSpec,
 )
-from high_level_jobs.subtasks.grab_sensor.models import GrabSensorConfig
-
 from .model import InsertionPolicyConfig
 
 
@@ -26,10 +27,10 @@ def default_config_path() -> Path:
 
 @dataclass(frozen=True)
 class InsertSensorConfig:
-    grasp_config_path: Path
     dataset_dir: Path
     model_path: Path
     policy: InsertionPolicyConfig
+    cameras: tuple[CameraSpec, ...]
     epochs: int = 80
     batch_size: int = 16
     lr: float = 3e-4
@@ -37,11 +38,81 @@ class InsertSensorConfig:
     seed: int = 42
     num_workers: int = 0
     record_hz: float = 15.0
-    record_camera_serial: str = ""
-    record_keypoint_online: bool = False
     deploy_hz: float = 15.0
     action_scale: float = 1.0
+    deploy_speed_scale: float = 2.0
     gripper_close_threshold: float = 0.5
+    require_camera_serials: bool = True
+
+    @property
+    def num_cameras(self) -> int:
+        """Policy / train / deploy camera count (unchanged until model supports 3)."""
+        return self.policy.num_cameras
+
+    @property
+    def overhead_serial(self) -> str:
+        for cam in self.cameras:
+            if cam.role == OVERHEAD_ROLE:
+                return cam.serial
+        return self.cameras[0].serial if self.cameras else ""
+
+    @property
+    def side_serial(self) -> str:
+        for cam in self.cameras:
+            if cam.role == SIDE_ROLE:
+                return cam.serial
+        return ""
+
+    @property
+    def side2_serial(self) -> str:
+        for cam in self.cameras:
+            if cam.role == SIDE2_ROLE:
+                return cam.serial
+        return ""
+
+    @property
+    def wrist_serial(self) -> str:
+        """Deprecated alias for side_serial."""
+        return self.side_serial
+
+    @property
+    def record_camera_serial(self) -> str:
+        """Legacy alias for overhead serial."""
+        return self.overhead_serial
+
+    def policy_cameras(self) -> tuple[CameraSpec, ...]:
+        """Cameras used by train / deploy for ``policy.num_cameras``."""
+        by_role = {c.role: c for c in self.cameras}
+        if self.num_cameras <= 1:
+            cam = by_role.get(OVERHEAD_ROLE) or (self.cameras[0] if self.cameras else None)
+            return (cam,) if cam is not None else ()
+        out: list[CameraSpec] = []
+        for role in POLICY_CAMERA_ROLES[: self.num_cameras]:
+            cam = by_role.get(role)
+            if cam is not None:
+                out.append(cam)
+        return tuple(out)
+
+    def record_cameras(self) -> tuple[CameraSpec, ...]:
+        """All configured cameras for demonstration recording."""
+        return self.cameras
+
+    def active_cameras(self) -> tuple[CameraSpec, ...]:
+        """Alias for ``policy_cameras`` (deploy / train)."""
+        return self.policy_cameras()
+
+    def assert_cameras_pinned(self, *, for_recording: bool = False) -> None:
+        if not self.require_camera_serials:
+            return
+        cams = self.record_cameras() if for_recording else self.policy_cameras()
+        missing = [c.role for c in cams if not (c.serial or "").strip()]
+        if missing:
+            raise RuntimeError(
+                f"Camera serial(s) not pinned for: {missing}. "
+                "USB order is unstable — set cameras.*.serial in config. "
+                "Identify with: python software/camera/live_view.py "
+                "or python -m high_level_jobs.subtasks.insert_sensor --preview-cameras"
+            )
 
     @staticmethod
     def from_mapping(data: Mapping[str, Any], base_dir: Path | None = None) -> InsertSensorConfig:
@@ -53,12 +124,8 @@ class InsertSensorConfig:
                 p = (base / p).resolve()
             return p
 
-        grasp_path = _resolve(
-            data.get("grasp_config"),
-            "software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml",
-        )
+        cameras = _parse_cameras(data)
         return InsertSensorConfig(
-            grasp_config_path=grasp_path,
             dataset_dir=_resolve(
                 data.get("dataset_dir"),
                 "software/high_level_jobs/subtasks/insert_sensor/dataset/episodes",
@@ -68,6 +135,7 @@ class InsertSensorConfig:
                 "software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt",
             ),
             policy=InsertionPolicyConfig.from_mapping(dict(data)),
+            cameras=cameras,
             epochs=int(data.get("epochs", 80)),
             batch_size=int(data.get("batch_size", 16)),
             lr=float(data.get("lr", 3e-4)),
@@ -75,12 +143,59 @@ class InsertSensorConfig:
             seed=int(data.get("seed", 42)),
             num_workers=int(data.get("num_workers", 0)),
             record_hz=float(data.get("record_hz", 15.0)),
-            record_camera_serial=str(data.get("record_camera_serial", "")),
-            record_keypoint_online=bool(data.get("record_keypoint_online", False)),
             deploy_hz=float(data.get("deploy_hz", 15.0)),
             action_scale=float(data.get("action_scale", 1.0)),
+            deploy_speed_scale=float(data.get("deploy_speed_scale", 2.0)),
             gripper_close_threshold=float(data.get("gripper_close_threshold", 0.5)),
+            require_camera_serials=bool(data.get("require_camera_serials", True)),
         )
+
+
+def _cam_block(cams_raw: Mapping[str, Any], role: str) -> Mapping[str, Any]:
+    block = cams_raw.get(role, {})
+    return block if isinstance(block, Mapping) else {}
+
+
+def _exposure_us(block: Mapping[str, Any]) -> float | None:
+    if "exposure_us" not in block or block.get("exposure_us") is None:
+        return None
+    return float(block["exposure_us"])
+
+
+def _parse_cameras(data: Mapping[str, Any]) -> tuple[CameraSpec, ...]:
+    cams_raw = data.get("cameras")
+    legacy = str(data.get("record_camera_serial", "") or "").strip()
+    if isinstance(cams_raw, Mapping):
+        # Accept either cameras.side or cameras.wrist
+        side_block = cams_raw.get(SIDE_ROLE, cams_raw.get("wrist", {}))
+        if not isinstance(side_block, Mapping):
+            side_block = {}
+        oh_block = _cam_block(cams_raw, OVERHEAD_ROLE)
+        oh_serial = str(oh_block.get("serial", "") or "").strip()
+        if legacy:
+            oh_serial = legacy
+        side_serial = str(side_block.get("serial", "") or "").strip()
+
+        cams: list[CameraSpec] = [
+            CameraSpec(role=OVERHEAD_ROLE, serial=oh_serial, exposure_us=_exposure_us(oh_block)),
+            CameraSpec(role=SIDE_ROLE, serial=side_serial, exposure_us=_exposure_us(side_block)),
+        ]
+        # Optional third view — include only when the key is present in config.
+        if SIDE2_ROLE in cams_raw:
+            side2_block = _cam_block(cams_raw, SIDE2_ROLE)
+            cams.append(
+                CameraSpec(
+                    role=SIDE2_ROLE,
+                    serial=str(side2_block.get("serial", "") or "").strip(),
+                    exposure_us=_exposure_us(side2_block),
+                )
+            )
+        return tuple(cams)
+
+    return (
+        CameraSpec(role=OVERHEAD_ROLE, serial=legacy),
+        CameraSpec(role=SIDE_ROLE, serial=""),
+    )
 
 
 def load_insert_sensor_config(path: Path | None = None) -> InsertSensorConfig:
@@ -95,8 +210,3 @@ def load_insert_sensor_config(path: Path | None = None) -> InsertSensorConfig:
     if not isinstance(data, Mapping):
         raise ValueError(f"Config must be a mapping, got {type(data).__name__}")
     return InsertSensorConfig.from_mapping(data, base_dir=_repo_root())
-
-
-def load_grasp_config(cfg: InsertSensorConfig) -> GrabSensorConfig:
-    grasp = load_grab_sensor_config(cfg.grasp_config_path)
-    return apply_runtime_calibrations(grasp)

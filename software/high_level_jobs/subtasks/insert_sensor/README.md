@@ -1,85 +1,64 @@
-# Insert sensor — imitation learning to place sensor back in holder
+# Insert sensor — ACT for placing sensor in holder
 
-Learn a visuomotor policy for tight insertion using **RGB-D**, **robot state**, a **pretrained base keypoint** (from `grab_sensor` vision), and **teleop demonstrations**. No manual geometry labels.
+**RGB (2 cameras for ACT)** + **Depth** (optional) + **joints** + **gripper**
+→ Frozen **DINOv2** (+ depth CNN) → Temporal Transformer → **ACT** → Action chunk.
+
+Recording can also capture a third **`side2`** RealSense; train/deploy still use overhead + side until the model is updated.
 
 ## Architecture
 
 | Component | Role |
 |-----------|------|
-| Perception encoder | RGB-D CNN + MLP(keypoint) + MLP(state) → fused features |
-| Temporal encoder | GRU (or Transformer) over history `H` → latent `z_t` |
-| Policy head | BC: `a_t = π(z_t)` vs expert teleop action |
-| World model | `(z_t, a_t) → z_{t+1}` with stopgrad target from encoder |
-| Smoothness | `‖z_t − z_{t−1}‖²` regularization |
-
-The base CNN (`base_point.pt`) is **not** trained here — it only supplies a noisy hole-base observation in robot frame.
+| Vision | Shared frozen DINOv2 (`dinov2_vits14`) on RGB; small CNN on depth; MLP(state) |
+| Temporal | Transformer over observation history `H` |
+| ACT | CVAE decoder predicts action horizon `Ta` |
 
 ## Workflow
 
-All commands from `software/`:
-
 ```bash
-# 1. Record demonstrations via manual_control (recommended; auto-detects robot USB port)
-python manual_control/manual_control_app.py --record-demos
-
-# Recording workflow:
-#   Teleop to grasp sensor / align (not recorded)
-#   R = start recording (RGB-D + joints + O/P gripper)
-#   Insert, open hand (O), retreat, T = home (stream waypoints, same as plain teleop)
-#   R = stop recording
-#   C = save episode  |  R again = discard and re-record
-
-# Or standalone insert_sensor teleop (same R/C keys):
-python -m high_level_jobs.subtasks.insert_sensor --record
-
-# 2. Check recordings
-python -m high_level_jobs.subtasks.insert_sensor --check
-python -m high_level_jobs.subtasks.insert_sensor --check --episode episode_000001 --frame 0
-
-# 3. Label base keypoints offline (default; keeps teleop from stalling)
-python -m high_level_jobs.subtasks.insert_sensor --label-keypoints
-
-# 4. Train policy
+cd software
 python -m high_level_jobs.subtasks.insert_sensor --train
-
-# 5. Deploy (camera loop; wire robot streaming as needed)
-python -m high_level_jobs.subtasks.insert_sensor --deploy --model \
-  high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
+python -m high_level_jobs.subtasks.insert_sensor --deploy \
+  --model high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
 ```
 
-## Config
+Retrain after model changes — older CNN / diffusion checkpoints are incompatible.
 
-Primary file: `config/default_insert_sensor.yaml`
+## Multi-camera setup
+
+USB enumeration order is **not stable**. Identify serials with live mosaic or snapshots, then pin in config:
+
+```bash
+python software/camera/live_view.py
+python -m high_level_jobs.subtasks.insert_sensor --preview-cameras
+```
+
+| Config key | Role |
+|------------|------|
+| `cameras.overhead` | Top-down robot + table |
+| `cameras.side` | Horizontal breadboard (used by ACT) |
+| `cameras.side2` | Extra side / oblique — **recorded**, not used by ACT yet |
+
+`num_cameras: 2` remains the policy size. New episodes save `*.side2.color.png` / `*.side2.depth.npy` alongside the existing files.
+
+## Test on robot
+
+1. `python manual_control/manual_control_app.py` — **T** home, grasp, **P** close, ESC  
+2. `python -m high_level_jobs.subtasks.insert_sensor --deploy --model .../policy.pt`
+
+| Flag | Meaning |
+|------|---------|
+| `--sim-only` | No motors |
+| `--speed 2.5` | Faster motion |
+
+## Config highlights
 
 | Key | Purpose |
 |-----|---------|
-| `grasp_config` | Reuses `grab_sensor` vision + table calib for base keypoint |
-| `dataset_dir` | Teleop episodes (`episode_*/`) |
-| `model_path` | Trained policy checkpoint |
-| `history_len` | Temporal window `H` |
-| `lambda_world`, `lambda_smooth` | Auxiliary loss weights |
-
-## Episode format
-
-```
-dataset/episodes/episode_000001/
-  meta.json
-  000000.color.png
-  000000.depth.npy
-  000000.frame.json   # joint state, expert action, keypoint vector
-```
-
-## Module map
-
-| Module | Role |
-|--------|------|
-| `base_keypoint.py` | YOLO + `base_point.pt` → robot-frame hole base |
-| `model.py` | Policy + world model architecture |
-| `dataset.py` | Episode loader + normalization |
-| `record.py` | Teleop hook + RealSense logging |
-| `train.py` | IL training loop |
-| `deploy.py` | Closed-loop inference |
-
-## Dependencies
-
-Same as `grab_sensor` (`pyrealsense2`, `torch`, `opencv-python`, `pybullet`) plus teleop stack in `manual_control/`.
+| `vision_backbone` | `dinov2_vits14` (default) or `cnn` |
+| `freeze_backbone` | Freeze DINOv2 weights (`true`) |
+| `img_width` / `img_height` | `224` (DINOv2 needs multiples of 14) |
+| `use_depth` | Include depth in vision (`true` / `false`) |
+| `action_horizon` | ACT chunk length |
+| `style_dim` / `kl_weight` | ACT CVAE |
+| `cameras.overhead` / `side` / `side2` | RealSense serials (`side2` = record only) |

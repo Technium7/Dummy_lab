@@ -1,39 +1,54 @@
-# Insert sensor: imitation learning to place sensor back in holder.
-# Uses grab_sensor vision (YOLO + base_point.pt) for weak hole-base keypoints.
-
-grasp_config: software/high_level_jobs/subtasks/grab_sensor/config/default_grasp.yaml
+# Insert sensor: ACT (Action Chunking Transformer).
+# RGB (2 cams) via frozen DINOv2 + Depth CNN + joints + gripper → temporal Transformer → ACT.
 
 dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
 model_path: software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
 
-# --- Model ---
+# --- Model (ACT) ---
 history_len: 8
-temporal: gru          # gru | transformer
+action_horizon: 8
+temporal: transformer
 latent_dim: 256
-img_width: 160
-img_height: 120
+img_width: 224           # DINOv2 needs multiples of 14
+img_height: 224
 depth_min_m: 0.25
 depth_max_m: 0.85
+num_cameras: 2
+use_depth: true          # false = RGB only
+vision_backbone: dinov2_vits14   # dinov2_vits14 | dinov2_vitb14 | cnn
+freeze_backbone: true
 
-lambda_world: 0.5
-lambda_smooth: 0.05
-lambda_aux: 0.0
+style_dim: 32            # ACT CVAE latent
+kl_weight: 10.0
 
 # --- Training ---
 epochs: 80
-batch_size: 16
+batch_size: 4            # lower for DINOv2 VRAM (raise if GPU allows)
 lr: 0.0003
 val_frac: 0.15
 seed: 42
 num_workers: 0
 
-# --- Recording (teleop + D415) ---
-record_hz: 15.0
+# --- Cameras ---
+# Recording captures every role listed here. Train/deploy still use num_cameras (overhead+side).
+cameras:
+  overhead:
+    serial: "104122062828"
+    exposure_us: 80
+  side:
+    serial: "024122062290"
+    exposure_us: 200
+  side2:
+    serial: "925322061385"          # pin via: python software/camera/live_view.py --list
+    exposure_us: 200
 record_camera_serial: ""
-# Keep false during teleop — YOLO in the record thread can starve robot serial I/O.
-record_keypoint_online: false
+require_camera_serials: true
+
+# --- Recording ---
+record_hz: 15.0
 
 # --- Deployment ---
 deploy_hz: 15.0
 action_scale: 1.0
+deploy_speed_scale: 2.0
 gripper_close_threshold: 0.5
