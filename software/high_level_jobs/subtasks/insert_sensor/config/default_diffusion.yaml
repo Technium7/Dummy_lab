@@ -1,0 +1,57 @@
+# Insert sensor: Diffusion Policy (CNN RGB-D + state → DDPM action chunk).
+# No auxiliary heads. Same demo episodes as ACT; separate checkpoint dir.
+#
+# Train:  python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
+# Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
+
+arch: diffusion
+
+dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/latest/policy.pt
+
+# --- Model (Diffusion Policy) ---
+history_len: 8
+action_horizon: 8
+temporal: transformer   # transformer | gru
+latent_dim: 256
+img_width: 160
+img_height: 120
+depth_min_m: 0.25
+depth_max_m: 0.85
+num_cameras: 2
+
+diffusion_steps: 50
+inference_steps: 16
+beta_start: 0.0001
+beta_end: 0.02
+
+# --- Training ---
+epochs: 80
+batch_size: 8
+lr: 0.0003
+val_frac: 0.15
+seed: 42
+num_workers: 0
+
+# --- Cameras (shared with ACT recording) ---
+cameras:
+  overhead:
+    serial: "104122062828"
+    exposure_us: 80
+  side:
+    serial: "024122062290"
+    exposure_us: 200
+  side2:
+    serial: "925322061385"
+    exposure_us: 200
+record_camera_serial: ""
+require_camera_serials: true
+
+# --- Recording ---
+record_hz: 15.0
+
+# --- Deployment ---
+deploy_hz: 15.0
+action_scale: 1.0
+deploy_speed_scale: 2.0
+gripper_close_threshold: 0.5

@@ -1,5 +1,11 @@
 # Insert sensor: ACT (Action Chunking Transformer).
 # RGB (2 cams) via frozen DINOv2 + Depth CNN + joints + gripper → temporal Transformer → ACT.
+#
+# Train:  python -m high_level_jobs.subtasks.insert_sensor --arch act --train
+# Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch act --deploy
+# Diffusion sibling: --arch diffusion (see default_diffusion.yaml)
+
+arch: act
 
 dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
 model_path: software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt

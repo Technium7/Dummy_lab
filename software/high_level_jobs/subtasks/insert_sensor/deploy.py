@@ -31,7 +31,7 @@ from .cameras import (
 )
 from .config_loader import InsertSensorConfig, default_config_path, load_insert_sensor_config
 from .dataset import build_state_vector, normalize
-from .model import load_policy, preprocess_rgbd_batch
+from .policies import load_policy_for_arch
 
 _STREAM_VEL_SCALE = 0.92
 # Cap catch-up so a stalled camera frame does not jump too far (seconds).
@@ -40,7 +40,7 @@ _HOLD_SPEED = 8.0
 
 
 class PolicyRunner:
-    """Rolling-window ACT inference at deploy_hz (open-loop action chunks)."""
+    """Rolling-window policy inference at deploy_hz (ACT or diffusion)."""
 
     def __init__(
         self,
@@ -48,11 +48,22 @@ class PolicyRunner:
         *,
         device: str | None = None,
         model_path: Path | None = None,
+        arch: str | None = None,
     ) -> None:
         self.cfg = cfg
         self.device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
         path = model_path or cfg.model_path
-        self.model, self.policy_cfg, self.norm_stats = load_policy(path, device=str(self.device))
+        resolved_arch = arch or getattr(cfg, "arch", None)
+        self.model, self.policy_cfg, self.norm_stats, self.arch = load_policy_for_arch(
+            path,
+            arch=resolved_arch,  # type: ignore[arg-type]
+            device=str(self.device),
+        )
+        if self.arch == "diffusion":
+            from .policies.diffusion import preprocess_rgbd_batch
+        else:
+            from .model import preprocess_rgbd_batch
+        self._preprocess_rgbd_batch = preprocess_rgbd_batch
         self.history_len = self.policy_cfg.history_len
         self.action_horizon = int(getattr(self.policy_cfg, "action_horizon", 8))
         self.num_cameras = int(self.policy_cfg.num_cameras)
@@ -62,6 +73,7 @@ class PolicyRunner:
         self._action_idx = 0
         self._replan_every = max(1, self.action_horizon // 2)
         self._gripper = 0.0
+        print(f"[insert_sensor] Loaded {self.arch} policy from {path}", flush=True)
 
     def _pad_history(self, buf: deque[np.ndarray], sample: np.ndarray) -> np.ndarray:
         buf.append(sample)
@@ -96,7 +108,7 @@ class PolicyRunner:
         if self.norm_stats:
             st = normalize(st, self.norm_stats["state_mean"], self.norm_stats["state_std"])
 
-        overhead = preprocess_rgbd_batch(
+        overhead = self._preprocess_rgbd_batch(
             color_rgb[np.newaxis, ...],
             depth_m[np.newaxis, ...],
             out_w=self.policy_cfg.img_width,
@@ -110,7 +122,7 @@ class PolicyRunner:
             if side_color_rgb is None or side_depth_m is None:
                 side = np.zeros_like(overhead)
             else:
-                side = preprocess_rgbd_batch(
+                side = self._preprocess_rgbd_batch(
                     side_color_rgb[np.newaxis, ...],
                     side_depth_m[np.newaxis, ...],
                     out_w=self.policy_cfg.img_width,
@@ -250,6 +262,7 @@ def run_deploy_loop(
     model_path: Path | None = None,
     countdown_s: float = 5.0,
     speed_scale: float | None = None,
+    arch: str | None = None,
 ) -> None:
     """
     Closed-loop policy at deploy_hz.
@@ -262,7 +275,8 @@ def run_deploy_loop(
     if not path.is_file():
         raise FileNotFoundError(
             f"Policy not found: {path}\n"
-            "Train first: python -m high_level_jobs.subtasks.insert_sensor --train"
+            "Train first: python -m high_level_jobs.subtasks.insert_sensor --train "
+            "(or --arch diffusion --train)"
         )
 
     motion_scale = float(speed_scale if speed_scale is not None else cfg.deploy_speed_scale)
@@ -270,7 +284,7 @@ def run_deploy_loop(
 
     _print_deploy_banner(sim_only=sim_only, model_path=path, countdown_s=countdown_s)
     print(f"[insert_sensor] deploy_speed_scale={motion_scale:.2f}  action_scale={cfg.action_scale:.2f}", flush=True)
-    runner = PolicyRunner(cfg, model_path=path)
+    runner = PolicyRunner(cfg, model_path=path, arch=arch or getattr(cfg, "arch", None))
     resolved = resolve_camera_serials(
         list(cfg.active_cameras()),
         require_pinned=cfg.require_camera_serials,
@@ -408,7 +422,8 @@ def main(argv: list[str] | None = None) -> int:
     from robot_config import default_robot_port
 
     p = argparse.ArgumentParser(description="Deploy insert_sensor policy.")
-    p.add_argument("--config", type=Path, default=default_config_path())
+    p.add_argument("--arch", choices=("act", "diffusion"), default=None)
+    p.add_argument("--config", type=Path, default=None)
     p.add_argument("--model", type=Path, default=None)
     p.add_argument("--port", default=default_robot_port())
     p.add_argument("--baudrate", type=int, default=int(os.environ.get("ROBOT_BAUDRATE", "115200")))
@@ -423,7 +438,8 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--device", default=None)
     args = p.parse_args(argv)
 
-    cfg = load_insert_sensor_config(args.config)
+    cfg_path = args.config or default_config_path(arch=args.arch or "act")
+    cfg = load_insert_sensor_config(cfg_path, arch=args.arch)
     run_deploy_loop(
         cfg,
         port=args.port,
@@ -432,6 +448,7 @@ def main(argv: list[str] | None = None) -> int:
         model_path=args.model,
         countdown_s=args.countdown,
         speed_scale=args.speed,
+        arch=cfg.arch,
     )
     return 0
 

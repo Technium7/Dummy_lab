@@ -11,11 +11,15 @@ if str(_SOFTWARE_DIR) not in sys.path:
 
 from robot_config import DEFAULT_ROBOT, default_robot_port, repo_root
 
-from high_level_jobs.subtasks.insert_sensor.config_loader import default_config_path, load_insert_sensor_config
+from high_level_jobs.subtasks.insert_sensor.config_loader import (
+    default_config_path,
+    load_insert_sensor_config,
+)
 from high_level_jobs.subtasks.insert_sensor.deploy import run_deploy_loop
 from high_level_jobs.subtasks.insert_sensor.record import run_record_session
 from high_level_jobs.subtasks.insert_sensor.review import check_recordings
 from high_level_jobs.subtasks.insert_sensor.train import train_policy
+from high_level_jobs.subtasks.insert_sensor.train_diffusion import train_diffusion_policy
 
 
 def _resolve_urdf(root: Path) -> tuple[Path, list[Path], str, Path | None]:
@@ -32,9 +36,16 @@ def _resolve_urdf(root: Path) -> tuple[Path, list[Path], str, Path | None]:
 
 def main() -> int:
     p = argparse.ArgumentParser(
-        description="Insert sensor: record demos, train IL policy, deploy on robot.",
+        description="Insert sensor: record demos, train IL policy (ACT or diffusion), deploy on robot.",
     )
-    p.add_argument("--config", type=Path, default=default_config_path())
+    p.add_argument(
+        "--arch",
+        choices=("act", "diffusion"),
+        default=None,
+        help="Policy family for --train/--deploy (default: from config, else act). "
+        "ACT and diffusion use separate configs and checkpoint dirs.",
+    )
+    p.add_argument("--config", type=Path, default=None, help="YAML config (default depends on --arch)")
     p.add_argument("--record", action="store_true", help="Teleop + RGB-D demonstration recording")
     p.add_argument("--train", action="store_true", help="Train policy from recorded episodes")
     p.add_argument("--deploy", action="store_true", help="Run trained policy loop")
@@ -75,6 +86,12 @@ def main() -> int:
     p.add_argument("--device", default=None)
     p.add_argument("--model", type=Path, default=None, help="Policy checkpoint for deploy")
     p.add_argument("--out", type=Path, default=None, help="Training / preview output path")
+    p.add_argument(
+        "--max-episodes",
+        type=int,
+        default=None,
+        help="With --train: use only the first N episodes (sorted by name)",
+    )
     args = p.parse_args()
 
     if not (
@@ -117,7 +134,11 @@ def main() -> int:
         preview_cameras(out_dir=Path(out))
         return 0
 
-    cfg = load_insert_sensor_config(args.config)
+    arch = args.arch
+    cfg_path = args.config
+    if cfg_path is None:
+        cfg_path = default_config_path(arch=arch or "act")
+    cfg = load_insert_sensor_config(cfg_path, arch=arch)
     root = repo_root()
 
     if args.relabel_episode:
@@ -126,7 +147,6 @@ def main() -> int:
         ep_name = args.relabel_episode
         ep_dir = cfg.dataset_dir / ep_name if not Path(ep_name).is_dir() else Path(ep_name)
         if not ep_dir.is_dir():
-            # also allow bare name under dataset
             ep_dir = cfg.dataset_dir / ep_name
         if not ep_dir.is_dir():
             print(f"Episode not found: {args.relabel_episode}", file=sys.stderr)
@@ -163,7 +183,21 @@ def main() -> int:
         return 0
 
     if args.train:
-        train_policy(cfg, device=args.device, out_path=args.out)
+        print(f"[insert_sensor] Training arch={cfg.arch}  config={cfg_path}", flush=True)
+        if cfg.arch == "diffusion":
+            train_diffusion_policy(
+                cfg,
+                device=args.device,
+                out_path=args.out,
+                max_episodes=args.max_episodes,
+            )
+        else:
+            train_policy(
+                cfg,
+                device=args.device,
+                out_path=args.out,
+                max_episodes=args.max_episodes,
+            )
         return 0
 
     if args.check:
@@ -178,6 +212,7 @@ def main() -> int:
             model_path=args.model,
             countdown_s=args.countdown,
             speed_scale=args.speed,
+            arch=cfg.arch,
         )
         return 0
 

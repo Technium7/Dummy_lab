@@ -15,7 +15,7 @@ from torch.utils.data import DataLoader, Dataset
 from manual_control.mapping import transformed_deg_to_sim_rad
 
 from .cameras import OVERHEAD_ROLE, SIDE_ROLE, load_rgbd_pair
-from .model import InsertionPolicyConfig, preprocess_rgbd_batch
+from .model import preprocess_rgbd_batch
 
 
 @dataclass(frozen=True)
@@ -102,7 +102,7 @@ class InsertSensorSequenceDataset(Dataset):
         episodes: list[EpisodeInfo],
         *,
         history_len: int,
-        policy_cfg: InsertionPolicyConfig,
+        policy_cfg: Any,
         norm_stats: dict[str, Any] | None = None,
         augment: bool = False,
     ) -> None:
@@ -170,7 +170,7 @@ class InsertSensorSequenceDataset(Dataset):
                 out_h=cfg.img_height,
                 depth_min_m=cfg.depth_min_m,
                 depth_max_m=cfg.depth_max_m,
-                use_depth=cfg.use_depth,
+                use_depth=bool(getattr(cfg, "use_depth", True)),
             )
             for cam_i in range(len(roles))
         ]
@@ -194,15 +194,23 @@ class InsertSensorSequenceDataset(Dataset):
 def make_dataloaders(
     dataset_dir: Path,
     *,
-    policy_cfg: InsertionPolicyConfig,
+    policy_cfg: Any,
     batch_size: int,
     val_frac: float,
     seed: int,
     num_workers: int = 0,
+    max_episodes: int | None = None,
 ) -> tuple[DataLoader, DataLoader | None, dict[str, Any]]:
     episodes = list_episodes(dataset_dir)
     if len(episodes) < 1:
         raise ValueError(f"No episodes found in {dataset_dir}")
+    if max_episodes is not None and max_episodes > 0:
+        episodes = episodes[: int(max_episodes)]
+        print(
+            f"[insert_sensor] Using first {len(episodes)} episode(s) "
+            f"(max_episodes={max_episodes})",
+            flush=True,
+        )
 
     rng = random.Random(seed)
     shuffled = episodes[:]

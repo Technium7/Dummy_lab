@@ -17,6 +17,7 @@ def train_policy(
     *,
     device: str | None = None,
     out_path: Path | None = None,
+    max_episodes: int | None = None,
 ) -> Path:
     torch_device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
     policy_cfg = cfg.policy
@@ -27,6 +28,7 @@ def train_policy(
         val_frac=cfg.val_frac,
         seed=cfg.seed,
         num_workers=cfg.num_workers,
+        max_episodes=max_episodes,
     )
 
     model = InsertionPolicy(policy_cfg).to(torch_device)
@@ -98,7 +100,8 @@ def train_policy(
         norm_stats=norm_stats,
         extra={
             "epochs": cfg.epochs,
-            "n_episodes": len(list_episodes(cfg.dataset_dir)),
+            "n_episodes": len(list_episodes(cfg.dataset_dir)[: max_episodes or None]),
+            "max_episodes": max_episodes,
             "best_val": None if best_val == float("inf") else best_val,
             "arch": "act_v1",
         },
@@ -115,6 +118,12 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--config", type=Path, default=default_config_path())
     p.add_argument("--device", default=None)
     p.add_argument("--out", type=Path, default=None)
+    p.add_argument(
+        "--max-episodes",
+        type=int,
+        default=None,
+        help="Use only the first N episodes (sorted by name) for a fair subset comparison",
+    )
     args = p.parse_args(argv)
 
     cfg = load_insert_sensor_config(args.config)
@@ -124,7 +133,7 @@ def main(argv: list[str] | None = None) -> int:
             f"No episodes in {cfg.dataset_dir}. Run:\n"
             "  python -m high_level_jobs.subtasks.insert_sensor --record"
         )
-    train_policy(cfg, device=args.device, out_path=args.out)
+    train_policy(cfg, device=args.device, out_path=args.out, max_episodes=args.max_episodes)
     return 0
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Literal, Mapping
 
 import yaml
 
@@ -14,23 +14,25 @@ from .cameras import (
     SIDE_ROLE,
     CameraSpec,
 )
-from .model import InsertionPolicyConfig
+
+ArchName = Literal["act", "diffusion"]
 
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
-def default_config_path() -> Path:
-    return Path(__file__).resolve().parent / "config" / "default_insert_sensor.yaml"
+def default_config_path(*, arch: ArchName = "act") -> Path:
+    name = "default_diffusion.yaml" if arch == "diffusion" else "default_insert_sensor.yaml"
+    return Path(__file__).resolve().parent / "config" / name
 
 
 @dataclass(frozen=True)
 class InsertSensorConfig:
     dataset_dir: Path
     model_path: Path
-    policy: InsertionPolicyConfig
-    cameras: tuple[CameraSpec, ...]
+    policy: Any
+    arch: ArchName = "act"
     epochs: int = 80
     batch_size: int = 16
     lr: float = 3e-4
@@ -115,7 +117,12 @@ class InsertSensorConfig:
             )
 
     @staticmethod
-    def from_mapping(data: Mapping[str, Any], base_dir: Path | None = None) -> InsertSensorConfig:
+    def from_mapping(
+        data: Mapping[str, Any],
+        base_dir: Path | None = None,
+        *,
+        arch: ArchName | None = None,
+    ) -> InsertSensorConfig:
         base = base_dir or _repo_root()
 
         def _resolve(raw: str | None, default: str) -> Path:
@@ -124,18 +131,23 @@ class InsertSensorConfig:
                 p = (base / p).resolve()
             return p
 
+        resolved_arch = _resolve_arch(data, arch)
+        policy = _parse_policy(data, resolved_arch)
         cameras = _parse_cameras(data)
+
+        default_model = (
+            "software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/latest/policy.pt"
+            if resolved_arch == "diffusion"
+            else "software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt"
+        )
         return InsertSensorConfig(
             dataset_dir=_resolve(
                 data.get("dataset_dir"),
                 "software/high_level_jobs/subtasks/insert_sensor/dataset/episodes",
             ),
-            model_path=_resolve(
-                data.get("model_path"),
-                "software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt",
-            ),
-            policy=InsertionPolicyConfig.from_mapping(dict(data)),
-            cameras=cameras,
+            model_path=_resolve(data.get("model_path"), default_model),
+            policy=policy,
+            arch=resolved_arch,
             epochs=int(data.get("epochs", 80)),
             batch_size=int(data.get("batch_size", 16)),
             lr=float(data.get("lr", 3e-4)),
@@ -149,6 +161,30 @@ class InsertSensorConfig:
             gripper_close_threshold=float(data.get("gripper_close_threshold", 0.5)),
             require_camera_serials=bool(data.get("require_camera_serials", True)),
         )
+
+
+def _resolve_arch(data: Mapping[str, Any], override: ArchName | None) -> ArchName:
+    if override in ("act", "diffusion"):
+        return override
+    raw = str(data.get("arch", "act") or "act").strip().lower()
+    if raw in ("diffusion", "diffusion_policy", "dp"):
+        return "diffusion"
+    if raw in ("act", "act_dinov2", "act_dinov2_v1"):
+        return "act"
+    # Heuristic: diffusion yaml without explicit arch
+    if int(data.get("diffusion_steps", 0) or 0) > 0 and not data.get("style_dim"):
+        return "diffusion"
+    return "act"
+
+
+def _parse_policy(data: Mapping[str, Any], arch: ArchName) -> Any:
+    if arch == "diffusion":
+        from .policies.diffusion import DiffusionPolicyConfig
+
+        return DiffusionPolicyConfig.from_mapping(dict(data))
+    from .model import InsertionPolicyConfig
+
+    return InsertionPolicyConfig.from_mapping(dict(data))
 
 
 def _cam_block(cams_raw: Mapping[str, Any], role: str) -> Mapping[str, Any]:
@@ -166,7 +202,6 @@ def _parse_cameras(data: Mapping[str, Any]) -> tuple[CameraSpec, ...]:
     cams_raw = data.get("cameras")
     legacy = str(data.get("record_camera_serial", "") or "").strip()
     if isinstance(cams_raw, Mapping):
-        # Accept either cameras.side or cameras.wrist
         side_block = cams_raw.get(SIDE_ROLE, cams_raw.get("wrist", {}))
         if not isinstance(side_block, Mapping):
             side_block = {}
@@ -180,7 +215,6 @@ def _parse_cameras(data: Mapping[str, Any]) -> tuple[CameraSpec, ...]:
             CameraSpec(role=OVERHEAD_ROLE, serial=oh_serial, exposure_us=_exposure_us(oh_block)),
             CameraSpec(role=SIDE_ROLE, serial=side_serial, exposure_us=_exposure_us(side_block)),
         ]
-        # Optional third view — include only when the key is present in config.
         if SIDE2_ROLE in cams_raw:
             side2_block = _cam_block(cams_raw, SIDE2_ROLE)
             cams.append(
@@ -198,8 +232,12 @@ def _parse_cameras(data: Mapping[str, Any]) -> tuple[CameraSpec, ...]:
     )
 
 
-def load_insert_sensor_config(path: Path | None = None) -> InsertSensorConfig:
-    cfg_path = (path or default_config_path()).resolve()
+def load_insert_sensor_config(
+    path: Path | None = None,
+    *,
+    arch: ArchName | None = None,
+) -> InsertSensorConfig:
+    cfg_path = (path or default_config_path(arch=arch or "act")).resolve()
     if not cfg_path.is_file():
         raise FileNotFoundError(f"Insert sensor config not found: {cfg_path}")
     text = cfg_path.read_text(encoding="utf-8")
@@ -209,4 +247,4 @@ def load_insert_sensor_config(path: Path | None = None) -> InsertSensorConfig:
         data = json.loads(text)
     if not isinstance(data, Mapping):
         raise ValueError(f"Config must be a mapping, got {type(data).__name__}")
-    return InsertSensorConfig.from_mapping(data, base_dir=_repo_root())
+    return InsertSensorConfig.from_mapping(data, base_dir=_repo_root(), arch=arch)
