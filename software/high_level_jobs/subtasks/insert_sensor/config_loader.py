@@ -32,6 +32,7 @@ class InsertSensorConfig:
     dataset_dir: Path
     model_path: Path
     policy: Any
+    cameras: tuple[CameraSpec, ...]
     arch: ArchName = "act"
     epochs: int = 80
     batch_size: int = 16
@@ -147,6 +148,7 @@ class InsertSensorConfig:
             ),
             model_path=_resolve(data.get("model_path"), default_model),
             policy=policy,
+            cameras=cameras,
             arch=resolved_arch,
             epochs=int(data.get("epochs", 80)),
             batch_size=int(data.get("batch_size", 16)),
