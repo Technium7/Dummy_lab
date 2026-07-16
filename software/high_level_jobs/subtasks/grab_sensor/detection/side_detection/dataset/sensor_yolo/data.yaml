@@ -1,5 +1,0 @@
-path: C:/Users/PQE_339_ThinkPad/Documents/Dummy_lab/software/high_level_jobs/subtasks/grab_sensor/dataset/sensor_yolo
-train: images/train
-val: images/val
-names:
-  0: sensor

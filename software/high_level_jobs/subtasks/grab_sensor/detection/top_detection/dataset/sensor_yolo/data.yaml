@@ -1,5 +1,0 @@
-path: /home/jack/Desktop/Dummy_lab/software/high_level_jobs/subtasks/grab_sensor/detection/top_detection/dataset/sensor_yolo
-train: images/train
-val: images/val
-names:
-  0: sensor

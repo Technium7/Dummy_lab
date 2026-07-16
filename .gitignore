@@ -19,8 +19,11 @@ software/high_level_jobs/subtasks/insert_sensor/runs/
 software/high_level_jobs/subtasks/insert_sensor/camera_previews/
 
 # grab_sensor — local training data, weights, and debug captures
-# software/high_level_jobs/subtasks/grab_sensor/dataset/**/*
-# !software/high_level_jobs/subtasks/grab_sensor/dataset/README.md
-# software/high_level_jobs/subtasks/grab_sensor/debug/
-# software/**/yolov8n.pt
-# software/grasp_overlay.png
+software/high_level_jobs/subtasks/grab_sensor/debug/
+software/high_level_jobs/subtasks/grab_sensor/detection/side_detection/dataset/grasp_keypoints/
+software/high_level_jobs/subtasks/grab_sensor/detection/side_detection/dataset/sensor_yolo/
+software/high_level_jobs/subtasks/grab_sensor/detection/top_detection/dataset/base_keypoints/
+software/high_level_jobs/subtasks/grab_sensor/detection/top_detection/dataset/sensor_yolo/
+software/**/yolov8n.pt
+software/**/yolo26n.pt
+software/grasp_overlay.png
