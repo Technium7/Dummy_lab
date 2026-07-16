@@ -22,8 +22,11 @@ Identify serials: `python software/camera/live_view.py` or `--preview-cameras`. 
 
 Configs:
 
-- ACT: `config/default_insert_sensor.yaml` → `runs/latest/policy.pt`
+- ACT (fair vs diffusion, CNN vision): `config/default_insert_sensor.yaml` → `runs/act_cnn/latest/policy.pt`
+- ACT (DINOv2): `config/default_act_dinov2.yaml` → `runs/latest/policy.pt`
 - Diffusion: `config/default_diffusion.yaml` → `runs/diffusion/latest/policy.pt`
+
+Apple-to-apple: both use the same per-cam RGB-D CNN (`160×120`, `use_depth: true`); only the action head differs (ACT CVAE vs DDPM).
 
 ## Record demos
 

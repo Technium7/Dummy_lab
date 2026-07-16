@@ -1,10 +1,11 @@
 """ACT (Action Chunking with Transformers) for insert_sensor.
 
-RGB (2 cameras) + Depth + Joint states + Gripper
-  → DINOv2 (frozen RGB) + depth CNN
-  → Temporal Transformer
-  → ACT (CVAE action-chunk decoder)
-  → Action chunk
+Default fair-comparison vision matches diffusion:
+  RGB-D CNN (per camera) + joints/gripper
+  → Temporal Transformer → ACT CVAE → action chunk
+
+Optional: ``vision_backbone: dinov2_*`` uses frozen DINOv2 RGB + depth CNN
+(see ``config/default_act_dinov2.yaml``).
 """
 
 from __future__ import annotations
@@ -44,8 +45,8 @@ class InsertionPolicyConfig:
     depth_max_m: float = DEFAULT_DEPTH_MAX_M
     num_cameras: int = 2
     use_depth: bool = True
-    vision_backbone: str = "dinov2_vits14"  # dinov2_*14 or "cnn"
-    freeze_backbone: bool = True
+    vision_backbone: str = "cnn"  # "cnn" (same as diffusion) or dinov2_*14
+    freeze_backbone: bool = False
     # ACT CVAE
     style_dim: int = 32
     kl_weight: float = 10.0
@@ -67,7 +68,7 @@ class InsertionPolicyConfig:
         n_cam = int(data.get("num_cameras", 2))
         if n_cam < 1 or n_cam > 2:
             raise ValueError(f"num_cameras must be 1 or 2, got {n_cam}")
-        backbone = str(data.get("vision_backbone", "dinov2_vits14")).strip().lower()
+        backbone = str(data.get("vision_backbone", "cnn")).strip().lower()
         if backbone not in ("cnn", *_DINO_NAMES):
             raise ValueError(
                 f"vision_backbone must be cnn or one of {_DINO_NAMES}, got {backbone!r}"
@@ -76,6 +77,7 @@ class InsertionPolicyConfig:
         img_h = int(data.get("img_height", 224 if backbone.startswith("dinov2") else 120))
         if backbone.startswith("dinov2") and (img_w % 14 != 0 or img_h % 14 != 0):
             raise ValueError(f"DINOv2 needs H/W multiples of 14, got {img_h}x{img_w}")
+        freeze_default = backbone.startswith("dinov2")
         return InsertionPolicyConfig(
             history_len=int(data.get("history_len", 8)),
             action_horizon=int(data.get("action_horizon", 8)),
@@ -88,7 +90,7 @@ class InsertionPolicyConfig:
             num_cameras=n_cam,
             use_depth=bool(data.get("use_depth", True)),
             vision_backbone=backbone,
-            freeze_backbone=bool(data.get("freeze_backbone", True)),
+            freeze_backbone=bool(data.get("freeze_backbone", freeze_default)),
             style_dim=int(data.get("style_dim", 32)),
             kl_weight=float(data.get("kl_weight", 10.0)),
             diffusion_steps=int(data.get("diffusion_steps", 0)),

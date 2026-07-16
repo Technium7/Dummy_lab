@@ -1,42 +1,41 @@
-# Insert sensor: ACT (Action Chunking Transformer).
-# RGB (2 cams) via frozen DINOv2 + Depth CNN + joints + gripper → temporal Transformer → ACT.
+# Insert sensor: ACT with CNN vision (same encoder as diffusion — fair comparison).
+# RGB-D CNN + joints/gripper → temporal Transformer → ACT CVAE chunk.
 #
 # Train:  python -m high_level_jobs.subtasks.insert_sensor --arch act --train
 # Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch act --deploy
-# Diffusion sibling: --arch diffusion (see default_diffusion.yaml)
+# DINOv2 variant: config/default_act_dinov2.yaml
 
 arch: act
 
 dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
-model_path: software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/latest/policy.pt
 
-# --- Model (ACT) ---
+# --- Model (ACT + CNN vision, matched to diffusion) ---
 history_len: 8
 action_horizon: 8
 temporal: transformer
 latent_dim: 256
-img_width: 224           # DINOv2 needs multiples of 14
-img_height: 224
+img_width: 160            # match diffusion
+img_height: 120           # match diffusion
 depth_min_m: 0.25
 depth_max_m: 0.85
 num_cameras: 2
-use_depth: true          # false = RGB only
-vision_backbone: dinov2_vits14   # dinov2_vits14 | dinov2_vitb14 | cnn
-freeze_backbone: true
+use_depth: true
+vision_backbone: cnn      # same RGB-D CNN as policies/diffusion.py (not DINOv2)
+freeze_backbone: false    # N/A for cnn; kept for API compatibility
 
-style_dim: 32            # ACT CVAE latent
+style_dim: 32
 kl_weight: 10.0
 
-# --- Training ---
+# --- Training (matched to diffusion defaults) ---
 epochs: 80
-batch_size: 4            # lower for DINOv2 VRAM (raise if GPU allows)
+batch_size: 8
 lr: 0.0003
 val_frac: 0.15
 seed: 42
 num_workers: 0
 
 # --- Cameras ---
-# Recording captures every role listed here. Train/deploy still use num_cameras (overhead+side).
 cameras:
   overhead:
     serial: "104122062828"
@@ -45,7 +44,7 @@ cameras:
     serial: "024122062290"
     exposure_us: 200
   side2:
-    serial: "925322061385"          # pin via: python software/camera/live_view.py --list
+    serial: "925322061385"
     exposure_us: 200
 record_camera_serial: ""
 require_camera_serials: true

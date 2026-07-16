@@ -1,0 +1,51 @@
+# Insert sensor: ACT with frozen DINOv2 (higher-capacity vision; not fair vs diffusion CNN).
+#
+# python -m high_level_jobs.subtasks.insert_sensor --arch act --config \
+#   high_level_jobs/subtasks/insert_sensor/config/default_act_dinov2.yaml --train
+
+arch: act
+
+dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/latest/policy.pt
+
+history_len: 8
+action_horizon: 8
+temporal: transformer
+latent_dim: 256
+img_width: 224
+img_height: 224
+depth_min_m: 0.25
+depth_max_m: 0.85
+num_cameras: 2
+use_depth: true
+vision_backbone: dinov2_vits14
+freeze_backbone: true
+
+style_dim: 32
+kl_weight: 10.0
+
+epochs: 80
+batch_size: 4
+lr: 0.0003
+val_frac: 0.15
+seed: 42
+num_workers: 0
+
+cameras:
+  overhead:
+    serial: "104122062828"
+    exposure_us: 80
+  side:
+    serial: "024122062290"
+    exposure_us: 200
+  side2:
+    serial: "925322061385"
+    exposure_us: 200
+record_camera_serial: ""
+require_camera_serials: true
+
+record_hz: 15.0
+deploy_hz: 15.0
+action_scale: 1.0
+deploy_speed_scale: 2.0
+gripper_close_threshold: 0.5
