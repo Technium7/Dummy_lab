@@ -126,6 +126,8 @@ class GrabSensorConfig:
     segmentation: SegmentationConfig
     vision_mode: VisionMode = "yolo_grasp"
     detection_profile: DetectionProfile = "top"
+    # Overhead/overview D415 (insert_sensor cameras.overhead); empty = first device.
+    camera_serial: str = ""
     yolo: YoloConfig | None = None
     grasp_net: GraspNetConfig | None = None
     grasp_orientation_mode: GraspOrientationMode = "fixed_robot"
@@ -284,6 +286,7 @@ class GrabSensorConfig:
             ),
             vision_mode=vision_raw,  # type: ignore[arg-type]
             detection_profile=detection_profile,
+            camera_serial=str(data.get("camera_serial", "") or "").strip(),
             yolo=YoloConfig(
                 model_path=_resolve_model_path(yolo_raw.get("model_path"), "sensor_yolo.pt"),
                 class_name=str(yolo_raw.get("class_name", "sensor")),

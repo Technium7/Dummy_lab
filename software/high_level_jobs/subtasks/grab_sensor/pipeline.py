@@ -105,12 +105,15 @@ def run_detection(
         )
     else:
         try:
+            camera_serial = str(
+                params.get("camera_serial") or cfg.camera_serial or ""
+            ).strip()
             capture = capture_realsense_frame(
                 width=int(params.get("width", 640)),
                 height=int(params.get("height", 480)),
                 fps=int(params.get("fps", 30)),
                 warmup=int(params.get("warmup", 15)),
-                serial=str(params.get("camera_serial", "")),
+                serial=camera_serial,
                 frame_timeout_ms=int(params.get("frame_timeout_ms", 10000)),
                 start_retries=int(params.get("camera_start_retries", 3)),
             )

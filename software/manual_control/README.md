@@ -56,6 +56,7 @@ Windows venv example:
 - `--angular-speed-deg`: base angular command speed
 - `--joint-vel-limit`: optional joint velocity clamp
 - `--no-home-firmware`: `T` only streams HOME; default also runs `!HOME` in the background
+- `--joint-current-limit-a`: `#I_LIMIT_J` for J1–J6 at connect (default **1.2**, same as grab_sensor; `0` = skip)
 - `--port`, `--baudrate`, `--timeout`: robot serial settings
 
 ### Tuning

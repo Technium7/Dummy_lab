@@ -17,6 +17,10 @@ camera_to_robot:
 detection_profile: top
 vision_mode: yolo_grasp
 
+# Pin RealSense serial (same overhead/overview cam as insert_sensor cameras.overhead).
+# Required when multiple D415s are plugged in; empty = first device Librealsense finds.
+camera_serial: "104122062828"
+
 yolo:
   model_path: software/high_level_jobs/subtasks/grab_sensor/detection/top_detection/dataset/base_keypoints/model/sensor_yolo.pt
   class_name: sensor

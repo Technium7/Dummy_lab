@@ -133,6 +133,7 @@ Primary file: `config/default_grasp.yaml`
 |-----|---------|
 | `detection_profile` | `top` (default, overhead) or `side` (oblique) — selects model defaults |
 | `vision_mode` | `yolo_grasp` (default) or `depth_segment` |
+| `camera_serial` | RealSense serial (default: insert_sensor overhead/overview `104122062828`) |
 | `camera_to_robot` | Fixed D415 mount (calibrate once) |
 | `yolo.*` | YOLO weights under `detection/top_detection/`, confidence, crop padding |
 | `grasp_net.base_only` | `true` for top view (base point CNN only) |

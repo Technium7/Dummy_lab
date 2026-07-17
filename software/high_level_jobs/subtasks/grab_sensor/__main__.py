@@ -77,6 +77,12 @@ def main() -> int:
         default=None,
         help="Motor current limit (A) for J1-J6 via #I_LIMIT_J at execute (default: config execute.joint_current_limit_a)",
     )
+    p.add_argument(
+        "--camera-serial",
+        type=str,
+        default=None,
+        help="RealSense serial for capture (default: config camera_serial / insert_sensor overhead)",
+    )
     args = p.parse_args()
 
     if args.rpy_viz:
@@ -125,6 +131,8 @@ def main() -> int:
         params["joint_current_limit_a"] = float(args.joint_current_limit_a)
     elif args.execute:
         params.setdefault("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    if args.camera_serial is not None:
+        params["camera_serial"] = str(args.camera_serial).strip()
 
     robot = None
     if args.execute:
