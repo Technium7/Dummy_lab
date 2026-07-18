@@ -39,7 +39,7 @@ class GraspOnObjectFrame:
 class ExecuteConfig:
     """Robot streaming options applied during ``execute_on_robot``."""
 
-    joint_current_limit_a: float = 1.2
+    joint_current_limit_a: float = 0.0
     home_confirm_attempts: int = 3
 
 
@@ -331,7 +331,7 @@ class GrabSensorConfig:
                 rpy_deg=robot_rpy,  # type: ignore[arg-type]
             ),
             execute=ExecuteConfig(
-                joint_current_limit_a=float(execute_raw.get("joint_current_limit_a", 1.2)),
+                joint_current_limit_a=float(execute_raw.get("joint_current_limit_a", 0.0)),
                 home_confirm_attempts=int(execute_raw.get("home_confirm_attempts", 3)),
             ),
         )

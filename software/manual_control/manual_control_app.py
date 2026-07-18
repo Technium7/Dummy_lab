@@ -70,7 +70,7 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=1.2,
         help="Set motor current limit (A) for J1-J6 at connect via #I_LIMIT_J "
-        "(default 1.2, same as grab_sensor; 0=skip).",
+        "(default 1.2; 0=skip).",
     )
     parser.add_argument(
         "--record-demos",

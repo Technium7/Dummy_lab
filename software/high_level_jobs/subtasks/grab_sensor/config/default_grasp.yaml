@@ -97,7 +97,7 @@ approach:
 
 # Robot execution (#I_LIMIT_J before !START; 0 = skip). Init HOME uses stream waypoints, not ``!HOME``.
 execute:
-  joint_current_limit_a: 1.2
+  joint_current_limit_a: 0
   home_confirm_attempts: 3
 
 paths:
