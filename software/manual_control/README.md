@@ -56,7 +56,7 @@ Windows venv example:
 - `--angular-speed-deg`: base angular command speed
 - `--joint-vel-limit`: optional joint velocity clamp
 - `--no-home-firmware`: `T` only streams HOME; default also runs `!HOME` in the background
-- `--joint-current-limit-a`: `#I_LIMIT_J` for J1–J6 at connect (default **1.2**; `0` = skip)
+- `--joint-current-limit-a`: `#I_LIMIT_J` for J1–J6 after `!START` (default **0** = skip; motors keep EEPROM limit, currently ~1A). Pass e.g. `1.2` only if you need to rewrite it.
 - `--port`, `--baudrate`, `--timeout`: robot serial settings
 
 ### Tuning
@@ -70,6 +70,8 @@ Linux defaults already use `--control-dt-ms 20` and `--speed-factor 1`. For snap
 - Linear: `W/S -> -Y/+Y`, `A/D -> +X/-X`, `Q/E -> +Z/-Z`
 - Angular: `H/K -> +Wy/-Wy`, `U/J -> +Wx/-Wx`
 - Home: `T` -> firmware `!HOME` + stream to `[0, 0, 90, 0, 0, 0]` at max speed (use `--no-home-firmware` for stream-only)
+- Gripper: `O` open / `P` close
+- Drives: `B` -> `!DISABLE` (stops streaming, torque off) · `N` -> `!START` + CMDMODE 2 (re-enable)
 
 ## Behavior notes
 
@@ -77,4 +79,7 @@ Linux defaults already use `--control-dt-ms 20` and `--speed-factor 1`. For snap
 - On key release, robot holds the last target position (prevents drift).
 - While moving, robot receives a sim joint target with one control-period velocity lookahead (larger per-waypoint delta so firmware does not crawl on tiny moves).
 - Pressing `T` latches HOME for ~1.2 s; optional firmware `!HOME` runs in background unless `--no-home-firmware`.
+- `B` flushes the stream queue before `!DISABLE` and leaves streaming paused until `N` (or app restart).
+- After `B`, exiting (Esc / close window) **skips** `!STOP` so firmware does not re-command a hold move that can look like a return to home. Without `B`, exit still sends `!STOP`.
+- `B` and the next launch both sync firmware `targetJoints` to the measured pose before `!START`. Otherwise enabling resumes the last commanded target (often HOME from `T`) and the arm auto-homes.
 

@@ -20,7 +20,7 @@ from manual_control.mapping import (
     home_stream_ascii_speed,
     max_ascii_speed,
 )
-from manual_control.robot_session import connect_robot_for_teleop, disconnect_robot
+from manual_control.robot_session import connect_robot_for_teleop, disconnect_robot, sync_target_to_current
 from robot_ascii_interface import RobotAsciiInterface
 from robot_config import find_dummy_robot_port
 
@@ -91,6 +91,7 @@ class RobotControlThread(threading.Thread):
         self._was_streaming = False
         self._serial_failures = 0
         self._home_busy = False
+        self._drives_enabled = True
 
     @property
     def proxy(self) -> ThreadSafeRobotProxy:
@@ -157,6 +158,25 @@ class RobotControlThread(threading.Thread):
                 self._cmd_queue.put_nowait("home_firmware")
             except Exception:
                 self._home_busy = False
+
+    def request_disable(self) -> None:
+        """Stop streaming, then send firmware ``!DISABLE`` (motors torque-off)."""
+        if not self._sim_only:
+            self._was_streaming = False
+            self._stream_pose_deg = None
+            self._last_stream_send_s = 0.0
+            try:
+                self._cmd_queue.put_nowait("disable")
+            except Exception:
+                pass
+
+    def request_enable(self) -> None:
+        """Re-arm drives with ``!START`` + CMDMODE 2 after a ``B`` disable."""
+        if not self._sim_only:
+            try:
+                self._cmd_queue.put_nowait("enable")
+            except Exception:
+                pass
 
     def get_joint_pos_blocking(self, timeout: float = 0.35) -> Optional[List[float]]:
         if self._sim_only or self._robot is None:
@@ -229,6 +249,7 @@ class RobotControlThread(threading.Thread):
             joint_current_limit_a=self._joint_current_limit_a,
         )
         self._last_sent_deg = None
+        self._drives_enabled = True
         self._resume_stream()
         self._serial_failures = 0
 
@@ -281,6 +302,39 @@ class RobotControlThread(threading.Thread):
         finally:
             self._home_busy = False
 
+    def _run_disable(self) -> None:
+        if self._robot is None:
+            return
+        self._was_streaming = False
+        self._stream_pose_deg = None
+        self._last_stream_send_s = 0.0
+        try:
+            # Sync target←current first so the next !START does not chase a stale
+            # HOME target left over from T. Then torque-off the motors.
+            sync_target_to_current(self._robot)
+            resp = self._robot.disable()
+            self._drives_enabled = False
+            print(f"[Robot] !DISABLE -> {resp}")
+        except Exception as exc:
+            print(f"[Robot] !DISABLE failed: {exc}", file=sys.stderr)
+            self._serial_failures += 1
+
+    def _run_enable(self) -> None:
+        if self._robot is None:
+            return
+        try:
+            sync_target_to_current(self._robot)
+            resp = self._robot.start()
+            print(f"[Robot] !START -> {resp}")
+            self._robot.set_command_mode(2)
+            if self._robot._session is not None:
+                self._robot._session.discard_stream_acks(max_lines=512)
+            self._drives_enabled = True
+            self._resume_stream()
+        except Exception as exc:
+            print(f"[Robot] !START (re-enable) failed: {exc}", file=sys.stderr)
+            self._serial_failures += 1
+
     def _run_command(self, cmd: str) -> None:
         if self._robot is None:
             return
@@ -296,11 +350,17 @@ class RobotControlThread(threading.Thread):
             elif cmd == "home_firmware":
                 self._run_home_firmware()
                 return
+            elif cmd == "disable":
+                self._run_disable()
+                return
+            elif cmd == "enable":
+                self._run_enable()
+                return
         except Exception as exc:
             print(f"[Robot] {cmd} failed: {exc}")
             self._serial_failures += 1
         finally:
-            if cmd != "home_firmware":
+            if cmd not in ("home_firmware", "disable", "enable"):
                 self._resume_stream()
                 self._was_streaming = was_streaming
 
@@ -319,6 +379,8 @@ class RobotControlThread(threading.Thread):
 
     def _maybe_stream_waypoint(self, now: float) -> None:
         if self._robot is None or now < self._next_robot_tick or self._home_busy:
+            return
+        if not self._drives_enabled:
             return
         intent = self._current_intent()
         if intent is None or len(intent.target_deg) < 6:
@@ -423,7 +485,7 @@ class RobotControlThread(threading.Thread):
                 time.sleep(poll_s)
         finally:
             try:
-                disconnect_robot(self._robot)
+                disconnect_robot(self._robot, already_disabled=not self._drives_enabled)
             except Exception:
                 pass
             self._robot = None

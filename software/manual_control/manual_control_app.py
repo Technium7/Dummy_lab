@@ -68,9 +68,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--joint-current-limit-a",
         type=float,
-        default=1.2,
-        help="Set motor current limit (A) for J1-J6 at connect via #I_LIMIT_J "
-        "(default 1.2; 0=skip).",
+        default=0.0,
+        help="Set motor current limit (A) for J1-J6 after !START via #I_LIMIT_J "
+        "(default 0=skip; motors already store limit in EEPROM).",
     )
     parser.add_argument(
         "--record-demos",

@@ -163,6 +163,12 @@ def run_teleop_tick(
     if robot_control is not None and keys.was_triggered(events, "p"):
         active_keys.append("P")
         robot_control.request_hand_close()
+    if robot_control is not None and keys.was_triggered(events, "b"):
+        active_keys.append("B")
+        robot_control.request_disable()
+    if robot_control is not None and keys.was_triggered(events, "n"):
+        active_keys.append("N")
+        robot_control.request_enable()
     if keys.was_triggered(events, "t"):
         active_keys.append("T")
         for local_idx, joint_idx in enumerate(joint_indices[:6]):
