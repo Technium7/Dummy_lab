@@ -1,7 +1,7 @@
 """RealSense helpers for insert_sensor (overhead + side [+ optional side2]).
 
-Recording can capture all configured roles. The ACT policy still uses at most
-overhead + side until the model is extended.
+Recording can capture all configured roles. Diffusion may use side2 (optional /
+zero-filled when missing). ACT keeps num_cameras=2 (overhead + side only).
 """
 
 from __future__ import annotations
@@ -17,12 +17,13 @@ from PIL import Image
 # Primary (overhead / table-calibrated) keeps legacy filenames for old episodes.
 OVERHEAD_ROLE = "overhead"
 SIDE_ROLE = "side"
-# Extra oblique / opposite-side view for data collection (not used by ACT yet).
+# Extra oblique / opposite-side view (optional for diffusion; unused by ACT).
 SIDE2_ROLE = "side2"
 # Older dual-cam recordings used "wrist" — still loaded as the side view.
 LEGACY_SIDE_ROLE = "wrist"
-# Policy / train / deploy slots (order matters).
-POLICY_CAMERA_ROLES = (OVERHEAD_ROLE, SIDE_ROLE)
+# Policy / train / deploy slots (order matters). Diffusion may use all three;
+# ACT configs keep num_cameras=2 so side2 is ignored.
+POLICY_CAMERA_ROLES = (OVERHEAD_ROLE, SIDE_ROLE, SIDE2_ROLE)
 # All roles that may appear in recorded episodes.
 CAMERA_ROLES = (OVERHEAD_ROLE, SIDE_ROLE, SIDE2_ROLE)
 SECOND_CAM_ALIASES = (SIDE_ROLE, LEGACY_SIDE_ROLE)
@@ -186,7 +187,7 @@ def preview_cameras(
         "Open each preview_*.png and decide roles:",
         "  overhead = top-down view of robot + table",
         "  side     = horizontal view across breadboard",
-        "  side2    = additional side / oblique view (recording only for now)",
+        "  side2    = additional side / oblique (diffusion optional; ACT unused)",
         "",
         "Then pin serials in default_insert_sensor.yaml:",
         "  cameras.overhead.serial / cameras.side.serial / cameras.side2.serial",

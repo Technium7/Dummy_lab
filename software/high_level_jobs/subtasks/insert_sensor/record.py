@@ -520,7 +520,7 @@ def run_record_session(
         control_dt_ms=float(teleop_kwargs.get("control_dt_ms", 70.0)),
         sim_only=sim_only,
         debug_serial=bool(teleop_kwargs.get("debug_serial", False)),
-        joint_current_limit_a=float(teleop_kwargs.get("joint_current_limit_a", 1.2)),
+        joint_current_limit_a=float(teleop_kwargs.get("joint_current_limit_a", 0.0)),
         teleop_hook=hook,
         on_shutdown=recorder.shutdown,
     )

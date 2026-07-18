@@ -1,6 +1,7 @@
 """Diffusion Policy for insert_sensor (no auxiliary heads).
 
-RGB-D (CNN) + joints/gripper → Temporal Transformer → DDPM action-chunk denoiser.
+RGB-D (CNN) + optional dense table XYZ + joints/gripper → Temporal Transformer → DDPM.
+Supports up to 3 cameras (overhead, side, optional side2).
 """
 
 from __future__ import annotations
@@ -23,6 +24,8 @@ from high_level_jobs.subtasks.grab_sensor.detection.grasp_point_net import (
 
 STATE_DIM = 13
 ACTION_DIM = 7
+RGBD_CHANNELS = 4
+TABLE_XYZ_CHANNELS = 3
 
 
 @dataclass(frozen=True)
@@ -37,10 +40,20 @@ class DiffusionPolicyConfig:
     depth_max_m: float = DEFAULT_DEPTH_MAX_M
     num_cameras: int = 2
     use_depth: bool = True  # always True for this CNN stack; kept for dataset API
+    use_table_xyz: bool = False
+    table_calib_path: str = ""
+    table_xyz_xy_min_m: float = -0.40
+    table_xyz_xy_max_m: float = 0.40
+    table_xyz_z_min_m: float = -0.05
+    table_xyz_z_max_m: float = 0.35
     diffusion_steps: int = 50
     inference_steps: int = 16
     beta_start: float = 1e-4
     beta_end: float = 0.02
+
+    @property
+    def img_channels(self) -> int:
+        return RGBD_CHANNELS + (TABLE_XYZ_CHANNELS if self.use_table_xyz else 0)
 
     @staticmethod
     def from_mapping(data: dict[str, Any]) -> DiffusionPolicyConfig:
@@ -48,8 +61,8 @@ class DiffusionPolicyConfig:
         if temporal not in ("gru", "transformer"):
             raise ValueError(f"temporal must be gru or transformer, got {temporal!r}")
         n_cam = int(data.get("num_cameras", 2))
-        if n_cam < 1 or n_cam > 2:
-            raise ValueError(f"num_cameras must be 1 or 2, got {n_cam}")
+        if n_cam < 1 or n_cam > 3:
+            raise ValueError(f"num_cameras must be 1, 2, or 3, got {n_cam}")
         return DiffusionPolicyConfig(
             history_len=int(data.get("history_len", 8)),
             action_horizon=int(data.get("action_horizon", 8)),
@@ -61,6 +74,12 @@ class DiffusionPolicyConfig:
             depth_max_m=float(data.get("depth_max_m", DEFAULT_DEPTH_MAX_M)),
             num_cameras=n_cam,
             use_depth=True,
+            use_table_xyz=bool(data.get("use_table_xyz", False)),
+            table_calib_path=str(data.get("table_calib_path", "") or "").strip(),
+            table_xyz_xy_min_m=float(data.get("table_xyz_xy_min_m", -0.40)),
+            table_xyz_xy_max_m=float(data.get("table_xyz_xy_max_m", 0.40)),
+            table_xyz_z_min_m=float(data.get("table_xyz_z_min_m", -0.05)),
+            table_xyz_z_max_m=float(data.get("table_xyz_z_max_m", 0.35)),
             diffusion_steps=int(data.get("diffusion_steps", 50)),
             inference_steps=int(data.get("inference_steps", 16)),
             beta_start=float(data.get("beta_start", 1e-4)),
@@ -77,13 +96,20 @@ def preprocess_rgbd_batch(
     depth_min_m: float,
     depth_max_m: float,
     use_depth: bool = True,
+    use_table_xyz: bool = False,
+    table_xyz_ctx: Any | None = None,
+    is_overhead: bool = False,
+    table_xyz_maps: np.ndarray | None = None,
 ) -> np.ndarray:
-    """Same signature as ACT preprocess so deploy/dataset can share call sites."""
+    """RGB-D preprocess; optional dense table XYZ → 7 channels when enabled."""
     del use_depth  # CNN stack always uses depth channel
     import cv2
 
+    from high_level_jobs.subtasks.insert_sensor.table_xyz import normalize_table_xyz
+
     n = color_rgb.shape[0]
-    out = np.zeros((n, 4, out_h, out_w), dtype=np.float32)
+    n_ch = RGBD_CHANNELS + (TABLE_XYZ_CHANNELS if use_table_xyz else 0)
+    out = np.zeros((n, n_ch, out_h, out_w), dtype=np.float32)
     span = max(depth_max_m - depth_min_m, 1e-6)
     for i in range(n):
         rgb = color_rgb[i]
@@ -99,14 +125,33 @@ def preprocess_rgbd_batch(
         depth_norm[valid] = np.clip((depth_small[valid] - depth_min_m) / span, 0.0, 1.0)
         out[i, 0:3] = np.transpose(rgb_f, (2, 0, 1))
         out[i, 3] = depth_norm
+        if use_table_xyz:
+            if is_overhead and table_xyz_maps is not None:
+                out[i, 4:7] = normalize_table_xyz(
+                    table_xyz_maps[i],
+                    table_xyz_ctx.bounds,
+                    out_w=out_w,
+                    out_h=out_h,
+                )
+            elif is_overhead and table_xyz_ctx is not None:
+                from high_level_jobs.subtasks.insert_sensor.table_xyz import depth_to_table_xyz
+
+                xyz_i = depth_to_table_xyz(depth, table_xyz_ctx)
+                out[i, 4:7] = normalize_table_xyz(
+                    xyz_i,
+                    table_xyz_ctx.bounds,
+                    out_w=out_w,
+                    out_h=out_h,
+                )
+            # else: leave XYZ zeros (side / side2)
     return out
 
 
 class RgbdEncoder(nn.Module):
-    def __init__(self, *, out_dim: int = 128) -> None:
+    def __init__(self, *, in_channels: int = 4, out_dim: int = 128) -> None:
         super().__init__()
         self.features = nn.Sequential(
-            nn.Conv2d(4, 32, 3, stride=2, padding=1),
+            nn.Conv2d(in_channels, 32, 3, stride=2, padding=1),
             nn.ReLU(inplace=True),
             nn.Conv2d(32, 64, 3, stride=2, padding=1),
             nn.ReLU(inplace=True),
@@ -140,13 +185,14 @@ class MlpEncoder(nn.Module):
 
 
 class VisionStateEncoder(nn.Module):
-    """Per-timestep: N cameras RGB-D + joints/gripper → latent token."""
+    """Per-timestep: N cameras RGB-D (+ table XYZ) + joints/gripper → latent token."""
 
     def __init__(self, cfg: DiffusionPolicyConfig) -> None:
         super().__init__()
         self.num_cameras = int(cfg.num_cameras)
+        in_ch = cfg.img_channels
         self.img_encoders = nn.ModuleList(
-            [RgbdEncoder(out_dim=128) for _ in range(self.num_cameras)]
+            [RgbdEncoder(in_channels=in_ch, out_dim=128) for _ in range(self.num_cameras)]
         )
         self.state_encoder = MlpEncoder(STATE_DIM, 64)
         fuse_in = 128 * self.num_cameras + 64
@@ -422,6 +468,12 @@ def save_policy(
                 "depth_max_m": cfg.depth_max_m,
                 "num_cameras": cfg.num_cameras,
                 "use_depth": True,
+                "use_table_xyz": cfg.use_table_xyz,
+                "table_calib_path": cfg.table_calib_path,
+                "table_xyz_xy_min_m": cfg.table_xyz_xy_min_m,
+                "table_xyz_xy_max_m": cfg.table_xyz_xy_max_m,
+                "table_xyz_z_min_m": cfg.table_xyz_z_min_m,
+                "table_xyz_z_max_m": cfg.table_xyz_z_max_m,
                 "diffusion_steps": cfg.diffusion_steps,
                 "inference_steps": cfg.inference_steps,
                 "beta_start": cfg.beta_start,

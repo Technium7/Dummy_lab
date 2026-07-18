@@ -1,4 +1,4 @@
-"""Episode dataset for insert_sensor ACT (obs history + action chunk)."""
+"""Episode dataset for insert_sensor ACT / diffusion (obs history + action chunk)."""
 
 from __future__ import annotations
 
@@ -14,8 +14,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from manual_control.mapping import transformed_deg_to_sim_rad
 
-from .cameras import OVERHEAD_ROLE, SIDE_ROLE, load_rgbd_pair
-from .model import preprocess_rgbd_batch
+from .cameras import OVERHEAD_ROLE, POLICY_CAMERA_ROLES, load_rgbd_pair
 
 
 @dataclass(frozen=True)
@@ -94,6 +93,19 @@ def normalize(x: np.ndarray, mean: list[float], std: list[float]) -> np.ndarray:
     return (x - m) / s
 
 
+def _preprocess_fn(policy_cfg: Any):
+    """ACT uses model.preprocess; diffusion may append table XYZ channels."""
+    if bool(getattr(policy_cfg, "use_table_xyz", False)) or hasattr(
+        policy_cfg, "diffusion_steps"
+    ):
+        from .policies.diffusion import preprocess_rgbd_batch
+
+        return preprocess_rgbd_batch
+    from .model import preprocess_rgbd_batch
+
+    return preprocess_rgbd_batch
+
+
 class InsertSensorSequenceDataset(Dataset):
     """Obs window [i, i+H) + action chunk starting at i+H-1 of length Ta."""
 
@@ -112,6 +124,18 @@ class InsertSensorSequenceDataset(Dataset):
         self.policy_cfg = policy_cfg
         self.norm_stats = norm_stats or {}
         self.augment = augment
+        self._preprocess = _preprocess_fn(policy_cfg)
+        self._table_xyz_ctx = None
+        if bool(getattr(policy_cfg, "use_table_xyz", False)):
+            from .table_xyz import TableXyzContext
+
+            self._table_xyz_ctx = TableXyzContext.from_config(
+                table_calib_path=getattr(policy_cfg, "table_calib_path", "") or None,
+                xy_min_m=float(getattr(policy_cfg, "table_xyz_xy_min_m", -0.40)),
+                xy_max_m=float(getattr(policy_cfg, "table_xyz_xy_max_m", 0.40)),
+                z_min_m=float(getattr(policy_cfg, "table_xyz_z_min_m", -0.05)),
+                z_max_m=float(getattr(policy_cfg, "table_xyz_z_max_m", 0.35)),
+            )
         self._windows: list[tuple[Path, int]] = []
         need = history_len + self.action_horizon - 1
         for ep in episodes:
@@ -134,11 +158,13 @@ class InsertSensorSequenceDataset(Dataset):
 
         cfg = self.policy_cfg
         n_cam = int(cfg.num_cameras)
-        roles = (OVERHEAD_ROLE,) if n_cam <= 1 else (OVERHEAD_ROLE, SIDE_ROLE)
+        roles = POLICY_CAMERA_ROLES[: max(1, n_cam)]
         flip = self.augment and random.random() < 0.5
+        use_table_xyz = bool(getattr(cfg, "use_table_xyz", False))
 
         per_cam_colors: list[list[np.ndarray]] = [[] for _ in roles]
         per_cam_depths: list[list[np.ndarray]] = [[] for _ in roles]
+        overhead_xyz: list[np.ndarray] = []
         states: list[np.ndarray] = []
 
         for fp in obs_paths:
@@ -152,28 +178,51 @@ class InsertSensorSequenceDataset(Dataset):
                     h, w = per_cam_colors[0][-1].shape[:2]
                     color = np.zeros((h, w, 3), dtype=np.uint8)
                     depth = np.zeros((h, w), dtype=np.float32)
+
+                xyz_map = None
+                if use_table_xyz and role == OVERHEAD_ROLE and self._table_xyz_ctx is not None:
+                    from .table_xyz import depth_to_table_xyz
+
+                    xyz_map = depth_to_table_xyz(depth, self._table_xyz_ctx)
+
                 if flip:
                     color = np.ascontiguousarray(color[:, ::-1, :])
                     depth = np.ascontiguousarray(depth[:, ::-1])
+                    if xyz_map is not None:
+                        xyz_map = np.ascontiguousarray(xyz_map[:, :, ::-1])
+
                 per_cam_colors[cam_i].append(color)
                 per_cam_depths[cam_i].append(depth)
+                if role == OVERHEAD_ROLE and xyz_map is not None:
+                    overhead_xyz.append(xyz_map)
+
             st = build_state_vector(data)
             if self.norm_stats:
                 st = normalize(st, self.norm_stats["state_mean"], self.norm_stats["state_std"])
             states.append(st)
 
-        cam_tensors = [
-            preprocess_rgbd_batch(
-                np.stack(per_cam_colors[cam_i]),
-                np.stack(per_cam_depths[cam_i]),
-                out_w=cfg.img_width,
-                out_h=cfg.img_height,
-                depth_min_m=cfg.depth_min_m,
-                depth_max_m=cfg.depth_max_m,
-                use_depth=bool(getattr(cfg, "use_depth", True)),
+        cam_tensors = []
+        for cam_i, role in enumerate(roles):
+            kwargs: dict[str, Any] = {
+                "out_w": cfg.img_width,
+                "out_h": cfg.img_height,
+                "depth_min_m": cfg.depth_min_m,
+                "depth_max_m": cfg.depth_max_m,
+                "use_depth": bool(getattr(cfg, "use_depth", True)),
+            }
+            if use_table_xyz:
+                kwargs["use_table_xyz"] = True
+                kwargs["table_xyz_ctx"] = self._table_xyz_ctx
+                kwargs["is_overhead"] = role == OVERHEAD_ROLE
+                if role == OVERHEAD_ROLE and overhead_xyz:
+                    kwargs["table_xyz_maps"] = np.stack(overhead_xyz)
+            cam_tensors.append(
+                self._preprocess(
+                    np.stack(per_cam_colors[cam_i]),
+                    np.stack(per_cam_depths[cam_i]),
+                    **kwargs,
+                )
             )
-            for cam_i in range(len(roles))
-        ]
         rgbd = np.stack(cam_tensors, axis=1)  # (T, N, C, H, W)
 
         actions: list[np.ndarray] = []

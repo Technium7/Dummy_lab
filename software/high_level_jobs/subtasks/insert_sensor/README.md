@@ -6,11 +6,43 @@ Two policies share the same demo episodes. Train and deploy them separately.
 |------|--------|-------------|--------|------------|
 | **act** (default) | Same RGB-D CNN as diffusion (`160×120`) | ACT CVAE chunk | `config/default_insert_sensor.yaml` | `runs/act_cnn/latest/policy.pt` |
 | **act** (DINOv2) | Frozen DINOv2 + depth CNN | ACT CVAE chunk | `config/default_act_dinov2.yaml` | `runs/latest/policy.pt` |
-| **diffusion** | RGB-D CNN | DDPM action-chunk denoiser (no aux) | `config/default_diffusion.yaml` | `runs/diffusion/latest/policy.pt` |
+| **diffusion** | RGB-D CNN + optional dense table XYZ; up to 3 cams | DDPM action-chunk denoiser (no aux) | `config/default_diffusion.yaml` | `runs/diffusion/ep20_tablexyz/policy.pt` |
 
-For apple-to-apple ACT vs diffusion, use the default ACT config (`vision_backbone: cnn`) and the same `--max-episodes` / seed / episode set.
+For apple-to-apple ACT vs diffusion (2-cam RGB-D only), use ACT `vision_backbone: cnn`, diffusion with `num_cameras: 2` / `use_table_xyz: false`, and the same `--max-episodes` / seed.
 
-Recording can also capture a third **`side2`** RealSense; train/deploy still use overhead + side until models support 3 cams.
+## Record more demos
+
+Episodes live under `dataset/episodes/episode_XXXXXX/` (gitignored). After moving **side2**, delete (or exclude) takes that used the old view; new recordings pick up the new aim. Serials usually stay the same — only re-pin YAML if you swapped USB cameras.
+
+```bash
+cd software
+
+# 1) Confirm views (especially after moving side2)
+python -m high_level_jobs.subtasks.insert_sensor --preview-cameras
+# Open camera_previews/preview_<serial>.png — overhead / side / side2 should match config
+
+# 2) Record (same teleop as manual_control; cameras stay off until R)
+python manual_control/manual_control_app.py --record-demos
+# equivalent: python -m high_level_jobs.subtasks.insert_sensor --record
+```
+
+| Key | Action |
+|-----|--------|
+| **T** | Home |
+| **O** / **P** | Gripper open / close |
+| **R** | Start or stop RGB-D capture (all pinned cams, incl. side2) |
+| **C** | Save episode after stopping with **R** (writes next `episode_*`) |
+| **R** again (while unsaved) | Discard staging and record again |
+| Esc / close | Exit (unsaved staging is discarded) |
+
+Typical take: **T** home → grasp sensor → **P** close → **R** start → insert into holder → **R** stop → **C** save. Repeat.
+
+```bash
+# 3) Sanity-check dataset
+python -m high_level_jobs.subtasks.insert_sensor --check
+```
+
+New episodes append alongside whatever remains in `dataset/episodes/`. Retrain when you have enough takes (`--arch act` / `diffusion`).
 
 ## Train / deploy
 
@@ -21,7 +53,7 @@ cd software
 python -m high_level_jobs.subtasks.insert_sensor --arch act --train
 python -m high_level_jobs.subtasks.insert_sensor --arch act --deploy
 
-# Diffusion (reproduced; no auxiliary heads)
+# Diffusion (3 cams + dense table XYZ; all episodes; side2 zero-filled when missing)
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
 ```
@@ -41,7 +73,9 @@ python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
 
 | Component | Role |
 |-----------|------|
-| Vision | Per-cam RGB-D CNN + state MLP |
+| Vision | Per-cam RGB-D CNN (7ch when `use_table_xyz`: RGB-D + table XYZ on overhead; side/side2 get zero XYZ) + state MLP |
+| Cameras | `num_cameras: 3` — overhead, side, optional side2 (missing → zero-fill) |
+| Table XYZ | Overhead depth → cam XYZ → table frame via `calibration_table` (no YOLO) |
 | Temporal | Transformer / GRU → condition vector |
 | Diffusion | Noise prediction on action chunk; DDPM sample at deploy |
 
@@ -56,9 +90,9 @@ python -m high_level_jobs.subtasks.insert_sensor --preview-cameras
 
 | Config key | Role |
 |------------|------|
-| `cameras.overhead` | Top-down robot + table |
-| `cameras.side` | Horizontal breadboard (used by policies) |
-| `cameras.side2` | Extra side / oblique — **recorded**, not used by policies yet |
+| `cameras.overhead` | Top-down robot + table (also dense table XYZ for diffusion) |
+| `cameras.side` | Horizontal breadboard |
+| `cameras.side2` | Extra side / oblique — used by diffusion when present; optional at deploy |
 
 ## Test on robot
 
@@ -81,13 +115,16 @@ python -m high_level_jobs.subtasks.insert_sensor --preview-cameras
 | `use_depth` | Include depth in vision (`true` / `false`) |
 | `action_horizon` | ACT chunk length |
 | `style_dim` / `kl_weight` | ACT CVAE |
-| `cameras.overhead` / `side` / `side2` | RealSense serials (`side2` = record only) |
+| `cameras.overhead` / `side` / `side2` | RealSense serials |
 
 ## Config highlights (Diffusion)
 
 | Key | Purpose |
 |-----|---------|
 | `img_width` / `img_height` | `160` / `120` (CNN) |
+| `num_cameras` | `3` (overhead + side + optional side2) |
+| `use_table_xyz` | Append dense table XYZ on overhead |
+| `table_calib_path` | Empty → newest valid `calibration_table/runs/*/table_calib.json` |
 | `diffusion_steps` | Train noise schedule length |
 | `inference_steps` | Denoising steps at deploy |
 | `beta_start` / `beta_end` | Linear β schedule |

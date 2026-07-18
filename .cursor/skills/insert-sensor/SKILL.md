@@ -3,8 +3,8 @@ name: insert-sensor
 description: >-
   Record, train, and deploy insert_sensor IL policies (ACT and diffusion).
   Use when the user mentions insert_sensor, ACT, diffusion policy, demo
-  recording, --arch, --max-episodes, side2 camera, or deploying after
-  manual_control grasp.
+  recording, --arch, --max-episodes, side2 camera, table XYZ, or deploying
+  after manual_control grasp.
 ---
 
 # insert_sensor
@@ -15,8 +15,8 @@ Work from `software/`. Policies share the same episodes; train/deploy separately
 
 | Role | Used by |
 |------|---------|
-| `overhead`, `side` | Train + deploy (`num_cameras: 2`) |
-| `side2` | **Recording only** (saved as `*.side2.*`, ignored by models for now) |
+| `overhead`, `side` | ACT (`num_cameras: 2`); diffusion always |
+| `side2` | Diffusion when `num_cameras: 3` — **optional** (zero-filled if missing). Still recorded when pinned. |
 
 Identify serials: `python software/camera/live_view.py` or `--preview-cameras`. Pin in YAML; USB order is unstable.
 
@@ -24,9 +24,9 @@ Configs:
 
 - ACT (fair vs diffusion, CNN vision): `config/default_insert_sensor.yaml` → `runs/act_cnn/latest/policy.pt`
 - ACT (DINOv2): `config/default_act_dinov2.yaml` → `runs/latest/policy.pt`
-- Diffusion: `config/default_diffusion.yaml` → `runs/diffusion/latest/policy.pt`
+- Diffusion (3-cam + dense table XYZ): `config/default_diffusion.yaml` → `runs/diffusion/ep20_tablexyz/policy.pt`
 
-Apple-to-apple: both use the same per-cam RGB-D CNN (`160×120`, `use_depth: true`); only the action head differs (ACT CVAE vs DDPM).
+Diffusion overhead input is **7 channels** (RGB-D + table XYZ from depth + `calibration_table`, no YOLO). Side/side2 keep RGB-D with zero XYZ pads.
 
 ## Record demos
 
@@ -44,7 +44,7 @@ python manual_control/manual_control_app.py --record-demos
 # ACT
 python -m high_level_jobs.subtasks.insert_sensor --arch act --train
 
-# Diffusion (CNN + DDPM, no aux heads)
+# Diffusion (all episodes; optional side2 + table XYZ)
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
 
 # Fair subset (first N episode_* by name)
@@ -65,6 +65,6 @@ python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
 ## Agent rules
 
 1. Do not change ACT checkpoints when adding diffusion (separate dirs).
-2. Keep `num_cameras: 2` for models until 3-cam architecture is implemented.
+2. Diffusion may use `num_cameras: 3` with optional side2; keep ACT at `num_cameras: 2`.
 3. If deploy fails with missing `cameras` on config, ensure `InsertSensorConfig` includes `cameras=` from YAML.
 4. Large demos: sync with [lab-data-sync](../lab-data-sync/SKILL.md); never git-push episodes.

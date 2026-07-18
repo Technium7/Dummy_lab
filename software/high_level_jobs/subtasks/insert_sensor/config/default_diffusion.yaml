@@ -1,13 +1,14 @@
-# Insert sensor: Diffusion Policy (CNN RGB-D + state → DDPM action chunk).
-# No auxiliary heads. Same demo episodes as ACT; separate checkpoint dir.
+# Insert sensor: Diffusion Policy (CNN RGB-D + dense table XYZ + state → DDPM).
+# No auxiliary heads. Optional side2 (zero-filled when missing). Separate checkpoint dir.
 #
 # Train:  python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
-# Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
+# Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy \
+#           --model high_level_jobs/subtasks/insert_sensor/runs/diffusion/ep20_tablexyz/policy.pt
 
 arch: diffusion
 
 dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
-model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/latest/policy.pt
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/ep20_tablexyz/policy.pt
 
 # --- Model (Diffusion Policy) ---
 history_len: 8
@@ -18,7 +19,15 @@ img_width: 160
 img_height: 120
 depth_min_m: 0.25
 depth_max_m: 0.85
-num_cameras: 2
+num_cameras: 3
+
+# Overhead depth → table-frame XYZ channels (no YOLO)
+use_table_xyz: true
+table_calib_path: ""   # empty → newest valid calibration_table/runs/*/table_calib.json
+table_xyz_xy_min_m: -0.40
+table_xyz_xy_max_m: 0.40
+table_xyz_z_min_m: -0.05
+table_xyz_z_max_m: 0.35
 
 diffusion_steps: 50
 inference_steps: 16

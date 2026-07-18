@@ -134,7 +134,7 @@ def main() -> int:
             "\nDo NOT trust list order. Identify with live_view or --preview-cameras, then pin:\n"
             "  cameras.overhead.serial  # top-down robot+table\n"
             "  cameras.side.serial      # horizontal breadboard view\n"
-            "  cameras.side2.serial     # additional side (recording only for now)\n"
+            "  cameras.side2.serial     # optional third cam (diffusion; zero-fill if missing)\n"
             "  python software/camera/live_view.py"
         )
         return 0

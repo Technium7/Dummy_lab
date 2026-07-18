@@ -24,6 +24,7 @@ from trajectory_run.run_planned_trajectory import ensure_robot_armed
 
 from .cameras import (
     OVERHEAD_ROLE,
+    SIDE2_ROLE,
     SIDE_ROLE,
     make_streamer,
     resolve_camera_serials,
@@ -67,6 +68,22 @@ class PolicyRunner:
         self.history_len = self.policy_cfg.history_len
         self.action_horizon = int(getattr(self.policy_cfg, "action_horizon", 8))
         self.num_cameras = int(self.policy_cfg.num_cameras)
+        self._use_table_xyz = bool(getattr(self.policy_cfg, "use_table_xyz", False))
+        self._table_xyz_ctx = None
+        if self._use_table_xyz:
+            from .table_xyz import TableXyzContext
+
+            self._table_xyz_ctx = TableXyzContext.from_config(
+                table_calib_path=getattr(self.policy_cfg, "table_calib_path", "") or None,
+                xy_min_m=float(getattr(self.policy_cfg, "table_xyz_xy_min_m", -0.40)),
+                xy_max_m=float(getattr(self.policy_cfg, "table_xyz_xy_max_m", 0.40)),
+                z_min_m=float(getattr(self.policy_cfg, "table_xyz_z_min_m", -0.05)),
+                z_max_m=float(getattr(self.policy_cfg, "table_xyz_z_max_m", 0.35)),
+            )
+            print(
+                f"[insert_sensor] Table XYZ from {self._table_xyz_ctx.calib_path}",
+                flush=True,
+            )
         self._rgbd_buf: deque[np.ndarray] = deque(maxlen=self.history_len)
         self._state_buf: deque[np.ndarray] = deque(maxlen=self.history_len)
         self._action_chunk: np.ndarray | None = None
@@ -82,6 +99,30 @@ class PolicyRunner:
             items.insert(0, items[0])
         return np.stack(items[-self.history_len :])
 
+    def _preprocess_cam(
+        self,
+        color_rgb: np.ndarray,
+        depth_m: np.ndarray,
+        *,
+        is_overhead: bool = False,
+    ) -> np.ndarray:
+        kwargs: dict = {
+            "out_w": self.policy_cfg.img_width,
+            "out_h": self.policy_cfg.img_height,
+            "depth_min_m": self.policy_cfg.depth_min_m,
+            "depth_max_m": self.policy_cfg.depth_max_m,
+            "use_depth": bool(getattr(self.policy_cfg, "use_depth", True)),
+        }
+        if self._use_table_xyz:
+            kwargs["use_table_xyz"] = True
+            kwargs["table_xyz_ctx"] = self._table_xyz_ctx
+            kwargs["is_overhead"] = is_overhead
+        return self._preprocess_rgbd_batch(
+            color_rgb[np.newaxis, ...],
+            depth_m[np.newaxis, ...],
+            **kwargs,
+        )[0]
+
     def observe(
         self,
         color_rgb: np.ndarray,
@@ -93,12 +134,21 @@ class PolicyRunner:
         wrist_depth_m: np.ndarray | None = None,
         side_color_rgb: np.ndarray | None = None,
         side_depth_m: np.ndarray | None = None,
+        side2_color_rgb: np.ndarray | None = None,
+        side2_depth_m: np.ndarray | None = None,
+        overhead_intrinsics: object | None = None,
     ) -> np.ndarray:
         # side_* is preferred; wrist_* kept as alias
         if side_color_rgb is None:
             side_color_rgb = wrist_color_rgb
         if side_depth_m is None:
             side_depth_m = wrist_depth_m
+        if (
+            self._use_table_xyz
+            and self._table_xyz_ctx is not None
+            and overhead_intrinsics is not None
+        ):
+            self._table_xyz_ctx = self._table_xyz_ctx.with_intrinsics(overhead_intrinsics)
         frame = {
             "joint_pos_deg": joint_pos_deg,
             "joint_vel_deg_s": joint_vel_deg_s or [0.0] * 6,
@@ -108,34 +158,23 @@ class PolicyRunner:
         if self.norm_stats:
             st = normalize(st, self.norm_stats["state_mean"], self.norm_stats["state_std"])
 
-        overhead = self._preprocess_rgbd_batch(
-            color_rgb[np.newaxis, ...],
-            depth_m[np.newaxis, ...],
-            out_w=self.policy_cfg.img_width,
-            out_h=self.policy_cfg.img_height,
-            depth_min_m=self.policy_cfg.depth_min_m,
-            depth_max_m=self.policy_cfg.depth_max_m,
-            use_depth=bool(getattr(self.policy_cfg, "use_depth", True)),
-        )[0]
+        overhead = self._preprocess_cam(color_rgb, depth_m, is_overhead=True)
+        cams = [overhead]
 
         if self.num_cameras >= 2:
             if side_color_rgb is None or side_depth_m is None:
-                side = np.zeros_like(overhead)
+                cams.append(np.zeros_like(overhead))
             else:
-                side = self._preprocess_rgbd_batch(
-                    side_color_rgb[np.newaxis, ...],
-                    side_depth_m[np.newaxis, ...],
-                    out_w=self.policy_cfg.img_width,
-                    out_h=self.policy_cfg.img_height,
-                    depth_min_m=self.policy_cfg.depth_min_m,
-                    depth_max_m=self.policy_cfg.depth_max_m,
-                    use_depth=bool(getattr(self.policy_cfg, "use_depth", True)),
-                )[0]
-            rgbd = np.stack([overhead, side], axis=0)  # (N, 4, H, W)
-        else:
-            rgbd = overhead[np.newaxis, ...]  # (1, 4, H, W)
+                cams.append(self._preprocess_cam(side_color_rgb, side_depth_m))
 
-        rgbd_seq = self._pad_history(self._rgbd_buf, rgbd)  # (T, N, 4, H, W)
+        if self.num_cameras >= 3:
+            if side2_color_rgb is None or side2_depth_m is None:
+                cams.append(np.zeros_like(overhead))
+            else:
+                cams.append(self._preprocess_cam(side2_color_rgb, side2_depth_m))
+
+        rgbd = np.stack(cams, axis=0)  # (N, C, H, W)
+        rgbd_seq = self._pad_history(self._rgbd_buf, rgbd)  # (T, N, C, H, W)
         st_seq = self._pad_history(self._state_buf, st)
 
         need_sample = (
@@ -285,18 +324,36 @@ def run_deploy_loop(
     _print_deploy_banner(sim_only=sim_only, model_path=path, countdown_s=countdown_s)
     print(f"[insert_sensor] deploy_speed_scale={motion_scale:.2f}  action_scale={cfg.action_scale:.2f}", flush=True)
     runner = PolicyRunner(cfg, model_path=path, arch=arch or getattr(cfg, "arch", None))
+    policy_cams = list(cfg.active_cameras())
+    required = [c for c in policy_cams if c.role != SIDE2_ROLE]
+    optional_side2 = next((c for c in policy_cams if c.role == SIDE2_ROLE), None)
     resolved = resolve_camera_serials(
-        list(cfg.active_cameras()),
+        required,
         require_pinned=cfg.require_camera_serials,
     )
-    streamers = {
-        cam.role: make_streamer(
+    streamers: dict[str, object] = {}
+    for cam in resolved:
+        streamers[cam.role] = make_streamer(
             cam.serial,
             role=cam.role,
             exposure_us=cam.exposure_us,
         )
-        for cam in resolved
-    }
+    if optional_side2 is not None and (optional_side2.serial or "").strip():
+        try:
+            side2_resolved = resolve_camera_serials(
+                [optional_side2],
+                require_pinned=cfg.require_camera_serials,
+            )
+            streamers[SIDE2_ROLE] = make_streamer(
+                side2_resolved[0].serial,
+                role=SIDE2_ROLE,
+                exposure_us=side2_resolved[0].exposure_us,
+            )
+        except Exception as exc:
+            print(
+                f"[insert_sensor] side2 optional — skipping ({exc})",
+                flush=True,
+            )
     period = 1.0 / max(cfg.deploy_hz, 1.0)
 
     robot = None
@@ -347,6 +404,10 @@ def run_deploy_loop(
             frames = {role: streamer.read() for role, streamer in streamers.items()}
             oh = frames[OVERHEAD_ROLE]
             side = frames.get(SIDE_ROLE)
+            side2 = frames.get(SIDE2_ROLE)
+            oh_intr = getattr(oh, "color_intrinsics", None) or getattr(
+                streamers.get(OVERHEAD_ROLE), "color_intrinsics", None
+            )
 
             # Fixed control dt like teleop's robot thread (not wall-clock catch-up).
             dt_s = 1.0 / max(cfg.deploy_hz, 1.0)
@@ -358,6 +419,9 @@ def run_deploy_loop(
                 joint_vel_deg_s=[0.0] * 6,
                 side_color_rgb=None if side is None else side.color_rgb,
                 side_depth_m=None if side is None else side.depth_m,
+                side2_color_rgb=None if side2 is None else side2.color_rgb,
+                side2_depth_m=None if side2 is None else side2.depth_m,
+                overhead_intrinsics=oh_intr,
             )
             grip_cmd = float(action[6]) if action.shape[0] >= 7 else 0.0
             target_deg, vel_deg_s, speed = _policy_vel_to_joint_target(

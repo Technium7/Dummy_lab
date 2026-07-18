@@ -49,7 +49,7 @@ class InsertSensorConfig:
 
     @property
     def num_cameras(self) -> int:
-        """Policy / train / deploy camera count (unchanged until model supports 3)."""
+        """Policy / train / deploy camera count (1–3; ACT typically 2, diffusion up to 3)."""
         return self.policy.num_cameras
 
     @property
