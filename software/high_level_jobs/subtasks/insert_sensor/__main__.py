@@ -92,6 +92,18 @@ def main() -> int:
         default=None,
         help="With --train: use only the first N episodes (sorted by name)",
     )
+    p.add_argument(
+        "--resume",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="With --train (ACT): resume from train_checkpoint.pt if present (default: true)",
+    )
+    p.add_argument(
+        "--checkpoint-every",
+        type=int,
+        default=1,
+        help="With --train (ACT): save mid-training checkpoint every N epochs",
+    )
     args = p.parse_args()
 
     if not (
@@ -197,6 +209,8 @@ def main() -> int:
                 device=args.device,
                 out_path=args.out,
                 max_episodes=args.max_episodes,
+                resume=args.resume,
+                checkpoint_every=args.checkpoint_every,
             )
         return 0
 

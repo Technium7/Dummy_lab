@@ -18,6 +18,12 @@ software/high_level_jobs/subtasks/insert_sensor/dataset/_staging/
 software/high_level_jobs/subtasks/insert_sensor/runs/
 software/high_level_jobs/subtasks/insert_sensor/camera_previews/
 
+# Slurm job logs (belong in /share/mehta/.../slurm_jobs, not the repo)
+software/insert_sensor_act_*.out
+software/insert_sensor_act_*.err
+insert_sensor_act_*.out
+insert_sensor_act_*.err
+
 # grab_sensor — local training data, weights, and debug captures
 software/high_level_jobs/subtasks/grab_sensor/debug/
 software/high_level_jobs/subtasks/grab_sensor/detection/side_detection/dataset/grasp_keypoints/

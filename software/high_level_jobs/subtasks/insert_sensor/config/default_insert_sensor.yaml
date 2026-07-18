@@ -27,13 +27,13 @@ freeze_backbone: false    # N/A for cnn; kept for API compatibility
 style_dim: 32
 kl_weight: 10.0
 
-# --- Training (matched to diffusion defaults) ---
+# --- Training (cluster-tuned: larger batch + parallel RGB-D loaders) ---
 epochs: 80
-batch_size: 8
+batch_size: 16
 lr: 0.0003
 val_frac: 0.15
 seed: 42
-num_workers: 0
+num_workers: 4            # match Slurm --cpus-per-task; was 0 (main-thread I/O bottleneck)
 
 # --- Cameras ---
 cameras:

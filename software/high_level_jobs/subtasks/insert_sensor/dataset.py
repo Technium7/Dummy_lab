@@ -242,15 +242,23 @@ def make_dataloaders(
     if len(train_ds) == 0:
         raise ValueError(f"No training windows (need episodes with >= {need} frames)")
 
+    loader_kw: dict[str, Any] = {
+        "num_workers": num_workers,
+        "pin_memory": torch.cuda.is_available(),
+    }
+    if num_workers > 0:
+        loader_kw["persistent_workers"] = True
+        loader_kw["prefetch_factor"] = 2
+
     train_loader = DataLoader(
         train_ds,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=num_workers,
         drop_last=len(train_ds) > batch_size,
+        **loader_kw,
     )
     val_loader = (
-        DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+        DataLoader(val_ds, batch_size=batch_size, shuffle=False, **loader_kw)
         if val_ds and len(val_ds) > 0
         else None
     )
