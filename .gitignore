@@ -15,7 +15,11 @@ software/camera/calibration/runs/
 # insert_sensor — local demo episodes and training outputs (too large for git)
 software/high_level_jobs/subtasks/insert_sensor/dataset/episodes/
 software/high_level_jobs/subtasks/insert_sensor/dataset/_staging/
-software/high_level_jobs/subtasks/insert_sensor/runs/
+software/high_level_jobs/subtasks/insert_sensor/runs/**
+# Keep the deployable ACT CNN policy in git (not train_checkpoint / history)
+!software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/
+!software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/latest/
+!software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/latest/policy.pt
 software/high_level_jobs/subtasks/insert_sensor/camera_previews/
 
 # Slurm job logs (belong in /share/mehta/.../slurm_jobs, not the repo)
