@@ -24,9 +24,10 @@ Configs:
 
 - ACT (fair vs diffusion, CNN vision): `config/default_insert_sensor.yaml` → `runs/act_cnn/latest/policy.pt`
 - ACT (DINOv2): `config/default_act_dinov2.yaml` → `runs/latest/policy.pt`
-- Diffusion (3-cam + dense table XYZ): `config/default_diffusion.yaml` → `runs/diffusion/ep20_tablexyz/policy.pt`
+- Diffusion CNN (3-cam + dense table XYZ): `config/default_diffusion.yaml` → `runs/diffusion/ep20_tablexyz/policy.pt`
+- Diffusion DINOv2 (same cams / table XYZ): `config/default_diffusion_dinov2.yaml` → `runs/diffusion_dinov2/latest/policy.pt`
 
-Diffusion overhead input is **7 channels** (RGB-D + table XYZ from depth + `calibration_table`, no YOLO). Side/side2 keep RGB-D with zero XYZ pads.
+Diffusion overhead input is **7 channels** (RGB-D + table XYZ from depth + `calibration_table`, no YOLO). Side/side2 keep RGB-D with zero XYZ pads. DINOv2 uses the same preprocess at `224×224` (frozen RGB backbone + aux depth/XYZ CNN).
 
 ## Record demos
 
@@ -44,10 +45,14 @@ python manual_control/manual_control_app.py --record-demos
 # ACT
 python -m high_level_jobs.subtasks.insert_sensor --arch act --train
 
-# Diffusion (all episodes; optional side2 + table XYZ)
+# Diffusion CNN (all episodes; optional side2 + table XYZ)
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
 
-# Fair subset (first N episode_* by name)
+# Diffusion DINOv2 (same demos / cams / table XYZ; compare vs CNN)
+python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train \
+  --config high_level_jobs/subtasks/insert_sensor/config/default_diffusion_dinov2.yaml
+
+# Fair subset (first N episode_* by name) — use same N/seed for CNN vs DINOv2
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train --max-episodes 10 \
   --out high_level_jobs/subtasks/insert_sensor/runs/diffusion/ep10/policy.pt
 ```
@@ -65,6 +70,7 @@ python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
 ## Agent rules
 
 1. Do not change ACT checkpoints when adding diffusion (separate dirs).
-2. Diffusion may use `num_cameras: 3` with optional side2; keep ACT at `num_cameras: 2`.
-3. If deploy fails with missing `cameras` on config, ensure `InsertSensorConfig` includes `cameras=` from YAML.
-4. Large demos: sync with [lab-data-sync](../lab-data-sync/SKILL.md); never git-push episodes.
+2. Keep CNN vs DINOv2 diffusion checkpoints separate (`runs/diffusion/` vs `runs/diffusion_dinov2/`); do not overwrite the CNN baseline when adding DINOv2.
+3. Diffusion may use `num_cameras: 3` with optional side2; keep ACT at `num_cameras: 2`.
+4. If deploy fails with missing `cameras` on config, ensure `InsertSensorConfig` includes `cameras=` from YAML.
+5. Large demos: sync with [lab-data-sync](../lab-data-sync/SKILL.md); never git-push episodes.

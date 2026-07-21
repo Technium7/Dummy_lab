@@ -109,6 +109,7 @@ def train_diffusion_policy(
     n_eps = len(list_episodes(cfg.dataset_dir)[: max_episodes or None])
     print(
         f"[insert_sensor] Training Diffusion Policy (no aux)  "
+        f"backbone={policy_cfg.vision_backbone} freeze={policy_cfg.freeze_backbone}  "
         f"obs_H={policy_cfg.history_len} act_H={policy_cfg.action_horizon}  "
         f"temporal={policy_cfg.temporal}  T_diff={policy_cfg.diffusion_steps}  "
         f"infer_steps={policy_cfg.inference_steps}  n_episodes={n_eps}  "

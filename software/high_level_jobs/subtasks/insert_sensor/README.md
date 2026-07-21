@@ -6,9 +6,12 @@ Two policies share the same demo episodes. Train and deploy them separately.
 |------|--------|-------------|--------|------------|
 | **act** (default) | Same RGB-D CNN as diffusion (`160×120`) | ACT CVAE chunk | `config/default_insert_sensor.yaml` | `runs/act_cnn/latest/policy.pt` |
 | **act** (DINOv2) | Frozen DINOv2 + depth CNN | ACT CVAE chunk | `config/default_act_dinov2.yaml` | `runs/latest/policy.pt` |
-| **diffusion** | RGB-D CNN + optional dense table XYZ; up to 3 cams | DDPM action-chunk denoiser (no aux) | `config/default_diffusion.yaml` | `runs/diffusion/ep20_tablexyz/policy.pt` |
+| **diffusion** (CNN) | RGB-D CNN + dense table XYZ; 3 cams | DDPM action-chunk denoiser (no aux) | `config/default_diffusion.yaml` | `runs/diffusion/ep20_tablexyz/policy.pt` |
+| **diffusion** (DINOv2) | Frozen DINOv2 RGB + depth/XYZ CNN; same 3 cams + table XYZ | DDPM (same head) | `config/default_diffusion_dinov2.yaml` | `runs/diffusion_dinov2/latest/policy.pt` |
 
 For apple-to-apple ACT vs diffusion (2-cam RGB-D only), use ACT `vision_backbone: cnn`, diffusion with `num_cameras: 2` / `use_table_xyz: false`, and the same `--max-episodes` / seed.
+
+For CNN vs DINOv2 diffusion (same demos / 3 cams / table XYZ), train both configs with the same `--max-episodes` / `seed`.
 
 ## Record more demos
 
@@ -53,9 +56,15 @@ cd software
 python -m high_level_jobs.subtasks.insert_sensor --arch act --train
 python -m high_level_jobs.subtasks.insert_sensor --arch act --deploy
 
-# Diffusion (3 cams + dense table XYZ; all episodes; side2 zero-filled when missing)
+# Diffusion CNN (3 cams + dense table XYZ; side2 zero-filled when missing)
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train
 python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
+
+# Diffusion DINOv2 (same cams / table XYZ; separate checkpoint)
+python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train \
+  --config high_level_jobs/subtasks/insert_sensor/config/default_diffusion_dinov2.yaml
+python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy \
+  --config high_level_jobs/subtasks/insert_sensor/config/default_diffusion_dinov2.yaml
 ```
 
 `--arch` selects the default config and train/deploy path. You can still override with `--config` / `--model` / `--out`.
@@ -73,7 +82,8 @@ python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy
 
 | Component | Role |
 |-----------|------|
-| Vision | Per-cam RGB-D CNN (7ch when `use_table_xyz`: RGB-D + table XYZ on overhead; side/side2 get zero XYZ) + state MLP |
+| Vision (CNN) | Per-cam RGB-D CNN (7ch when `use_table_xyz`: RGB-D + table XYZ on overhead; side/side2 get zero XYZ) + state MLP |
+| Vision (DINOv2) | Frozen DINOv2 RGB + aux CNN on depth/(table XYZ); same preprocess / cams (`default_diffusion_dinov2.yaml`) |
 | Cameras | `num_cameras: 3` — overhead, side, optional side2 (missing → zero-fill) |
 | Table XYZ | Overhead depth → cam XYZ → table frame via `calibration_table` (no YOLO) |
 | Temporal | Transformer / GRU → condition vector |
@@ -121,7 +131,9 @@ python -m high_level_jobs.subtasks.insert_sensor --preview-cameras
 
 | Key | Purpose |
 |-----|---------|
-| `img_width` / `img_height` | `160` / `120` (CNN) |
+| `vision_backbone` | `cnn` (default) or `dinov2_vits14` |
+| `freeze_backbone` | Freeze DINOv2 weights (`true` for DINOv2) |
+| `img_width` / `img_height` | `160` / `120` (CNN) or `224` / `224` (DINOv2) |
 | `num_cameras` | `3` (overhead + side + optional side2) |
 | `use_table_xyz` | Append dense table XYZ on overhead |
 | `table_calib_path` | Empty → newest valid `calibration_table/runs/*/table_calib.json` |

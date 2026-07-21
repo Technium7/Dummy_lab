@@ -1,7 +1,8 @@
 """Diffusion Policy for insert_sensor (no auxiliary heads).
 
-RGB-D (CNN) + optional dense table XYZ + joints/gripper → Temporal Transformer → DDPM.
-Supports up to 3 cameras (overhead, side, optional side2).
+Default: RGB-D CNN + optional dense table XYZ + joints/gripper → Temporal → DDPM.
+Optional: ``vision_backbone: dinov2_*`` uses frozen DINOv2 RGB + depth/(XYZ) CNN
+(see ``config/default_diffusion_dinov2.yaml``). Supports up to 3 cameras.
 """
 
 from __future__ import annotations
@@ -21,11 +22,13 @@ from high_level_jobs.subtasks.grab_sensor.detection.grasp_point_net import (
     IMAGENET_MEAN,
     IMAGENET_STD,
 )
+from high_level_jobs.subtasks.insert_sensor.model import load_dinov2
 
 STATE_DIM = 13
 ACTION_DIM = 7
 RGBD_CHANNELS = 4
 TABLE_XYZ_CHANNELS = 3
+_DINO_NAMES = ("dinov2_vits14", "dinov2_vitb14", "dinov2_vitl14", "dinov2_vitg14")
 
 
 @dataclass(frozen=True)
@@ -39,13 +42,15 @@ class DiffusionPolicyConfig:
     depth_min_m: float = DEFAULT_DEPTH_MIN_M
     depth_max_m: float = DEFAULT_DEPTH_MAX_M
     num_cameras: int = 2
-    use_depth: bool = True  # always True for this CNN stack; kept for dataset API
+    use_depth: bool = True  # always True for this stack; kept for dataset API
     use_table_xyz: bool = False
     table_calib_path: str = ""
     table_xyz_xy_min_m: float = -0.40
     table_xyz_xy_max_m: float = 0.40
     table_xyz_z_min_m: float = -0.05
     table_xyz_z_max_m: float = 0.35
+    vision_backbone: str = "cnn"  # "cnn" or dinov2_*14
+    freeze_backbone: bool = False
     diffusion_steps: int = 50
     inference_steps: int = 16
     beta_start: float = 1e-4
@@ -55,6 +60,10 @@ class DiffusionPolicyConfig:
     def img_channels(self) -> int:
         return RGBD_CHANNELS + (TABLE_XYZ_CHANNELS if self.use_table_xyz else 0)
 
+    @property
+    def uses_dinov2(self) -> bool:
+        return self.vision_backbone.startswith("dinov2")
+
     @staticmethod
     def from_mapping(data: dict[str, Any]) -> DiffusionPolicyConfig:
         temporal = str(data.get("temporal", "transformer")).strip().lower()
@@ -63,13 +72,23 @@ class DiffusionPolicyConfig:
         n_cam = int(data.get("num_cameras", 2))
         if n_cam < 1 or n_cam > 3:
             raise ValueError(f"num_cameras must be 1, 2, or 3, got {n_cam}")
+        backbone = str(data.get("vision_backbone", "cnn")).strip().lower()
+        if backbone not in ("cnn", *_DINO_NAMES):
+            raise ValueError(
+                f"vision_backbone must be cnn or one of {_DINO_NAMES}, got {backbone!r}"
+            )
+        img_w = int(data.get("img_width", 224 if backbone.startswith("dinov2") else 160))
+        img_h = int(data.get("img_height", 224 if backbone.startswith("dinov2") else 120))
+        if backbone.startswith("dinov2") and (img_w % 14 != 0 or img_h % 14 != 0):
+            raise ValueError(f"DINOv2 needs H/W multiples of 14, got {img_h}x{img_w}")
+        freeze_default = backbone.startswith("dinov2")
         return DiffusionPolicyConfig(
             history_len=int(data.get("history_len", 8)),
             action_horizon=int(data.get("action_horizon", 8)),
             temporal=temporal,  # type: ignore[arg-type]
             latent_dim=int(data.get("latent_dim", 256)),
-            img_width=int(data.get("img_width", 160)),
-            img_height=int(data.get("img_height", 120)),
+            img_width=img_w,
+            img_height=img_h,
             depth_min_m=float(data.get("depth_min_m", DEFAULT_DEPTH_MIN_M)),
             depth_max_m=float(data.get("depth_max_m", DEFAULT_DEPTH_MAX_M)),
             num_cameras=n_cam,
@@ -80,6 +99,8 @@ class DiffusionPolicyConfig:
             table_xyz_xy_max_m=float(data.get("table_xyz_xy_max_m", 0.40)),
             table_xyz_z_min_m=float(data.get("table_xyz_z_min_m", -0.05)),
             table_xyz_z_max_m=float(data.get("table_xyz_z_max_m", 0.35)),
+            vision_backbone=backbone,
+            freeze_backbone=bool(data.get("freeze_backbone", freeze_default)),
             diffusion_steps=int(data.get("diffusion_steps", 50)),
             inference_steps=int(data.get("inference_steps", 16)),
             beta_start=float(data.get("beta_start", 1e-4)),
@@ -190,16 +211,70 @@ class VisionStateEncoder(nn.Module):
     def __init__(self, cfg: DiffusionPolicyConfig) -> None:
         super().__init__()
         self.num_cameras = int(cfg.num_cameras)
-        in_ch = cfg.img_channels
-        self.img_encoders = nn.ModuleList(
-            [RgbdEncoder(in_channels=in_ch, out_dim=128) for _ in range(self.num_cameras)]
-        )
+        self.use_table_xyz = bool(cfg.use_table_xyz)
+        self.uses_dinov2 = cfg.uses_dinov2
+        self.freeze_backbone = bool(cfg.freeze_backbone)
+        self.rgb_backbone: nn.Module | None = None
+        self.rgb_proj: nn.Module | None = None
+        self.aux_encoder: nn.Module | None = None
+        self.img_encoders: nn.ModuleList | None = None
+
+        if self.uses_dinov2:
+            self.rgb_backbone = load_dinov2(cfg.vision_backbone)
+            if self.freeze_backbone:
+                for p in self.rgb_backbone.parameters():
+                    p.requires_grad = False
+                self.rgb_backbone.eval()
+            emb = int(getattr(self.rgb_backbone, "embed_dim", 384))
+            self.rgb_proj = nn.Sequential(
+                nn.Linear(emb, 128),
+                nn.ReLU(inplace=True),
+            )
+            # Depth (+ optional table XYZ) as aux CNN; side/side2 XYZ are zero-padded.
+            aux_ch = 1 + (TABLE_XYZ_CHANNELS if self.use_table_xyz else 0)
+            self.aux_encoder = RgbdEncoder(in_channels=aux_ch, out_dim=64)
+            cam_dim = 128 + 64
+        else:
+            in_ch = cfg.img_channels
+            self.img_encoders = nn.ModuleList(
+                [RgbdEncoder(in_channels=in_ch, out_dim=128) for _ in range(self.num_cameras)]
+            )
+            cam_dim = 128
+
         self.state_encoder = MlpEncoder(STATE_DIM, 64)
-        fuse_in = 128 * self.num_cameras + 64
+        fuse_in = cam_dim * self.num_cameras + 64
         self.fusion = nn.Sequential(
             nn.Linear(fuse_in, cfg.latent_dim),
             nn.ReLU(inplace=True),
         )
+
+    def train(self, mode: bool = True) -> VisionStateEncoder:
+        super().train(mode)
+        if self.rgb_backbone is not None and self.freeze_backbone:
+            self.rgb_backbone.eval()
+        return self
+
+    def _encode_images(self, rgbd_flat: torch.Tensor) -> torch.Tensor:
+        """rgbd_flat: (BT, N, C, H, W) → (BT, N*cam_dim)."""
+        if self.uses_dinov2:
+            assert self.rgb_backbone is not None and self.rgb_proj is not None
+            assert self.aux_encoder is not None
+            bt, n = rgbd_flat.shape[:2]
+            rgb = rgbd_flat[:, :, :3].reshape(bt * n, 3, *rgbd_flat.shape[-2:])
+            if self.freeze_backbone:
+                with torch.no_grad():
+                    feat = self.rgb_backbone(rgb)
+            else:
+                feat = self.rgb_backbone(rgb)
+            feat = self.rgb_proj(feat).reshape(bt, n, -1)
+            # Channels 3: depth; 4:7 table XYZ when enabled
+            aux = rgbd_flat[:, :, 3:].reshape(bt * n, -1, *rgbd_flat.shape[-2:])
+            afeat = self.aux_encoder(aux).reshape(bt, n, -1)
+            return torch.cat([feat, afeat], dim=-1).reshape(bt, -1)
+
+        assert self.img_encoders is not None
+        feats = [enc(rgbd_flat[:, i]) for i, enc in enumerate(self.img_encoders)]
+        return torch.cat(feats, dim=-1)
 
     def forward(self, rgbd: torch.Tensor, state: torch.Tensor) -> torch.Tensor:
         if rgbd.dim() == 5:
@@ -207,8 +282,9 @@ class VisionStateEncoder(nn.Module):
         b, t = rgbd.shape[:2]
         rgbd_flat = rgbd.reshape(b * t, *rgbd.shape[2:])
         st_flat = state.reshape(b * t, -1)
-        feats = [enc(rgbd_flat[:, i]) for i, enc in enumerate(self.img_encoders)]
-        v = torch.cat(feats, dim=-1)
+        if rgbd_flat.dim() == 4:
+            rgbd_flat = rgbd_flat.unsqueeze(1)
+        v = self._encode_images(rgbd_flat)
         s = self.state_encoder(st_flat)
         return self.fusion(torch.cat([v, s], dim=-1)).reshape(b, t, -1)
 
@@ -474,6 +550,8 @@ def save_policy(
                 "table_xyz_xy_max_m": cfg.table_xyz_xy_max_m,
                 "table_xyz_z_min_m": cfg.table_xyz_z_min_m,
                 "table_xyz_z_max_m": cfg.table_xyz_z_max_m,
+                "vision_backbone": cfg.vision_backbone,
+                "freeze_backbone": cfg.freeze_backbone,
                 "diffusion_steps": cfg.diffusion_steps,
                 "inference_steps": cfg.inference_steps,
                 "beta_start": cfg.beta_start,

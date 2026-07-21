@@ -1,0 +1,70 @@
+# Insert sensor: Diffusion Policy with frozen DINOv2 RGB + depth/(table XYZ) CNN.
+# Same 3 cams + dense table XYZ as default_diffusion.yaml; separate checkpoint dir.
+#
+# Train:  python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --train \
+#           --config high_level_jobs/subtasks/insert_sensor/config/default_diffusion_dinov2.yaml
+# Deploy: python -m high_level_jobs.subtasks.insert_sensor --arch diffusion --deploy \
+#           --config high_level_jobs/subtasks/insert_sensor/config/default_diffusion_dinov2.yaml \
+#           --model high_level_jobs/subtasks/insert_sensor/runs/diffusion_dinov2/latest/policy.pt
+
+arch: diffusion
+
+dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion_dinov2/latest/policy.pt
+
+# --- Model (Diffusion Policy + DINOv2) ---
+history_len: 8
+action_horizon: 8
+temporal: transformer   # transformer | gru
+latent_dim: 256
+img_width: 224
+img_height: 224
+depth_min_m: 0.25
+depth_max_m: 0.85
+num_cameras: 3
+vision_backbone: dinov2_vits14
+freeze_backbone: true
+
+# Overhead depth → table-frame XYZ channels (no YOLO); unchanged vs CNN diffusion
+use_table_xyz: true
+table_calib_path: ""   # empty → newest valid calibration_table/runs/*/table_calib.json
+table_xyz_xy_min_m: -0.40
+table_xyz_xy_max_m: 0.40
+table_xyz_z_min_m: -0.05
+table_xyz_z_max_m: 0.35
+
+diffusion_steps: 50
+inference_steps: 16
+beta_start: 0.0001
+beta_end: 0.02
+
+# --- Training (smaller batch for DINOv2 memory) ---
+epochs: 80
+batch_size: 4
+lr: 0.0003
+val_frac: 0.15
+seed: 42
+num_workers: 4
+
+# --- Cameras (shared with ACT / CNN diffusion recording) ---
+cameras:
+  overhead:
+    serial: "104122062828"
+    exposure_us: 80
+  side:
+    serial: "024122062290"
+    exposure_us: 200
+  side2:
+    serial: "925322061385"
+    exposure_us: 200
+record_camera_serial: ""
+require_camera_serials: true
+
+# --- Recording ---
+record_hz: 15.0
+
+# --- Deployment ---
+deploy_hz: 15.0
+action_scale: 1.0
+deploy_speed_scale: 2.0
+gripper_close_threshold: 0.5
