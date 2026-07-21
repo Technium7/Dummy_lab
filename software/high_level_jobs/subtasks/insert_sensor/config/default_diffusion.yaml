@@ -8,7 +8,7 @@
 arch: diffusion
 
 dataset_dir: software/high_level_jobs/subtasks/insert_sensor/dataset/episodes
-model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/ep20_tablexyz/policy.pt
+model_path: software/high_level_jobs/subtasks/insert_sensor/runs/diffusion/latest/policy.pt
 
 # --- Model (Diffusion Policy) ---
 history_len: 8
@@ -34,13 +34,13 @@ inference_steps: 16
 beta_start: 0.0001
 beta_end: 0.02
 
-# --- Training ---
+# --- Training (cluster-tuned: larger batch + parallel RGB-D loaders) ---
 epochs: 80
-batch_size: 8
+batch_size: 16
 lr: 0.0003
 val_frac: 0.15
 seed: 42
-num_workers: 0
+num_workers: 4            # match Slurm --cpus-per-task; was 0 (main-thread I/O bottleneck)
 
 # --- Cameras (shared with ACT recording) ---
 cameras:

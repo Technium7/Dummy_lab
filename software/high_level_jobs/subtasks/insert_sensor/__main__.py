@@ -202,6 +202,8 @@ def main() -> int:
                 device=args.device,
                 out_path=args.out,
                 max_episodes=args.max_episodes,
+                resume=args.resume,
+                checkpoint_every=args.checkpoint_every,
             )
         else:
             train_policy(
