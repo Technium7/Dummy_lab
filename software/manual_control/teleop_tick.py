@@ -44,7 +44,7 @@ class TeleopConfig:
 class TeleopState:
     hold_target_deg: Optional[List[float]] = None
     home_latch_until_s: float = 0.0
-    speed_scale: float = 0.4
+    speed_scale: float = 0.18
     was_moving: bool = False
 
 
@@ -99,7 +99,7 @@ def run_teleop_tick(
     include_joint_telemetry: bool = True,
 ) -> TeleopTickResult:
     """One teleop iteration — logic matches stable Windows manual_control (64acdd4)."""
-    speed_scale_min = 0.35
+    speed_scale_min = 0.18
     speed_scale_max = 1.8
     speed_scale_rise_per_sec = 1.6
     home_stream_speed = home_stream_ascii_speed()
@@ -203,22 +203,35 @@ def run_teleop_tick(
 
     if abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) + abs(wrist_vel) <= 1e-12:
         commanded_velocity = [0.0] * len(joint_indices)
+    elif abs(vx) + abs(vy) + abs(vz) + abs(wx) + abs(wy) <= 1e-12:
+        # Wrist-only: do not run Cartesian DLS (avoids noisy J1–J5 from a zero twist).
+        commanded_velocity = [0.0] * len(joint_indices)
+        if len(joint_indices) >= 6:
+            commanded_velocity[5] = wrist_vel
     else:
+        # Solve on J1–J5 only; J6 is reserved for I/Y and must not be part of the twist solve.
+        arm_joints = list(joint_indices[:5])
+        arm_weights = (1.15, 1.1, 1.05, 1.0, 1.0)[: len(arm_joints)]
         qdot = compute_dls_joint_velocity(
             robot_id,
             end_link_idx,
-            joint_indices,
+            arm_joints,
             [vx, vy, vz, wx, wy],
             config.ik_damping,
             config.rotation_weight,
+            joint_weights=arm_weights,
         )
-        commanded_velocity = [float(v) for v in qdot] if qdot is not None else [0.0] * len(joint_indices)
+        commanded_velocity = [0.0] * len(joint_indices)
+        if qdot is not None:
+            for i, vel in enumerate(qdot):
+                if i < len(commanded_velocity):
+                    commanded_velocity[i] = float(vel)
         if config.joint_vel_limit > 0.0:
             commanded_velocity = [
                 min(max(v, -config.joint_vel_limit), config.joint_vel_limit) for v in commanded_velocity
             ]
-    if len(joint_indices) >= 6:
-        commanded_velocity[5] = wrist_vel
+        if len(joint_indices) >= 6:
+            commanded_velocity[5] = wrist_vel
 
     for j_idx, vel in zip(joint_indices, commanded_velocity):
         p.setJointMotorControl2(

@@ -1,0 +1,16 @@
+# software_win dependencies (Windows)
+
+# Core robot / planning (same as repo requirements.txt)
+numpy>=1.25.2,<3
+scipy>=1.11
+pybullet>=3.2.6
+jax[cpu]>=0.4.20
+xacro
+pyserial>=3.5
+PyYAML>=6.0
+Pillow>=10.0
+
+# Cameras (Zelux + Infinity live view / epoxy_app)
+opencv-python>=4.8
+pylablib>=1.4.0
+lucam>=2022.9.27

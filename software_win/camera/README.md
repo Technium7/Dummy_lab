@@ -1,0 +1,69 @@
+# Windows cameras (epoxy / high-level jobs)
+
+Live viewers and grab backends for:
+
+| Camera | Backend |
+|--------|---------|
+| Thorlabs **Zelux** | `pylablib` → Thorlabs TLCamera SDK (ThorCam) |
+| Lumenera / Teledyne **Infinity 2-1RM** | `lucam` → `lucamapi.dll`, with OpenCV DirectShow fallback |
+
+## Install
+
+1. Install vendor software / drivers (ThorCam, Infinity Capture).
+2. From repo root:
+
+```powershell
+pip install -r software_win\requirements.txt
+```
+
+Optional: set `THORLABS_TSI_DLL_PATH` if ThorCam DLLs are not under the default Program Files path.
+
+## Scripts
+
+```powershell
+python software_win\camera\list_devices.py
+python software_win\camera\dual_live_view.py          # two windows
+python software_win\camera\dual_live_view.py --demo  # no hardware
+python software_win\camera\live_zelux.py --serial <SN>
+python software_win\camera\live_infinity.py --opencv-index 0
+```
+
+Keys: **Q** / **Esc** quit.
+
+Infinity uses **Lucam** (Infinity Capture drivers). It will **not** silently fall
+back to OpenCV camera #0 (that is usually a different device). Close the
+Infinity Capture GUI before running so Lucam can open the USB camera.
+
+If colors look wrong, try `--infinity-bayer GB` (or `RG` / `GR`).
+
+
+Each live window has manual **Exposure_0.1ms** and **Gain_0.1** trackbars
+(auto exposure/gain disabled when the driver supports it). Overlay text shows
+current `exp=…ms` and `gain=…`.
+
+- Exposure trackbar value `10` → **1.0 ms**
+- Gain trackbar value `100` → **10.0**
+- Zelux gain range is typically **0–48**; Infinity lucam often **1–20**
+
+Initial values:
+
+```powershell
+python software_win\camera\dual_live_view.py --zelux-exposure-ms 5 --zelux-gain 6 --infinity-exposure-ms 8 --infinity-gain 2
+```
+
+
+## Python API (for epoxy_app)
+
+```python
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path("software_win").resolve()))
+
+from camera import ZeluxCamera, InfinityCamera
+
+with ZeluxCamera(exposure_s=0.01) as zelux, InfinityCamera(camera_number=1) as infinity:
+    z_frame = zelux.grab_bgr()   # HxWx3 BGR uint8
+    i_frame = infinity.grab_bgr()
+```
+
+Both backends implement `CameraBackend` (`open` / `grab_bgr` / `close`).

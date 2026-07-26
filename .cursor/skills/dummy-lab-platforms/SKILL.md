@@ -19,7 +19,8 @@ description: >-
 
 ## Repo layout (same on every clone)
 
-- Code root for Python modules: `software/` (add to `PYTHONPATH` / `cd software`)
+- Code root for Linux / RealSense / IL jobs: `software/` (add to `PYTHONPATH` / `cd software`)
+- Code root for **Windows** teleop + epoxy cameras: `software_win/` (add to `PYTHONPATH`)
 - Conda env: typically `.conda` at repo root (`Dummy_lab/.conda`)
 - Do **not** git-commit large demos or weights (see `.gitignore`)
 

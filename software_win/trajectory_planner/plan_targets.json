@@ -1,0 +1,10 @@
+{
+  "comment": "Grasp teach point. Position and orientation match manual_control End Link GUI: robot-base frame (m) and semantic A/B/C (deg) where HOME [0,0,90,0,0,0] reads A=0, B=0, C=180. With orientation_c_from_xy, C = atan2(Y, X) from position_robot_m (sensor/table XY). Paste position_robot_m from the GUI after a physical teach; add goal_joints_deg from the status window for reliable planning.",
+  "start_joints_deg": [0.0, 0.0, 90.0, 0.0, 0.0, 0.0],
+  "goal_joints_deg": null,
+  "target_end_link": {
+    "position_robot_m": [-0.2235, 0.3035, 0.3407],
+    "orientation_abc_deg": [0.0, 0.0, 0.0],
+    "orientation_c_from_xy": true
+  }
+}

@@ -75,7 +75,7 @@ Linux defaults already use `--control-dt-ms 20` and `--speed-factor 1`. For snap
 
 ## Behavior notes
 
-- Motion speed scales from 40% to 250% while keys are held; first waypoint sends immediately on key press.
+- Motion speed scales from 18% to 180% while keys are held; first waypoint sends immediately on key press.
 - On key release, robot holds the last target position (prevents drift).
 - While moving, robot receives a sim joint target with one control-period velocity lookahead (larger per-waypoint delta so firmware does not crawl on tiny moves).
 - Pressing `T` latches HOME for ~1.2 s; optional firmware `!HOME` runs in background unless `--no-home-firmware`.

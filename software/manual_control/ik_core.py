@@ -188,6 +188,7 @@ def compute_dls_joint_velocity(
     task_twist: Sequence[float],
     damping: float,
     rotation_weight: float,
+    joint_weights: Sequence[float] | None = None,
 ) -> Optional[List[float]]:
     q_all = [float(p.getJointState(robot_id, j)[0]) for j in range(p.getNumJoints(robot_id))]
     zeros = [0.0] * len(q_all)
@@ -201,6 +202,10 @@ def compute_dls_joint_velocity(
     n = len(joint_indices)
     if n == 0:
         return None
+    if joint_weights is None:
+        jw = [1.0] * n
+    else:
+        jw = [float(joint_weights[i]) if i < len(joint_weights) else 1.0 for i in range(n)]
     n_task = 5
     jt = [[rows[r][c] for r in range(n_task)] for c in range(n)]
     h = [[0.0 for _ in range(n)] for _ in range(n)]
@@ -208,7 +213,8 @@ def compute_dls_joint_velocity(
     for i in range(n):
         for j in range(n):
             h[i][j] = sum(jt[i][k] * rows[k][j] for k in range(n_task))
-        h[i][i] += damping * damping
+        # Higher joint_weights → stronger damping → prefer smaller |qdot_i|.
+        h[i][i] += (damping * jw[i]) * (damping * jw[i])
         g[i] = sum(jt[i][k] * float(task_twist[k]) * weights[k] for k in range(n_task))
     return solve_linear_system(h, g)
 
