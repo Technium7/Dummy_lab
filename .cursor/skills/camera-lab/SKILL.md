@@ -32,9 +32,17 @@ Pin serials in job YAML (`cameras.overhead` / `side` / `side2`). Never trust USB
 
 | Tool | When |
 |------|------|
-| `software/camera/calibration_table/table_calib_app.py` | Default: optical table hole grid |
+| `software_win/camera/calibration_table/table_calib_app.py` | Windows ThinkPad: optical table hole grid |
+| `software/camera/calibration_table/table_calib_app.py` | Linux / shared: optical table hole grid |
 | `software/camera/calibration/calibration_app.py` | Hand-eye / checkerboard fallback |
 | `software/camera/single_shot.py` | Single RGB-D capture, no GUI |
+
+Windows:
+
+```powershell
+$env:PYTHONPATH = "$PWD\software_win"
+python -m camera.calibration_table
+```
 
 ## Agent rules
 

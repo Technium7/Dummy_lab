@@ -44,6 +44,26 @@ class ThreadSafeRobotProxy:
     def get_joint_pos(self) -> Optional[List[float]]:
         return self._thread.get_joint_pos_blocking()
 
+    def set_stream_intent(
+        self,
+        *,
+        target_deg: Sequence[float],
+        vel_deg_s: Sequence[float],
+        speed: float,
+        moving_key_down: bool,
+        home_latched: bool,
+        timestamp: float,
+    ) -> None:
+        """Forward stream waypoints (used by epoxy apply / IkCartesianMover)."""
+        self._thread.set_stream_intent(
+            target_deg=target_deg,
+            vel_deg_s=vel_deg_s,
+            speed=speed,
+            moving_key_down=moving_key_down,
+            home_latched=home_latched,
+            timestamp=timestamp,
+        )
+
 
 class RobotControlThread(threading.Thread):
     """Dedicated serial thread: waypoint streaming, hand/home, recovery."""

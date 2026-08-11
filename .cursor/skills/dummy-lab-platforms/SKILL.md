@@ -32,6 +32,7 @@ description: >-
 | insert_sensor ACT ckpt | `.../insert_sensor/runs/latest/policy.pt` |
 | insert_sensor diffusion | `.../insert_sensor/runs/diffusion/latest/policy.pt` |
 | grab_sensor labels/weights | `.../grab_sensor/detection/*/dataset/` and `debug/` |
+| Windows flat grab_sensor | `software_win/high_level_jobs/grab_sensor/vision/dataset/` and `debug/` |
 
 On cluster, demos often live at:
 

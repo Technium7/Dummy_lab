@@ -22,6 +22,9 @@ software/high_level_jobs/subtasks/insert_sensor/runs/**
 !software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/latest/policy.pt
 software/high_level_jobs/subtasks/insert_sensor/camera_previews/
 
+# epoxy_app — local demo episodes (Windows)
+software_win/high_level_jobs/epoxy_app/dataset/
+
 # Slurm job logs (belong in /share/mehta/.../slurm_jobs, not the repo)
 software/insert_sensor_act_*.out
 software/insert_sensor_act_*.err
@@ -37,3 +40,18 @@ software/high_level_jobs/subtasks/grab_sensor/detection/top_detection/dataset/se
 software/**/yolov8n.pt
 software/**/yolo26n.pt
 software/grasp_overlay.png
+
+# Windows flat grab_sensor
+software_win/high_level_jobs/grab_sensor/debug/
+software_win/high_level_jobs/power_measure/debug/
+software_win/high_level_jobs/grab_sensor/vision/dataset/images/
+software_win/high_level_jobs/grab_sensor/vision/dataset/depth/
+software_win/high_level_jobs/grab_sensor/vision/dataset/labels/
+software_win/high_level_jobs/grab_sensor/vision/dataset/previews/
+software_win/high_level_jobs/grab_sensor/vision/dataset/model/
+software_win/high_level_jobs/grab_sensor/vision/dataset/sensor_yolo/
+software_win/high_level_jobs/grab_sensor/vision/dataset/.trash/
+software_win/high_level_jobs/grab_sensor/vision/dataset/*.pt
+software_win/high_level_jobs/grab_sensor/vision/runs/
+software_win/**/yolov8n.pt
+software_win/grasp_overlay.png

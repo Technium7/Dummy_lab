@@ -6,6 +6,24 @@ Live viewers and grab backends for:
 |--------|---------|
 | Thorlabs **Zelux** | `pylablib` → Thorlabs TLCamera SDK (ThorCam) |
 | Lumenera / Teledyne **Infinity 2-1RM** | `lucam` → `lucamapi.dll`, with OpenCV DirectShow fallback |
+| Intel **RealSense D415** | `pyrealsense2` (RGB + aligned depth; used by `grab_sensor`) |
+
+### RealSense (D415)
+
+1. Install [Intel RealSense SDK 2.0](https://github.com/IntelRealSense/librealsense/releases) for Windows.
+2. `pip install pyrealsense2`
+3. Use from Python:
+
+```python
+from camera import RealSenseCamera, list_realsense_devices
+
+print(list_realsense_devices())
+with RealSenseCamera(serial="") as cam:
+    bgr = cam.grab_bgr()
+    rgb, depth_m = cam.grab_rgb_depth()
+```
+
+Pin a serial in `high_level_jobs/grab_sensor/config/default_grasp.yaml` (`camera_serial`).
 
 ## Install
 
@@ -29,6 +47,16 @@ python software_win\camera\live_infinity.py --opencv-index 0
 ```
 
 Keys: **Q** / **Esc** quit.
+
+### Table calibration (optical hole grid)
+
+```powershell
+$env:PYTHONPATH = "$PWD\software_win"
+python -m camera.calibration_table
+python -m camera.calibration_table --camera-serial <SERIAL>
+```
+
+Saves under `software_win/camera/calibration_table/runs/`. See `calibration_table/README.md`.
 
 Infinity uses **Lucam** (Infinity Capture drivers). It will **not** silently fall
 back to OpenCV camera #0 (that is usually a different device). Close the

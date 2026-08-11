@@ -75,7 +75,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--record-demos",
         action="store_true",
-        help="Arm insert_sensor demo recording (R/C keys; teleop unchanged until R).",
+        help="Arm epoxy_app demo recording (live Zelux+Infinity; R/C keys).",
     )
     return parser.parse_args()
 
@@ -98,7 +98,7 @@ def main() -> None:
     teleop_hook = None
     on_shutdown = None
     if args.record_demos:
-        from high_level_jobs.subtasks.insert_sensor.record import create_manual_control_record_hook
+        from high_level_jobs.epoxy_app.record import create_manual_control_record_hook
 
         teleop_hook, recorder = create_manual_control_record_hook()
         on_shutdown = recorder.shutdown

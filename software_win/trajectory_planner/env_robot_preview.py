@@ -1,16 +1,13 @@
-"""PyBullet preview: default gripper URDF (or chosen URDF) at world origin with a static OBJ environment.
+"""PyBullet preview: table-frame world + robot at physical_env/robot_in_table.yaml.
 
-Usage — path depends on current directory:
+Usage from repo root (Dummy_lab/):
+  $env:PYTHONPATH = "$PWD\\software_win"
+  python -m trajectory_planner.env_robot_preview
+  python -m trajectory_planner.env_robot_preview --env physical_env/packaging_station_edit.obj
 
-  From repo root (Dummy_lab/):
-    python software/trajectory_planner/env_robot_preview.py
-
-  From software/ (do not prefix another software/):
-    python trajectory_planner/env_robot_preview.py
-
-  Options (same either way): --env ../physical_env/packaging_station_edit.obj
-
-Robot base is placed at (0,0,0) in the same frame as the environment mesh (OBJ vertex coordinates).
+Planner / preview world = optical table frame (OBJ origin = calib 0,0).
+Robot base is placed at ``robot_in_table_frame`` from
+``physical_env/robot_in_table.yaml`` (same as grab_sensor planning).
 """
 
 from __future__ import annotations
@@ -20,7 +17,7 @@ import math
 import sys
 import time
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 _SOFTWARE_DIR = Path(__file__).resolve().parent.parent
 if str(_SOFTWARE_DIR) not in sys.path:
@@ -45,10 +42,35 @@ from robot_config import DEFAULT_ROBOT, repo_root  # noqa: E402
 def parse_args() -> argparse.Namespace:
     root = repo_root()
     default_env = root / "physical_env" / "packaging_station_edit.obj"
-    parser = argparse.ArgumentParser(description="Preview robot + static OBJ environment in PyBullet.")
+    default_frames = root / "physical_env" / "robot_in_table.yaml"
+    parser = argparse.ArgumentParser(
+        description="Preview table-frame OBJ + robot at physical_env/robot_in_table.yaml."
+    )
     parser.add_argument("--root", type=Path, default=root, help="Workspace root for URDF discovery.")
     parser.add_argument("--robot", type=str, default=DEFAULT_ROBOT, help="URDF/Xacro path or name filter.")
-    parser.add_argument("--env", type=Path, default=default_env, help="Wavefront .obj for the static scene.")
+    parser.add_argument("--env", type=Path, default=default_env, help="Wavefront .obj (table calib frame).")
+    parser.add_argument(
+        "--frames",
+        type=Path,
+        default=default_frames,
+        help="Shared robot_in_table YAML (default: physical_env/robot_in_table.yaml).",
+    )
+    parser.add_argument(
+        "--robot-in-table-in",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=("X", "Y", "Z"),
+        help="Override robot base in table frame (inches).",
+    )
+    parser.add_argument(
+        "--robot-in-table-rpy-deg",
+        type=float,
+        nargs=3,
+        default=None,
+        metavar=("R", "P", "Y"),
+        help="Override robot RPY in table frame (deg).",
+    )
     parser.add_argument("--mesh-scale", type=float, default=1.0, help="Uniform scale applied to the OBJ mesh.")
     parser.add_argument("--fixed-base", action="store_true", default=True, help="Load robot with fixed base.")
     parser.add_argument("--floating-base", action="store_true", help="Allow robot base to move.")
@@ -56,7 +78,40 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
+def _resolve_env_path(env: Path, root: Path) -> Path:
+    path = env.expanduser()
+    if not path.is_absolute():
+        cwd_candidate = (Path.cwd() / path).resolve()
+        root_candidate = (root / path).resolve()
+        if cwd_candidate.is_file():
+            return cwd_candidate
+        if root_candidate.is_file():
+            return root_candidate
+        return root_candidate
+    return path.resolve()
+
+
+def _robot_in_table_from_args(args: argparse.Namespace):
+    from high_level_jobs.grab_sensor.frame_config import resolve_robot_in_table_frame
+
+    override = {}
+    if args.robot_in_table_in is not None:
+        override["translation_in"] = [float(v) for v in args.robot_in_table_in]
+    if args.robot_in_table_rpy_deg is not None:
+        override["rpy_deg"] = [float(v) for v in args.robot_in_table_rpy_deg]
+    return resolve_robot_in_table_frame(
+        shared_yaml=args.frames,
+        override=override or None,
+    )
+
+
+def load_static_obj_mesh(
+    obj_path: Path,
+    mesh_scale: float,
+    *,
+    base_position: Sequence[float] | None = None,
+    base_orientation: Sequence[float] | None = None,
+) -> int:
     path = obj_path.resolve()
     if not path.is_file():
         raise SystemExit(f"Environment mesh not found: {path}")
@@ -69,12 +124,14 @@ def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
     except Exception:
         col = p.createCollisionShape(p.GEOM_MESH, fileName=mesh_file, meshScale=scale)
     vis = p.createVisualShape(p.GEOM_MESH, fileName=mesh_file, meshScale=scale)
+    pos = [float(v) for v in (base_position or (0.0, 0.0, 0.0))[:3]]
+    orn = [float(v) for v in (base_orientation or (0.0, 0.0, 0.0, 1.0))[:4]]
     return p.createMultiBody(
         baseMass=0,
         baseCollisionShapeIndex=col,
         baseVisualShapeIndex=vis,
-        basePosition=[0.0, 0.0, 0.0],
-        baseOrientation=[0.0, 0.0, 0.0, 1.0],
+        basePosition=pos,
+        baseOrientation=orn,
     )
 
 
@@ -99,14 +156,14 @@ def _aabb_union(
     if not mins:
         return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
     out_min = (
-        min(a[0] for a in mins),
-        min(a[1] for a in mins),
-        min(a[2] for a in mins),
+        min(b[0] for b in mins),
+        min(b[1] for b in mins),
+        min(b[2] for b in mins),
     )
     out_max = (
-        max(a[0] for a in maxs),
-        max(a[1] for a in maxs),
-        max(a[2] for a in maxs),
+        max(b[0] for b in maxs),
+        max(b[1] for b in maxs),
+        max(b[2] for b in maxs),
     )
     return out_min, out_max
 
@@ -118,6 +175,10 @@ def run_preview(
     fixed_base: bool,
     extra_search_paths: Iterable[Path],
     load_plane: bool,
+    *,
+    robot_base_position: Sequence[float],
+    robot_base_orientation: Sequence[float],
+    robot_in_table_display: str,
 ) -> None:
     cid = p.connect(p.GUI)
     if cid < 0:
@@ -140,29 +201,64 @@ def run_preview(
             except Exception:
                 pass
 
-    env_id = load_static_obj_mesh(env_path, mesh_scale)
+    # Table frame = world: scanned mesh at origin (+90° X export fix).
+    from high_level_jobs.grab_sensor.table_position import table_frame_pose_in_planner_world
 
-    load_flags = p.URDF_USE_INERTIA_FROM_FILE | p.URDF_USE_SELF_COLLISION | p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    env_pos, env_orn = table_frame_pose_in_planner_world()
+    env_id = load_static_obj_mesh(
+        env_path,
+        mesh_scale,
+        base_position=env_pos,
+        base_orientation=env_orn,
+    )
+
+    load_flags = (
+        p.URDF_USE_INERTIA_FROM_FILE
+        | p.URDF_USE_SELF_COLLISION
+        | p.URDF_USE_SELF_COLLISION_EXCLUDE_PARENT
+    )
     robot_id = p.loadURDF(
         str(urdf_path),
-        basePosition=[0.0, 0.0, 0.0],
-        baseOrientation=p.getQuaternionFromEuler([0.0, 0.0, 0.0]),
+        basePosition=[float(v) for v in robot_base_position[:3]],
+        baseOrientation=[float(v) for v in robot_base_orientation[:4]],
         useFixedBase=fixed_base,
         flags=load_flags,
     )
+
+    axis_len = 0.08
+    rx, ry, rz = (float(v) for v in robot_base_position[:3])
+    p.addUserDebugLine([0, 0, 0], [axis_len, 0, 0], [1, 0, 0], 3, 0)
+    p.addUserDebugLine([0, 0, 0], [0, axis_len, 0], [0, 1, 0], 3, 0)
+    p.addUserDebugLine([0, 0, 0], [0, 0, axis_len], [0, 0, 1], 3, 0)
+    p.addUserDebugText("table 0,0", [0, 0, 0.02], [1, 1, 1], 1.2, 0)
+    p.addUserDebugLine([rx, ry, rz], [rx + axis_len, ry, rz], [1, 0.4, 0.4], 2, 0)
+    p.addUserDebugLine([rx, ry, rz], [rx, ry + axis_len, rz], [0.4, 1, 0.4], 2, 0)
+    p.addUserDebugLine([rx, ry, rz], [rx, ry, rz + axis_len], [0.4, 0.4, 1], 2, 0)
+    p.addUserDebugText("robot base", [rx, ry, rz + 0.02], [1, 1, 0], 1.2, 0)
 
     boxes = [p.getAABB(robot_id, -1), p.getAABB(env_id, -1)]
     aabb_min, aabb_max = _aabb_union(boxes)
     cx = (aabb_min[0] + aabb_max[0]) * 0.5
     cy = (aabb_min[1] + aabb_max[1]) * 0.5
     cz = (aabb_min[2] + aabb_max[2]) * 0.5
-    span = max(abs(aabb_max[0] - aabb_min[0]), abs(aabb_max[1] - aabb_min[1]), abs(aabb_max[2] - aabb_min[2]))
+    span = max(
+        abs(aabb_max[0] - aabb_min[0]),
+        abs(aabb_max[1] - aabb_min[1]),
+        abs(aabb_max[2] - aabb_min[2]),
+    )
     p.resetDebugVisualizerCamera(
         cameraDistance=max(0.5, span) * 2.2,
         cameraYaw=50,
         cameraPitch=-28,
         cameraTargetPosition=[cx, cy, cz],
     )
+
+    print(f"[env_robot_preview] robot_in_table: {robot_in_table_display}")
+    print(
+        f"[env_robot_preview] robot base at table/world "
+        f"pos_m={[round(float(v), 4) for v in robot_base_position]}"
+    )
+    print("[env_robot_preview] env OBJ at table origin. Close GUI to exit.")
 
     joint_signs = [1.0, -1.0, 1.0, 1.0, 1.0, 1.0]
     joint_offsets_deg = [0.0, 73.0, 180.0, 0.0, 0.0, 0.0]
@@ -188,34 +284,32 @@ def run_preview(
         else:
             current_user = sim_to_user(current, 0.0, sign)
             lower_user, upper_user = user_bounds_from_sim(lower, upper, 0.0, sign)
-            slider_id = p.addUserDebugParameter(name, lower_user, upper_user, max(lower_user, min(current_user, upper_user)))
-        return joint_idx, slider_id, name
+            slider_id = p.addUserDebugParameter(
+                name, lower_user, upper_user, max(lower_user, min(current_user, upper_user))
+            )
+        return slider_id, joint_idx, name
 
-    joint_slider_map: Dict[int, Tuple[int, str]] = {}
-    for joint_idx in range(p.getNumJoints(robot_id)):
-        slider = create_slider_for_joint(joint_idx)
-        if slider is not None:
-            joint_slider_map[joint_idx] = (slider[1], slider[2])
-
-    print("PyBullet preview: robot base and environment mesh both at world origin. Close the GUI to exit.")
-    if not joint_slider_map:
-        print("(No controllable joints — view only.)")
+    sliders: Dict[int, Tuple[int, str]] = {}
+    for j in range(p.getNumJoints(robot_id)):
+        created = create_slider_for_joint(j)
+        if created is None:
+            continue
+        slider_id, joint_idx, name = created
+        sliders[slider_id] = (joint_idx, name)
 
     while p.isConnected():
-        for joint_idx, (slider_id, _) in joint_slider_map.items():
-            try:
-                target_user = p.readUserDebugParameter(slider_id)
-            except Exception:
-                continue
+        for slider_id, (joint_idx, _name) in sliders.items():
             info = p.getJointInfo(robot_id, joint_idx)
+            joint_type = info[2]
+            raw = float(p.readUserDebugParameter(slider_id))
             sign = joint_signs[joint_idx] if joint_idx < len(joint_signs) else 1.0
-            if info[2] == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
+            if joint_type == p.JOINT_REVOLUTE and joint_idx < len(joint_offsets_deg):
                 offset_rad = math.radians(joint_offsets_deg[joint_idx])
-                target = offset_rad - sign * math.radians(target_user)
+                target = offset_rad - math.radians(raw) * sign
             else:
-                target = -sign * target_user
+                target = -raw * sign if abs(sign + 1.0) < 1e-9 else raw * sign
             p.setJointMotorControl2(
-                bodyUniqueId=robot_id,
+                bodyIndex=robot_id,
                 jointIndex=joint_idx,
                 controlMode=p.POSITION_CONTROL,
                 targetPosition=target,
@@ -234,14 +328,25 @@ def main() -> None:
     package_map = build_package_map(root)
     urdf_path, temp_file = materialize_urdf(selected, package_map)
     extra = {root, selected.parent, urdf_path.parent, *package_map.values()}
+    env_path = _resolve_env_path(Path(args.env), root)
+    robot_in_table = _robot_in_table_from_args(args)
+    from high_level_jobs.grab_sensor.table_position import (
+        format_robot_in_table_display,
+        robot_base_pose_in_table_world,
+    )
+
+    robot_pos, robot_orn = robot_base_pose_in_table_world(robot_in_table)
     try:
         run_preview(
             urdf_path=urdf_path,
-            env_path=args.env,
+            env_path=env_path,
             mesh_scale=args.mesh_scale,
             fixed_base=fixed_base,
             extra_search_paths=extra,
             load_plane=not args.no_plane,
+            robot_base_position=robot_pos,
+            robot_base_orientation=robot_orn,
+            robot_in_table_display=format_robot_in_table_display(robot_in_table),
         )
     finally:
         if temp_file and temp_file.exists():

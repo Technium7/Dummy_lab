@@ -1,0 +1,96 @@
+# Windows flat grab_sensor — top-view D415, YOLO boxes + keypoint heads.
+#
+# Vertical grasp: A=-90 + grasp_rpy_roll_offset_deg≈-15.6 corrects URDF TCP
+# (0,-100,-28)mm so wrist→tip is ⊥ table. Yaw from holder axis. Z = table surface.
+
+camera_to_robot:
+  translation_m: [0.02473759406925837, 0.34061158616990395, 0.3150136487329851]
+  rpy_deg: [102.40187601838566, -39.56813467465095, -1.9826286775152475]
+
+camera_serial: ""
+
+vision_mode: cascade
+
+vision:
+  detector_backend: yolo  # yolo (default) | cascade
+  yolo_model_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/sensor_yolo.pt
+  proposal_model_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/proposal.pt
+  class_model_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/class_net.pt
+  sensor_head_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/sensor_head.pt
+  center_head_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/center_head.pt
+  confidence: 0.35
+  crop_padding_px: 16
+  max_proposals: 16
+
+grasp_position_from_table: true
+
+# Optional pin; else newest valid software_win/.../calibration_table/runs/*/table_calib.json
+# (falls back to software/camera/calibration_table/runs/)
+# table_calib_path: software_win/camera/calibration_table/runs/run_YYYYMMDD_HHMMSS/table_calib.json
+
+motion_planning:
+  # Sensor sits on the table surface — TCP Z = table plane (no lift offset)
+  grasp_height_above_table_mm: 0.0
+
+# Semantic A/B → world RPY: roll=-a + grasp_rpy_roll_offset_deg, pitch=-b.
+# A=-90 → roll=+90 for pure link6 -Y down; URDF TCP origin is (0, -100, -28) mm
+# so add roll_offset=-atan2(28,100)≈-15.6° to make wrist→TCP vertical (⊥ table).
+# C (yaw) from table-plane holder axis + offset (not raw image axis — camera is tilted).
+# 0° → gripper jaws across the holder (⊥ handle); ±90 → parallel to handle.
+fixed_grasp_ab_deg: [-90.0, 0.0]
+grasp_rpy_roll_offset_deg: -15.64
+yaw_from_sensor_axis: true
+grasp_c_offset_deg: 90.0
+grasp_rpy_yaw_base_deg: 180.0
+# Grasp XY: contact projected to table, then offset along holder (table plane)
+grasp_offset_from_holder_mm: 19
+# Image overlay preview (live_label / detect)
+grasp_offset_from_holder_px: 18.0
+
+grasp_orientation_tol_deg: 50.0
+grasp_position_tol_mm: 20.0
+# Simultaneous IK balance (after PyBullet seed):
+#   cost = (pos_mm / pos_tol)^2 + ik_ori_vs_pos * (ori_deg / ori_tol)^2
+# 1.0 = equal when both sit at their tols; <1 favors TCP XYZ; >1 favors orientation
+ik_ori_vs_pos: 1.0
+
+# Robot↔table + work_position_deg from physical_env/robot_in_table.yaml (edit there).
+# Start/return at work_position (between rest and HOME); J1 still sequenced first.
+# Optional override:
+# robot_in_table_frame:
+#   translation_in: [...]
+#   rpy_deg: [0, 0, 0]
+# work_position_deg: [0, 25, 150, 0, 0, 0]  # see physical_env/robot_in_table.yaml
+# rest_position_deg: [0, -75, 180, 0, 0, 0]
+
+approach:
+  plan_pre_grasp: true
+  pre_grasp_offset_mm: 50.0
+  pre_grasp_along_xy: false   # approach from above along world +Z
+  pre_grasp_orientation_tol_deg: 90.0
+  post_grasp_lift_mm: 120.0
+  plan_return_home: true
+  retreat_after_close_mm: 40.0
+
+post_obstacle:
+  diameter_in: 1.0
+  min_height_mm: 10.0
+  max_height_mm: 80.0
+  depth_patch_radius_px: 3
+
+execute:
+  joint_current_limit_a: 0
+  home_confirm_attempts: 3
+
+paths:
+  robot: robot_design/Dummy_ros2_gripper_description/urdf/Dummy_ros2_gripper_grasp.urdf
+  end_link: link6_1
+  tcp_link: grasp_tcp_link
+  save_debug_dir: software_win/high_level_jobs/grab_sensor/debug
+
+# Scanned OBJ is in table calib frame (origin=hole 0,0). Planner world = table;
+# robot base from physical_env/robot_in_table.yaml.
+load_environment: true
+env_path: physical_env/packaging_station_edit.obj
+enable_collision: false
+plan_seed: 42

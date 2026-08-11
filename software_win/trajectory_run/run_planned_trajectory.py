@@ -19,9 +19,13 @@ from manual_control.mapping import (  # noqa: E402
     MAX_SPEED,
     MIN_SPEED,
     clamp_firmware_joints_deg,
+    continuous_firmware_joint,
     deg_speed_to_ascii_speed,
     max_ascii_speed,
+    normalize_firmware_joints_deg,
+    shortest_deg_delta,
     sim_rad_to_transformed_deg,
+    unwrap_firmware_trajectory_deg,
 )
 from manual_control.robot_session import connect_robot_for_teleop, disconnect_robot  # noqa: E402
 from robot_ascii_interface import RobotAsciiInterface  # noqa: E402
@@ -35,13 +39,20 @@ from trajectory_run.run_results import default_run_results_path, save_run_result
 
 
 def sim_trajectory_to_robot_deg(trajectory_rad: np.ndarray) -> np.ndarray:
-    """Convert planner joint samples (sim rad) to robot ``&`` command degrees."""
+    """Convert planner joint samples (sim rad) to robot ``&`` command degrees.
+
+    Continuous joints are wrapped into firmware ±180 (not hard-clamped), then the
+    path is unwrapped so consecutive samples take the short ±360 branch.
+    """
     traj = np.asarray(trajectory_rad, dtype=np.float64)
     n, nj = traj.shape
     out = np.zeros((n, 6), dtype=np.float64)
     for i in range(n):
         for j in range(min(6, nj)):
             out[i, j] = sim_rad_to_transformed_deg(j, float(traj[i, j]))
+        out[i] = normalize_firmware_joints_deg(out[i])
+    if n >= 2:
+        out = np.asarray(unwrap_firmware_trajectory_deg(out), dtype=np.float64)
     return out
 
 
@@ -84,7 +95,12 @@ def _joint_errors(
     """Return (max abs error, per-joint errors) in degrees."""
     ref = np.asarray(reference[:6], dtype=np.float64)
     act = np.asarray(measured[:6], dtype=np.float64)
-    per_joint = act - ref
+    per_joint = np.zeros(6, dtype=np.float64)
+    for j in range(6):
+        if continuous_firmware_joint(j):
+            per_joint[j] = shortest_deg_delta(ref[j], act[j])
+        else:
+            per_joint[j] = act[j] - ref[j]
     return float(np.max(np.abs(per_joint))), per_joint
 
 
@@ -234,7 +250,13 @@ def _segment_velocities_deg_s(
         vels = [float(velocities_deg_s[index, j]) * scale for j in range(6)]
     else:
         q_prev = clamp_firmware_joints_deg(pts[index - 1])
-        vels = [(q[j] - q_prev[j]) / dt_s for j in range(6)]
+        vels = []
+        for j in range(6):
+            if continuous_firmware_joint(j):
+                dq = shortest_deg_delta(q_prev[j], q[j])
+            else:
+                dq = q[j] - q_prev[j]
+            vels.append(dq / dt_s)
     vels = [max(-vmax, min(vmax, v)) for v in vels]
     return q, vels
 
@@ -463,12 +485,21 @@ def stream_waypoints_deg(
     arm: bool = True,
     seed_from_robot: bool = True,
     hold_end: bool = True,
+    min_speed_scale: float = 0.25,
+    ramp_from_speed_scale: float | None = None,
+    on_waypoint=None,
 ) -> bool:
     """
     Stream ``&`` targets in interruptible mode (CMDMODE 2).
 
   When ``velocities_deg_s`` is provided (from quintic smoothing), use those speeds
     instead of finite-difference deltas so starts/ends stay smooth.
+
+    If ``ramp_from_speed_scale`` differs from ``speed_scale``, the stream scale
+    lerps from the prior cruise to the target across waypoints.
+
+    ``on_waypoint(i, frac)`` is called after sending waypoint ``i`` (1..n-1) without
+    stopping the stream — useful for in-motion sensor reads.
     """
     pts = np.asarray(waypoints_deg, dtype=np.float64)
     if len(pts) < 2:
@@ -491,14 +522,29 @@ def stream_waypoints_deg(
         dt_s = max(1e-3, send_interval_ms / 1000.0)
 
     vmax = max(MIN_SPEED, float(max_joint_vel_deg_s))
-    scale = max(0.25, float(speed_scale))
+    end_scale = max(float(min_speed_scale), float(speed_scale))
+    if ramp_from_speed_scale is None:
+        start_scale = end_scale
+    else:
+        start_scale = max(float(min_speed_scale), float(ramp_from_speed_scale))
 
-    print(
-        f"{label}Streaming {len(pts)} waypoints "
-        f"({dt_s * 1000:.0f} ms/seg, speed_scale={scale:.2f})..."
-    )
+    if abs(start_scale - end_scale) > 1e-6:
+        print(
+            f"{label}Streaming {len(pts)} waypoints "
+            f"({dt_s * 1000:.0f} ms/seg, speed_scale {start_scale:.2f}→{end_scale:.2f})..."
+        )
+    else:
+        print(
+            f"{label}Streaming {len(pts)} waypoints "
+            f"({dt_s * 1000:.0f} ms/seg, speed_scale={end_scale:.2f})..."
+        )
 
     for i in range(1, len(pts)):
+        if n_seg <= 1:
+            scale = end_scale
+        else:
+            t = float(i) / float(n_seg)
+            scale = start_scale + t * (end_scale - start_scale)
         q, vels_seg = _segment_velocities_deg_s(
             pts, i, dt_s, velocities_deg_s, vmax=vmax, scale=scale
         )
@@ -510,6 +556,11 @@ def stream_waypoints_deg(
         if not ok:
             print(f"{label}Failed to send waypoint {i}/{n_seg}.")
             return False
+        if on_waypoint is not None:
+            try:
+                on_waypoint(i, float(i) / float(max(n_seg, 1)))
+            except Exception as exc:
+                print(f"{label}on_waypoint({i}) failed: {exc}")
         time.sleep(dt_s)
 
     if hold_end:
@@ -545,7 +596,10 @@ def prepare_robot_trajectory(
 ) -> Tuple[np.ndarray, Optional[np.ndarray], dict]:
     """Convert sim-rad plan to robot deg; optionally quintic smooth + retime."""
     waypoints_deg = sim_trajectory_to_robot_deg(trajectory_rad)
-    info: dict = {"n_plan_samples": len(waypoints_deg)}
+    info: dict = {
+        "n_plan_samples": len(waypoints_deg),
+        "firmware_normalized": True,
+    }
 
     if not smooth:
         info["smoothed"] = False
@@ -558,6 +612,32 @@ def prepare_robot_trajectory(
         max_acc_deg_s2=max_acc_deg_s2,
         max_knots=max_knots,
     )
+    # Quintic can blow up on near-duplicate J1-sequencing samples; fall back.
+    peak_v = float(sinfo.get("peak_vel_deg_s", 0.0) or 0.0)
+    peak_a = float(sinfo.get("peak_acc_deg_s2", 0.0) or 0.0)
+    crazy = (
+        not np.isfinite(peak_v)
+        or not np.isfinite(peak_a)
+        or peak_v > max(5.0 * max_vel_deg_s, 200.0)
+        or peak_a > max(20.0 * max_acc_deg_s2, 2000.0)
+        or float(np.max(np.abs(pos))) > 1.0e4
+    )
+    if crazy:
+        info["smoothed"] = False
+        info["smooth_fallback"] = True
+        info["smooth_reject"] = {
+            "peak_vel_deg_s": peak_v,
+            "peak_acc_deg_s2": peak_a,
+            **{k: sinfo[k] for k in ("n_knots", "n_out", "duration_s", "time_scale") if k in sinfo},
+        }
+        return waypoints_deg, None, info
+
+    # Quintic can nudge past limits; wrap continuous joints and re-unwrap path.
+    pos = np.asarray(
+        [normalize_firmware_joints_deg(row) for row in pos], dtype=np.float64
+    )
+    if len(pos) >= 2:
+        pos = np.asarray(unwrap_firmware_trajectory_deg(pos), dtype=np.float64)
     info["smoothed"] = True
     info.update(sinfo)
     return pos, vel, info

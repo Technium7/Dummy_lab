@@ -1,4 +1,4 @@
-"""PyBullet planning scene: robot (Z-rotated 180°) + static OBJ environment."""
+"""PyBullet planning scene: robot + static OBJ environment (table-frame world)."""
 
 from __future__ import annotations
 
@@ -60,7 +60,13 @@ def disconnect_planning_scene(scene: PlanningScene) -> None:
         pass
 
 
-def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
+def load_static_obj_mesh(
+    obj_path: Path,
+    mesh_scale: float,
+    *,
+    base_position: Sequence[float] | None = None,
+    base_orientation: Sequence[float] | None = None,
+) -> int:
     path = obj_path.resolve()
     if not path.is_file():
         raise FileNotFoundError(f"Environment mesh not found: {path}")
@@ -73,12 +79,14 @@ def load_static_obj_mesh(obj_path: Path, mesh_scale: float) -> int:
     except Exception:
         col = p.createCollisionShape(p.GEOM_MESH, fileName=mesh_file, meshScale=scale)
     vis = p.createVisualShape(p.GEOM_MESH, fileName=mesh_file, meshScale=scale)
+    pos = [float(v) for v in (base_position or (0.0, 0.0, 0.0))[:3]]
+    orn = [float(v) for v in (base_orientation or (0.0, 0.0, 0.0, 1.0))[:4]]
     return p.createMultiBody(
         baseMass=0,
         baseCollisionShapeIndex=col,
         baseVisualShapeIndex=vis,
-        basePosition=[0.0, 0.0, 0.0],
-        baseOrientation=[0.0, 0.0, 0.0, 1.0],
+        basePosition=pos,
+        baseOrientation=orn,
     )
 
 
@@ -92,6 +100,10 @@ def build_planning_scene(
     end_link_hint: str,
     use_gui: bool,
     tcp_link_hint: str = "",
+    env_base_position: Sequence[float] | None = None,
+    env_base_orientation: Sequence[float] | None = None,
+    robot_base_position: Sequence[float] | None = None,
+    robot_base_orientation: Sequence[float] | None = None,
 ) -> PlanningScene:
     mode = p.GUI if use_gui else p.DIRECT
     cid = p.connect(mode)
@@ -115,13 +127,20 @@ def build_planning_scene(
                 pass
 
     if env_path is not None:
-        env_id = load_static_obj_mesh(env_path, mesh_scale)
+        env_id = load_static_obj_mesh(
+            env_path,
+            mesh_scale,
+            base_position=env_base_position,
+            base_orientation=env_base_orientation,
+        )
     else:
         env_id = -1
+    robot_pos = [float(v) for v in (robot_base_position or (0.0, 0.0, 0.0))[:3]]
+    robot_orn = [float(v) for v in (robot_base_orientation or _BASE_ORIENTATION_Z_180)[:4]]
     robot_id = p.loadURDF(
         str(urdf_path),
-        basePosition=[0.0, 0.0, 0.0],
-        baseOrientation=_BASE_ORIENTATION_Z_180,
+        basePosition=robot_pos,
+        baseOrientation=robot_orn,
         useFixedBase=fixed_base,
         flags=p.URDF_USE_INERTIA_FROM_FILE,
     )

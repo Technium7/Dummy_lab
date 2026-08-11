@@ -48,12 +48,14 @@ def plan_lqr_trajectory(
     endpoint_relax_fraction: float = DEFAULT_ENDPOINT_RELAX_FRACTION,
     endpoint_skip_fraction: float = DEFAULT_ENDPOINT_SKIP_FRACTION,
     verbose: bool = True,
+    joint_guess_mode: str | None = None,
 ) -> Optional[np.ndarray]:
     """
     Optimize a joint trajectory with discrete iLQR (JAX Riccati).
 
     With ``enable_collision_penalty``, runs nominal iLQR then SCP collision refinement.
     Terminal cost always tracks ``goal_q`` joint angles.
+    ``joint_guess_mode``: ``early`` / ``late`` / ``linear`` (base J1 timing hint).
     """
     if enable_collision_penalty:
         from .scp_planner import plan_scp_trajectory
@@ -83,6 +85,7 @@ def plan_lqr_trajectory(
             endpoint_relax_fraction=endpoint_relax_fraction,
             endpoint_skip_fraction=endpoint_skip_fraction,
             verbose=verbose,
+            joint_guess_mode=joint_guess_mode,
         )
 
     from .scp_planner import plan_nominal_ilqr_trajectory
@@ -101,4 +104,5 @@ def plan_lqr_trajectory(
         line_search_alphas=line_search_alphas,
         resample_to=resample_to,
         verbose=verbose,
+        joint_guess_mode=joint_guess_mode,
     )

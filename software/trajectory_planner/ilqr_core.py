@@ -30,6 +30,89 @@ def linear_joint_guess(start_q: np.ndarray, goal_q: np.ndarray, horizon: int) ->
     return start_q + t[:, None] * (goal_q - start_q)[None, :]
 
 
+def phased_base_joint_guess(
+    start_q: np.ndarray,
+    goal_q: np.ndarray,
+    horizon: int,
+    *,
+    base_idx: int = 0,
+    phase_frac: float = 0.35,
+    mode: str = "linear",
+) -> np.ndarray:
+    """Initial joint path with base (J1) timed early, late, or linearly.
+
+    Prefer ``plan_joint_trajectory(..., joint_guess_mode=early|late)`` which
+    sequences two full plans (J1 alone first / last). This guess is the
+    single-plan fallback when that midpoint is invalid.
+
+    ``early``: J1 finishes in the first ``phase_frac`` of the horizon, then other joints.
+    ``late``: other joints first, J1 in the last ``phase_frac``.
+    ``linear``: same as ``linear_joint_guess``.
+    """
+    horizon = max(2, int(horizon))
+    start = np.asarray(start_q, dtype=np.float64).reshape(-1)
+    goal = np.asarray(goal_q, dtype=np.float64).reshape(-1)
+    n_j = int(start.shape[0])
+    mode_norm = str(mode).strip().lower()
+    if mode_norm in ("", "linear", "none"):
+        return linear_joint_guess(start, goal, horizon)
+
+    frac = float(np.clip(phase_frac, 0.05, 0.9))
+    n_phase = max(1, min(horizon - 1, int(round(horizon * frac))))
+    bi = int(np.clip(base_idx, 0, n_j - 1))
+    out = np.zeros((horizon, n_j), dtype=np.float64)
+    out[0] = start
+    out[-1] = goal
+
+    if mode_norm == "early":
+        # [0, n_phase]: move base only; [n_phase, end]: move other joints, base held at goal.
+        for k in range(1, horizon - 1):
+            q = start.copy()
+            if k <= n_phase:
+                a = k / float(n_phase)
+                q[bi] = start[bi] + a * (goal[bi] - start[bi])
+            else:
+                q[bi] = goal[bi]
+                a = (k - n_phase) / float(max(1, horizon - 1 - n_phase))
+                for j in range(n_j):
+                    if j == bi:
+                        continue
+                    q[j] = start[j] + a * (goal[j] - start[j])
+            out[k] = q
+    elif mode_norm == "late":
+        # [0, split]: other joints; [split, end]: base.
+        split = max(1, horizon - 1 - n_phase)
+        for k in range(1, horizon - 1):
+            q = start.copy()
+            if k <= split:
+                a = k / float(split)
+                for j in range(n_j):
+                    if j == bi:
+                        continue
+                    q[j] = start[j] + a * (goal[j] - start[j])
+                q[bi] = start[bi]
+            else:
+                for j in range(n_j):
+                    if j != bi:
+                        q[j] = goal[j]
+                a = (k - split) / float(max(1, horizon - 1 - split))
+                q[bi] = start[bi] + a * (goal[bi] - start[bi])
+            out[k] = q
+    else:
+        raise ValueError(f"joint guess mode must be early|late|linear, got {mode!r}")
+    return out
+
+
+def resolve_joint_guess(
+    start_q: np.ndarray,
+    goal_q: np.ndarray,
+    horizon: int,
+    joint_guess_mode: str | None = None,
+) -> np.ndarray:
+    mode = "linear" if joint_guess_mode is None else str(joint_guess_mode)
+    return phased_base_joint_guess(start_q, goal_q, horizon, mode=mode)
+
+
 def ilqr_iteration(
     solver: IlqrJaxSolver,
     scene,

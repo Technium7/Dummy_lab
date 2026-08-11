@@ -1,0 +1,25 @@
+# Epoxy application demo recording (Zelux + Infinity 2-1RM).
+#
+# Record: python software_win/manual_control/manual_control_app.py --record-demos
+# Keys: R start/stop  |  C save  |  O/P gripper
+
+dataset_dir: software_win/high_level_jobs/epoxy_app/dataset/episodes
+# epoxy_apply R/C recordings (not training demos)
+record_result_dir: software_win/high_level_jobs/epoxy_app/dataset/record_result
+
+# --- Recording ---
+record_hz: 15.0
+# --- Cameras (opened only while R recording is active) ---
+cameras:
+  zelux:
+    serial: ""          # optional Thorlabs serial; empty = first device / index
+    index: 0
+    exposure_ms: 10.0
+    gain: 0.0
+  infinity:
+    camera_number: 1    # lucam 1-indexed
+    opencv_index: null  # set to force OpenCV DirectShow (skips lucam)
+    exposure_ms: 25.0
+    gain: 1.0
+    bayer: BG
+    prefer_opencv: false

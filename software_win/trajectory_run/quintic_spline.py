@@ -324,9 +324,30 @@ def _compress_spline_to_target(
     return scaled, new_scale, peak_v, peak_a
 
 
+def collapse_near_duplicate_knots(
+    waypoints: np.ndarray,
+    *,
+    min_step_deg: float = 0.05,
+) -> np.ndarray:
+    """Drop consecutive knots whose max joint step is below ``min_step_deg`` (keep ends)."""
+    wp = np.asarray(waypoints, dtype=np.float64)
+    if len(wp) < 3:
+        return wp
+    keep = [0]
+    thr = max(0.0, float(min_step_deg))
+    for i in range(1, len(wp) - 1):
+        if float(np.max(np.abs(wp[i] - wp[keep[-1]]))) >= thr:
+            keep.append(i)
+    keep.append(len(wp) - 1)
+    # Ensure last kept point is distinct from previous when possible.
+    if len(keep) >= 2 and float(np.max(np.abs(wp[keep[-1]] - wp[keep[-2]]))) < 1e-12:
+        keep.pop(-2)
+    return wp[np.asarray(keep, dtype=np.int64)]
+
+
 def subsample_knots(waypoints: np.ndarray, max_knots: int) -> np.ndarray:
     """Reduce knots by arc length (keeps endpoints, avoids large joint-space gaps)."""
-    wp = np.asarray(waypoints, dtype=np.float64)
+    wp = collapse_near_duplicate_knots(np.asarray(waypoints, dtype=np.float64))
     n = len(wp)
     mk = max(2, int(max_knots))
     if n <= mk:
@@ -360,6 +381,11 @@ def _clamped_knot_velocities(
     for i in range(1, n - 1):
         dt0 = knot_times[i] - knot_times[i - 1]
         dt1 = knot_times[i + 1] - knot_times[i]
+        step0 = float(np.max(np.abs(knots[i] - knots[i - 1])))
+        step1 = float(np.max(np.abs(knots[i + 1] - knots[i])))
+        # Near-stationary knots must keep v≈0; otherwise quintic overshoots massively.
+        if step0 < 0.05 or step1 < 0.05:
+            continue
         if dt0 > 1e-9 and dt1 > 1e-9:
             v0 = (knots[i] - knots[i - 1]) / dt0
             v1 = (knots[i + 1] - knots[i]) / dt1

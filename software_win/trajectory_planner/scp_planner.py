@@ -42,7 +42,7 @@ from .ilqr_core import (
     default_line_search_alphas,
     get_ilqr_solver,
     ilqr_iteration,
-    linear_joint_guess,
+    resolve_joint_guess,
 )
 from .scene import PlanningScene
 from .trajectory_utils import (
@@ -145,9 +145,10 @@ def _run_nominal_ilqr(
     verbose: bool,
     *,
     joint_terminal_goal: np.ndarray | None = None,
+    joint_guess_mode: str | None = None,
 ) -> np.ndarray:
     solver = get_ilqr_solver()
-    traj = linear_joint_guess(start, stage_goal, horizon)
+    traj = resolve_joint_guess(start, stage_goal, horizon, joint_guess_mode)
     traj[0] = start
     jterm = joint_terminal_goal if joint_terminal_goal is not None else stage_goal
     traj[-1] = jterm
@@ -157,8 +158,10 @@ def _run_nominal_ilqr(
     zero_grad = np.zeros((horizon, start.shape[0]), dtype=np.float64)
 
     if verbose:
+        mode_s = joint_guess_mode or "linear"
         print(
-            f"SCP phase 1: nominal iLQR ({n_ilqr_iterations} iters, no collision, joint goal)",
+            f"SCP phase 1: nominal iLQR ({n_ilqr_iterations} iters, no collision, "
+            f"joint goal, guess={mode_s})",
             flush=True,
         )
     for _ in range(max(1, int(n_ilqr_iterations))):
@@ -200,6 +203,7 @@ def plan_nominal_ilqr_trajectory(
     line_search_alphas: Optional[Sequence[float]] = None,
     resample_to: Optional[int] = None,
     verbose: bool = True,
+    joint_guess_mode: str | None = None,
 ) -> np.ndarray:
     """Collision-free discrete iLQR."""
     start = np.asarray(start_q, dtype=np.float64)
@@ -226,6 +230,7 @@ def plan_nominal_ilqr_trajectory(
         reg,
         verbose,
         joint_terminal_goal=stage_goal,
+        joint_guess_mode=joint_guess_mode,
     )
     return _finalize_trajectory(traj, start, stage_goal, out_samples, max_control_step)
 
@@ -281,6 +286,12 @@ def plan_scp_from_nominal(
     )
     u_nom = traj[1:] - traj[:-1]
 
+    violations = batch_constraint_values(
+        scene, traj, margin_profile, exact_clearance=exact_clearance, stride=stride
+    )
+    check = violations[: max(1, horizon - skip_tail)]
+    nominal_max_v = float(np.max(check))
+
     if verbose:
         mode = "exact per-link" if exact_clearance else "fast arm-link"
         print(
@@ -293,13 +304,20 @@ def plan_scp_from_nominal(
             f"skip SCP on last {skip_tail} waypoints",
             flush=True,
         )
-        violations = batch_constraint_values(
-            scene, traj, margin_profile, exact_clearance=exact_clearance, stride=stride
-        )
         print(
-            f"  nominal max violation={float(np.max(violations)) * 1000:.2f} mm",
+            f"  nominal max violation={nominal_max_v * 1000:.2f} mm",
             flush=True,
         )
+
+    # Already clear of env (+ margin): keep nominal iLQR path, skip SCP solve.
+    if nominal_max_v <= float(scp_violation_tol):
+        if verbose:
+            print(
+                f"  skip SCP (nominal already feasible, "
+                f"tol {scp_violation_tol * 1000:.2f} mm)",
+                flush=True,
+            )
+        return _finalize_trajectory(traj, start, stage_goal, resample_to, max_control_step)
 
     scp_weight = float(scp_constraint_weight)
 
@@ -388,8 +406,23 @@ def plan_scp_from_nominal(
     return _finalize_trajectory(traj, start, stage_goal, resample_to, max_control_step)
 
 
-_ILQR_KW = ("q_weight", "qf_weight", "r_weight", "reg", "max_control_step", "line_search_alphas")
-_SCP_KW = _ILQR_KW + (
+_ILQR_KW = (
+    "q_weight",
+    "qf_weight",
+    "r_weight",
+    "reg",
+    "max_control_step",
+    "line_search_alphas",
+    "joint_guess_mode",
+)
+# SCP refinement reuses iLQR weights but not the initial-guess mode (nominal already built).
+_SCP_KW = (
+    "q_weight",
+    "qf_weight",
+    "r_weight",
+    "reg",
+    "max_control_step",
+    "line_search_alphas",
     "scp_constraint_weight",
     "scp_weight_scale",
     "scp_violation_tol",

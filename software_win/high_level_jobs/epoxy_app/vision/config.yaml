@@ -1,0 +1,126 @@
+# Epoxy cascade vision
+# Stage 1: contact — NOT_TOUCHING vs contact (TOUCHING/FLOWING/SETTLED)
+# Stage 2: phase — TOUCHING / FLOWING (SETTLED excluded from phase)
+# Labels: NOT / TOUCH / FLOW / SETTLED / REMOVING — train cuts at first REMOVING
+# Runtime SETTLED can still be temporal (touch after flow) in the filter/FSM
+
+model:
+  backbone: mobilenet_v3_small
+  pretrained: true
+  image_size: 224
+  contact_in_channels: 1
+  phase_in_channels: 2
+
+# Needle tip keypoint → crop for contact/phase
+tip:
+  enabled: true
+  crop_size: 512  # doubled from 256 (ROI width & height)
+  heatmap_size: 64
+  conf_threshold: 0.15
+  interpolate_labels: true
+  checkpoint: software_win/high_level_jobs/epoxy_app/dataset/checkpoints/tip_best_full.pt
+  # Temporal local search (can lock onto a bad first guess — leave off unless needed)
+  track: false
+  track_radius_px: 96
+  track_sigma_px: 48
+  track_max_jump_px: 140
+  track_vel_ema: 0.35
+
+thresholds:
+  contact: 0.65
+  # phase softmax argmax, with optional min confidence
+  phase_min_conf: 0.55
+  contact_consecutive: 3
+  flow_consecutive: 3
+  settled_consecutive: 3
+  uncertainty_low: 0.40
+  uncertainty_high: 0.60
+  uncertainty_max_frames: 30
+
+control:
+  # Soft teleop-scale creeps; settle_tol in IK must stay << min_z_step
+  min_z_step: 0.00012         # 0.12 mm per creep
+  approach_step_period: 1.50  # wait after each approach creep before next
+  flow_check_delay: 2.00      # wait after contact / each CHECK_FLOW creep before next
+  post_move_vision_delay: 0.50  # after creep: tip settles, then vision is armed
+  flow_hold_probability: 0.55 # if raw flow_p >= this, do not creep (even if filter not latched)
+  max_settling_time: 2.0      # after FLOWING confirmed: retract at 2s if SETTLED never fires
+  lift_distance: 0.010          # +Z retract only (10 mm); Y slide disabled for faster cycle
+  retract_distance: 0.0         # was 0.05 Y; 0 = Z-only retract
+  max_downward_travel: 0.015
+  max_z_steps: 400
+  max_approach_time: 60.0
+  max_flow_detect_time: 25.0
+  step_linear_speed: 0.00165  # +10% from 0.0015
+  accel_time: 0.20
+  settle_tol: 0.00001         # 0.01 mm — was 0.05 mm and cancelled 0.07 mm steps
+  ik_damping: 0.05
+  rotation_weight: 8.0
+  joint_vel_limit: 1.2
+  joint_force: 2000.0
+
+training:
+  batch_size: 16
+  epochs: 40
+  lr: 3.0e-5
+  weight_decay: 1.0e-4
+  num_workers: 0
+  early_stopping_patience: 12
+  # Stage 1 — contact: keep ImageNet backbone frozen (unfreeze caused collapse)
+  not_touching_weight: 1.0
+  contact_pos_weight: 1.0
+  contact_sample_weight: 1.0
+  contact_focal_gamma: 0.0
+  contact_freeze_epochs: 3
+  contact_finetune_backbone: true
+  contact_head_lr: 1.0e-4
+  contact_backbone_lr: 5.0e-6
+  # Stage 2 — mild rebalance (2.5+sampler flipped collapse to all-TOUCH)
+  phase_class_weight_touching: 1.3
+  phase_class_weight_flowing: 1.0
+  phase_use_weighted_sampler: false
+  use_weighted_sampler: false
+  val_ratio: 0.15
+  test_ratio: 0.15
+  seed: 42
+  # Explicit split: train selects ckpt via val; test is held out for reliability.
+  # Remaining result_* episodes are auto-merged into train (see train.py).
+  train_episodes:
+    - episode_000001
+    - episode_000002
+    - episode_000003
+    - episode_000004
+    - episode_000005
+    - episode_000006
+    - episode_000007
+    - episode_000008
+    - episode_000009
+    - episode_000011
+    - episode_000013
+    - episode_000014
+    - episode_000015
+    - episode_000016
+  val_episodes:
+    - episode_000010
+    - episode_000017
+    - result_000004
+  test_episodes:
+    - episode_000012
+    - result_000008
+    - result_000009
+
+augmentation:
+  brightness: 0.15
+  contrast: 0.15
+  exposure: 0.10
+  noise_std: 0.02
+  translate_frac: 0.02
+
+paths:
+  checkpoints: software_win/high_level_jobs/epoxy_app/dataset/checkpoints
+  best_checkpoint: software_win/high_level_jobs/epoxy_app/dataset/checkpoints/best.pt
+  split_json: software_win/high_level_jobs/epoxy_app/dataset/checkpoints/split.json
+
+inference:
+  device: cuda
+  camera: zelux

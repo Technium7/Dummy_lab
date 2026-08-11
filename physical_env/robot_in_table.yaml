@@ -1,0 +1,21 @@
+# Canonical robot ↔ optical-table frame (shared by grab_sensor, power_measure,
+# env preview, and planning collision).
+#
+# Table frame: origin = calib hole (0,0); +X/+Y = grid column/row; +Z up.
+# Scanned physical_env/*.obj is authored in this table frame.
+#
+# translation_in / rpy_deg: robot base pose expressed in the table frame.
+# Planner / PyBullet world = table frame: env at origin, robot at this pose
+# (plus the usual URDF 180° Z base rotation).
+
+robot_in_table_frame:
+  translation_in: [10.5, -6.4, 0.2]
+  rpy_deg: [0, 0, 0]
+
+# Firmware/GUI joint angles (deg), same convention as HOME_JOINTS_DEG.
+# rest  = [0, -75, 180, 0, 0, 0]
+# home  = [0, 0, 90, 0, 0, 0]
+# work  = intermediate pose used as grab_sensor / power_measure start & return
+#         (J1 still sequenced first in planning).
+rest_position_deg: [0.0, -75.0, 180.0, 0.0, 0.0, 0.0]
+work_position_deg: [0.0, -55.0, 145.0, 0.0, 0.0, 0.0]
