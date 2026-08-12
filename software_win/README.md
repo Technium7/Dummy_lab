@@ -113,13 +113,13 @@ See `software_win/high_level_jobs/epoxy_app/vision/README.md`.
 
 ```powershell
 python software_win\camera\list_devices.py
-python software_win\camera\dual_live_view.py --demo
-python software_win\camera\dual_live_view.py
+python software_win\camera\live_view.py --demo
+python software_win\camera\live_view.py
 python software_win\camera\live_zelux.py
 python software_win\camera\live_infinity.py --opencv-index 0
 ```
 
-`dual_live_view.py` opens **two** OpenCV windows (Zelux + Infinity). Press **Q** / **Esc** to quit.
+`live_view.py` opens **three** OpenCV windows (Zelux front + Zelux side + Infinity). Press **Q** / **Esc** to quit. Pin with `--front-serial` / `--side-serial` after `list_devices.py`.
 
 ## Windows notes vs Linux `software/`
 

@@ -43,7 +43,7 @@ yaw_from_sensor_axis: true
 grasp_c_offset_deg: 90.0
 grasp_rpy_yaw_base_deg: 180.0
 # Grasp XY: contact projected to table, then offset along holder (table plane)
-grasp_offset_from_holder_mm: 19
+grasp_offset_from_holder_mm: 22
 # Image overlay preview (live_label / detect)
 grasp_offset_from_holder_px: 18.0
 

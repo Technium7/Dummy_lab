@@ -69,6 +69,10 @@ python -m high_level_jobs.grab_sensor --detect-only --visualize
 python -m high_level_jobs.grab_sensor --offline --plan-gui
 python -m high_level_jobs.grab_sensor --ik-gui
 python -m high_level_jobs.grab_sensor --execute --visualize --port COM3
+
+# Continuous session: grab_sensor saves motion; put_sensor reverses it
+python -m high_level_jobs.session --port COM3
 ```
 
 Config: [`config/default_grasp.yaml`](config/default_grasp.yaml).
+Session records: [`../session/records/`](../session/records/).

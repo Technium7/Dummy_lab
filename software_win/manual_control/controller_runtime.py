@@ -4,12 +4,18 @@ import sys
 from pathlib import Path
 from typing import Callable, Iterable
 
-from teleop_runtime import TeleopLaunchConfig, TeleopLoopHook, run_teleop_session
-from teleop_tick import PyBulletKeyInput
-
 _SOFTWARE_DIR = Path(__file__).resolve().parents[1]
-if str(_SOFTWARE_DIR) not in sys.path:
-    sys.path.insert(0, str(_SOFTWARE_DIR))
+_MANUAL_CONTROL_DIR = Path(__file__).resolve().parent
+for _path in (_SOFTWARE_DIR, _MANUAL_CONTROL_DIR):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
+
+try:
+    from teleop_runtime import TeleopLaunchConfig, TeleopLoopHook, run_teleop_session
+    from teleop_tick import PyBulletKeyInput
+except ImportError:  # imported as package (e.g. session → manual_control.controller_runtime)
+    from manual_control.teleop_runtime import TeleopLaunchConfig, TeleopLoopHook, run_teleop_session
+    from manual_control.teleop_tick import PyBulletKeyInput
 
 
 def is_key_triggered(events: dict[int, int], char: str) -> bool:

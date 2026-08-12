@@ -1,1 +1,1 @@
-"""High-level Windows jobs (epoxy, grab_sensor, power_measure, etc.)."""
+"""High-level Windows jobs (session, epoxy, grab_sensor, power_measure, etc.)."""

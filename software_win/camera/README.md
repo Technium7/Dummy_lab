@@ -40,13 +40,15 @@ Optional: set `THORLABS_TSI_DLL_PATH` if ThorCam DLLs are not under the default 
 
 ```powershell
 python software_win\camera\list_devices.py
-python software_win\camera\dual_live_view.py          # two windows
-python software_win\camera\dual_live_view.py --demo  # no hardware
+python software_win\camera\live_view.py          # Zelux front + side + Infinity
+python software_win\camera\live_view.py --demo  # no hardware
+python software_win\camera\live_view.py --front-serial <SN1> --side-serial <SN2>
+python software_win\camera\live_view.py --zelux-only   # front + side only
 python software_win\camera\live_zelux.py --serial <SN>
 python software_win\camera\live_infinity.py --opencv-index 0
 ```
 
-Keys: **Q** / **Esc** quit.
+Keys: **Q** / **Esc** quit. Pin serials so front/side do not swap after USB reordering.
 
 ### Table calibration (optical hole grid)
 
@@ -76,7 +78,10 @@ current `exp=…ms` and `gain=…`.
 Initial values:
 
 ```powershell
-python software_win\camera\dual_live_view.py --zelux-exposure-ms 5 --zelux-gain 6 --infinity-exposure-ms 8 --infinity-gain 2
+python software_win\camera\live_view.py `
+  --front-exposure-ms 5 --front-gain 6 `
+  --side-exposure-ms 5 --side-gain 6 `
+  --infinity-exposure-ms 8 --infinity-gain 2
 ```
 
 

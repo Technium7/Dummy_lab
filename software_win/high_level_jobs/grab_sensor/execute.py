@@ -618,3 +618,224 @@ def execute_on_robot(
             label=label,
             target_joints_deg=work_deg,
         )
+
+
+def execute_put_sensor_on_robot(
+    robot: RobotAsciiInterface,
+    segments: Mapping[str, Any],
+    cfg: GrabSensorConfig,
+    params: Mapping[str, Any],
+    *,
+    label: str = "",
+) -> None:
+    """Put sensor back using reversed grab_sensor segments; end at WORK open."""
+    from high_level_jobs.session.motion_store import MotionRecord
+
+    record = MotionRecord(
+        name="put",
+        kind="grab_sensor",
+        segments={
+            k: (np.asarray(v, dtype=np.float64) if v is not None else None)
+            for k, v in segments.items()
+        },
+    )
+    ordered = record.reversed_put_order()
+    if not ordered:
+        raise RuntimeError("put_sensor: no reversible segments in motion record.")
+
+    from .plan_motion import work_joints_deg as _work_joints_deg
+
+    work_deg = _work_joints_deg(cfg)
+    cmd_mode = int(params.get("cmd_mode", 2))
+    home_first = bool(params.get("home_first", True))
+    joint_current_limit_a = float(
+        params.get("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    )
+    if not ensure_robot_ready(
+        robot,
+        cmd_mode=cmd_mode,
+        home_first=home_first,
+        open_hand=False,
+        joint_current_limit_a=joint_current_limit_a,
+        label=label,
+        start_joints_deg=work_deg,
+    ):
+        raise RuntimeError("Failed to reach WORK before put_sensor.")
+
+    stream_kw = {
+        "smooth": bool(params.get("smooth", True)),
+        "send_interval_ms": float(params.get("send_interval_ms", 120.0)),
+        "speed_scale": float(params.get("speed_scale", 0.75)),
+        "label": label,
+    }
+
+    opened = False
+    keys = [k for k, _, _ in ordered]
+    release_after = "lift" if "lift" in keys else ("home" if "home" in keys else None)
+
+    for i, (key, seg_label, traj) in enumerate(ordered):
+        if (not opened) and key == "grasp" and release_after is None:
+            open_gripper(robot, label=label)
+            opened = True
+        print(f"{label}put_sensor: {seg_label} ({len(traj)} samples).")
+        _stream_segment_or_raise(
+            robot,
+            traj,
+            segment=seg_label,
+            stream_kw=stream_kw,
+            arm=False,
+            seed_from_robot=False,
+            sync_start_to_robot=(i == 0),
+        )
+        if (not opened) and key == release_after:
+            open_gripper(robot, label=label)
+            opened = True
+
+    if not opened:
+        open_gripper(robot, label=label)
+
+    _confirm_return_home(
+        robot,
+        cmd_mode=cmd_mode,
+        params=params,
+        label=label,
+        target_joints_deg=work_deg,
+    )
+
+
+def execute_return_segments_on_robot(
+    robot: RobotAsciiInterface,
+    segment_list: Sequence[tuple[str, np.ndarray]],
+    cfg: GrabSensorConfig,
+    params: Mapping[str, Any],
+    *,
+    label: str = "",
+) -> None:
+    """Stream recorded return segments (lift/home or reversed place) to WORK."""
+    from .plan_motion import work_joints_deg as _work_joints_deg
+
+    if not segment_list:
+        raise RuntimeError("return: empty segment list.")
+
+    work_deg = _work_joints_deg(cfg)
+    cmd_mode = int(params.get("cmd_mode", 2))
+    joint_current_limit_a = float(
+        params.get("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    )
+    if not ensure_robot_ready(
+        robot,
+        cmd_mode=cmd_mode,
+        home_first=False,
+        open_hand=False,
+        joint_current_limit_a=joint_current_limit_a,
+        label=label,
+    ):
+        raise RuntimeError("Failed to arm robot for return.")
+
+    stream_kw = {
+        "smooth": bool(params.get("smooth", True)),
+        "send_interval_ms": float(params.get("send_interval_ms", 160.0)),
+        "speed_scale": float(params.get("speed_scale", 0.55)),
+        "label": label,
+    }
+    for i, (seg_label, traj) in enumerate(segment_list):
+        print(f"{label}return: {seg_label} ({len(traj)} samples).")
+        home_ramp = params.get("return_home_speed_scale") if i == len(segment_list) - 1 else None
+        _stream_segment_or_raise(
+            robot,
+            np.asarray(traj, dtype=np.float64),
+            segment=seg_label,
+            stream_kw=stream_kw,
+            arm=False,
+            seed_from_robot=False,
+            sync_start_to_robot=(i == 0),
+            ramp_speed_scale=float(home_ramp) if home_ramp is not None else None,
+        )
+    _confirm_return_home(
+        robot,
+        cmd_mode=cmd_mode,
+        params=params,
+        label=label,
+        target_joints_deg=work_deg,
+    )
+
+
+def execute_standby_to_work(
+    robot: RobotAsciiInterface,
+    cfg: GrabSensorConfig,
+    params: Mapping[str, Any],
+    *,
+    label: str = "",
+) -> dict[str, Any]:
+    """Plan from current joints to WORK and stream (fresh plan, not a recording)."""
+    from trajectory_run.run_planned_trajectory import read_physical_joints
+
+    from .plan_motion import (
+        build_scene,
+        plan_return_home_segment,
+        start_q_from_robot_joints_deg,
+        work_joints_deg as _work_joints_deg,
+    )
+
+    work_deg = _work_joints_deg(cfg)
+    cmd_mode = int(params.get("cmd_mode", 2))
+    joint_current_limit_a = float(
+        params.get("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    )
+    if not ensure_robot_ready(
+        robot,
+        cmd_mode=cmd_mode,
+        home_first=False,
+        open_hand=False,
+        joint_current_limit_a=joint_current_limit_a,
+        label=label,
+    ):
+        raise RuntimeError("Failed to arm robot for standby.")
+
+    current = read_physical_joints(robot)
+    if current is None:
+        raise RuntimeError("standby: cannot read current joints.")
+
+    scene = build_scene(cfg)
+    try:
+        start_q = start_q_from_robot_joints_deg(scene, current)
+        home_traj, home_goal_q = plan_return_home_segment(
+            scene,
+            start_q,
+            enable_collision=cfg.enable_collision,
+            work_joints_deg_list=work_deg,
+        )
+        if home_traj is None or home_goal_q is None:
+            raise RuntimeError("standby: failed to plan return to WORK.")
+        print(f"{label}standby: streaming planned return ({len(home_traj)} samples).")
+        stream_kw = {
+            "smooth": bool(params.get("smooth", True)),
+            "send_interval_ms": float(params.get("send_interval_ms", 120.0)),
+            "speed_scale": float(params.get("speed_scale", 0.65)),
+            "label": label,
+        }
+        _stream_segment_or_raise(
+            robot,
+            np.asarray(home_traj, dtype=np.float64),
+            segment="standby -> WORK",
+            stream_kw=stream_kw,
+            arm=False,
+            seed_from_robot=False,
+            sync_start_to_robot=True,
+        )
+        _confirm_return_home(
+            robot,
+            cmd_mode=cmd_mode,
+            params=params,
+            label=label,
+            target_joints_deg=work_deg,
+        )
+        return {
+            "trajectory_rad": np.asarray(home_traj, dtype=np.float64),
+            "home_goal_q": home_goal_q,
+            "start_joints_deg": list(current[:6]),
+        }
+    finally:
+        from trajectory_planner.scene import disconnect_planning_scene
+
+        disconnect_planning_scene(scene)

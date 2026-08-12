@@ -60,6 +60,16 @@ def main() -> int:
         help="Skip PM100 record/search/maximize (insert + lift + WORK only)",
     )
     p.add_argument(
+        "--place-only",
+        action="store_true",
+        help="Direct placement only: WORK→insert, stay there (no optimize / lift / return)",
+    )
+    p.add_argument(
+        "--optimize-only",
+        action="store_true",
+        help="Run power search/climb from current pose (requires prior place debug/record)",
+    )
+    p.add_argument(
         "--pm-serial",
         type=str,
         default=None,
@@ -99,6 +109,10 @@ def main() -> int:
         )
         return 1
 
+    if args.place_only and args.optimize_only:
+        print("Use only one of --place-only / --optimize-only", file=sys.stderr)
+        return 1
+
     params: dict = {
         "execute": bool(args.execute),
         "port": args.port,
@@ -107,12 +121,48 @@ def main() -> int:
         "ik_gui": bool(args.ik_gui),
         "no_power_scan": bool(args.no_power_scan),
     }
+    if args.place_only:
+        params["power_mode"] = "place"
     if args.joint_current_limit_a is not None:
         params["joint_current_limit_a"] = float(args.joint_current_limit_a)
     elif args.execute:
         params.setdefault("joint_current_limit_a", cfg.execute.joint_current_limit_a)
     if args.camera_serial is not None:
         params["camera_serial"] = str(args.camera_serial).strip()
+
+    if args.optimize_only:
+        from high_level_jobs.power_measure.pipeline import run_power_optimize
+        from high_level_jobs.session.motion_store import load_record
+        from high_level_jobs.session.paths import POWER_MEASURE_RECORD
+
+        if not args.execute:
+            print("--optimize-only requires --execute", file=sys.stderr)
+            return 1
+        record = load_record(POWER_MEASURE_RECORD)
+        if record is None:
+            print(
+                f"No {POWER_MEASURE_RECORD}.json under session/records — "
+                "run place first (session power_measure or --place-only).",
+                file=sys.stderr,
+            )
+            return 1
+        click = record.extras.get("click_uv")
+        grasp_q = record.extras.get("grasp_goal_q") or record.plan_meta.get("grasp_goal_q")
+        if not click or grasp_q is None:
+            print("Record missing click_uv / grasp_goal_q", file=sys.stderr)
+            return 1
+        insert = build_insert_target_from_uv(cfg, (int(click[0]), int(click[1])))
+        params["home_first"] = False
+        params["plan_meta"] = {"grasp_goal_q": grasp_q}
+        params["insert_power_w"] = record.extras.get("insert_power_w") or 0.0
+        params["along_max_w"] = record.extras.get("along_max_w") or 0.0
+        params["insert_samples"] = record.extras.get("insert_samples") or []
+        try:
+            run_power_optimize(cfg, insert, params)
+        except KeyboardInterrupt:
+            print("\n[power_measure] Interrupted.")
+            raise
+        return 0
 
     if args.click_uv:
         parts = [s.strip() for s in str(args.click_uv).replace(" ", "").split(",")]

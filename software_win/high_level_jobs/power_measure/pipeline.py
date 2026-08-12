@@ -144,10 +144,24 @@ def run_insert_pipeline(
                 raise RuntimeError(f"Failed to connect robot on {port}")
             own_robot = True
         try:
+            mode = str(params.get("power_mode") or "full").strip().lower()
             use_power = bool(cfg.power_meter.enabled) and not bool(
                 params.get("no_power_scan", False)
             )
-            if use_power:
+            if mode in ("place", "place_only"):
+                from .execute_power import execute_power_place_on_robot
+
+                power_out = execute_power_place_on_robot(
+                    robot,
+                    trajectory,
+                    targets,
+                    cfg,
+                    insert,
+                    exec_params,
+                )
+                result["power_scan"] = power_out.get("power_scan")
+                result["place_result"] = power_out
+            elif use_power:
                 from .execute_power import execute_power_measure_on_robot
 
                 power_out = execute_power_measure_on_robot(
@@ -168,3 +182,44 @@ def run_insert_pipeline(
                 disconnect_robot(robot)
 
     return result
+
+
+def run_power_optimize(
+    cfg: PowerMeasureConfig,
+    insert: InsertTarget,
+    params: Mapping[str, Any],
+    *,
+    robot=None,
+) -> dict[str, Any]:
+    """Run power search/climb from the current insert pose (session command)."""
+    cfg = apply_runtime_calibrations(cfg, params)
+    exec_params = dict(params)
+    exec_params.setdefault("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+
+    own_robot = False
+    if robot is None:
+        from robot_ascii_interface import RobotAsciiInterface
+        from robot_config import default_robot_port
+
+        port = str(params.get("port") or default_robot_port())
+        robot = RobotAsciiInterface(
+            port=port,
+            baudrate=int(params.get("baudrate", 115200)),
+        )
+        if not robot.connect():
+            raise RuntimeError(f"Failed to connect robot on {port}")
+        own_robot = True
+    try:
+        from .execute_power import execute_power_optimize_on_robot
+
+        return execute_power_optimize_on_robot(
+            robot,
+            cfg,
+            insert,
+            exec_params,
+        )
+    finally:
+        if own_robot:
+            from manual_control.robot_session import disconnect_robot
+
+            disconnect_robot(robot)

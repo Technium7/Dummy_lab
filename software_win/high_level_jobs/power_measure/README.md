@@ -3,14 +3,30 @@
 Live top-view **D415** click → table XY (calib) + fixed measured height → TCP offset
 (radial-left + above) → top-down insert. Gripper stays closed (sensor already held).
 
-During `--execute`, records optical power with **ThorlabsPM100** (PyVISA) at **400 nm**.
+## Modes
+
+| Mode | Entry | Behavior |
+|------|-------|----------|
+| **Place** | Session `power_measure` or `--place-only` | Insert and **stay**; record traj for `return` |
+| **Optimize** | Session `power_optimization` or `--optimize-only` | PM100 search/climb from insert; **stay** |
+| **Full** | `--execute` (default CLI) | Composed: place → optimize → return WORK |
+
+During power protocols, records optical power with **ThorlabsPM100** (PyVISA) at **400 nm**.
 If needed, expands gently inside a **20×20 mm** square until power is found, then
 **climbs toward higher intensity** (first-improvement + gradient step). Search starts
 slow (`search_speed_scale`); once power is seen, motion slows further
 (`climb_speed_scale`) until the local max, then a slower final approach. Every
 speed change ramps up/down via smooth streaming; no settle waits — not a full-area
-raster. Limited to the square centered on insert / first detection; then pull up
-and return to **work**.
+raster. Limited to the square centered on insert / first detection.
+
+Interactive place → optimize → return:
+
+```powershell
+$env:PYTHONPATH = "$PWD\software_win"
+python -m high_level_jobs.session --port COM3
+```
+
+See [`../session/README.md`](../session/README.md).
 
 ## Geometry
 
@@ -47,10 +63,16 @@ python -m high_level_jobs.power_measure --ik-gui --camera-serial <D415_SN>
 # Same as grab_sensor: plan + PyBullet trajectory playback
 python -m high_level_jobs.power_measure --plan-gui --camera-serial <D415_SN>
 
-# Plan + stream to robot (PM100 record / search / maximize enabled by default)
+# Full one-shot: place → optimize → return WORK
 python -m high_level_jobs.power_measure --execute --port COM3 --camera-serial <D415_SN>
 
-# Insert only (no power meter protocol)
+# Place only (stay at insert; session-style)
+python -m high_level_jobs.power_measure --execute --place-only --port COM3
+
+# Optimize only (after a place that saved session/records/power_measure.json)
+python -m high_level_jobs.power_measure --execute --optimize-only --port COM3
+
+# Insert only (no power meter protocol; still lift+WORK unless --place-only)
 python -m high_level_jobs.power_measure --execute --no-power-scan --port COM3
 
 # Headless from a pixel (no live window)
@@ -72,3 +94,4 @@ Flow with `--ik-gui` / `--plan-gui`: live click → Enter/E → **camera/OpenCV 
 
 Config: [`config/default_power_measure.yaml`](config/default_power_measure.yaml).
 Debug power log: `debug/power_scan.json`.
+Session records: `../session/records/power_measure.json`.

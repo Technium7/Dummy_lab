@@ -44,6 +44,7 @@ software/grasp_overlay.png
 # Windows flat grab_sensor
 software_win/high_level_jobs/grab_sensor/debug/
 software_win/high_level_jobs/power_measure/debug/
+software_win/high_level_jobs/session/records/*.json
 software_win/high_level_jobs/grab_sensor/vision/dataset/images/
 software_win/high_level_jobs/grab_sensor/vision/dataset/depth/
 software_win/high_level_jobs/grab_sensor/vision/dataset/labels/
