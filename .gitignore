@@ -22,8 +22,9 @@ software/high_level_jobs/subtasks/insert_sensor/runs/**
 !software/high_level_jobs/subtasks/insert_sensor/runs/act_cnn/latest/policy.pt
 software/high_level_jobs/subtasks/insert_sensor/camera_previews/
 
-# epoxy_app — local demo episodes (Windows)
+# epoxy_app — local demo episodes + approach debug (Windows)
 software_win/high_level_jobs/epoxy_app/dataset/
+software_win/high_level_jobs/epoxy_app/debug/
 
 # Slurm job logs (belong in /share/mehta/.../slurm_jobs, not the repo)
 software/insert_sensor_act_*.out

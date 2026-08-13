@@ -18,10 +18,11 @@ def status_gui_process_main(queue_obj) -> None:
     frame = tk.Frame(root, padx=12, pady=12)
     frame.pack(fill="both", expand=True)
     mapping = (
-        "Linear: W/S -> -Y/+Y, A/D -> -X/+X, Q/E -> +Z/-Z\n"
-        "Angular: H/K -> +Wy/-Wy, U/J -> +Wx/-Wx, I/Y -> final wrist rotation joint only\n"
-        "Action: T -> HOME [0, 0, 90, 0, 0, 0]  |  O -> hand open (!HAND_O)  |  P -> hand close (!HAND_C)\n"
-        "Drives: B -> !DISABLE (torque off, stops streaming)  |  N -> !START (re-enable + stream)"
+        "Linear: W/S -Y/+Y, A/D +X/-X, Q/E +Z/-Z  "
+        "(press = creep step, hold = continuous jog)\n"
+        "Angular: H/K +Wy/-Wy, U/J +Wx/-Wx, I/Y wrist only\n"
+        "Action: T -> WORK  |  O hand open  |  P hand close\n"
+        "Drives: B !DISABLE  |  N !START"
     )
     tk.Label(frame, text="Keyboard Mapping", font=("Helvetica", 13, "bold"), anchor="w").pack(fill="x")
     tk.Label(frame, text=mapping, justify="left", anchor="w", font=("Helvetica", 11)).pack(fill="x", pady=(4, 10))

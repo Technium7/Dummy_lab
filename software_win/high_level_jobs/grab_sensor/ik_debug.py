@@ -112,6 +112,7 @@ def show_ik_goal_debug_gui(cfg: GrabSensorConfig, targets: GraspTargets) -> None
         frame_camera_on_scene(scene)
 
         home_q = start_q_from_robot_joints_deg(scene, work_joints_deg(cfg))
+        ignore_yaw = bool(getattr(cfg, "ik_ignore_yaw", False))
         goal_q = grasp_ik_goal_from_home(
             scene,
             targets,
@@ -121,9 +122,40 @@ def show_ik_goal_debug_gui(cfg: GrabSensorConfig, targets: GraspTargets) -> None
             pos_tol_mm=float(cfg.grasp_position_tol_mm),
             ori_tol_deg=float(cfg.grasp_orientation_tol_deg),
             ori_vs_pos=float(cfg.ik_ori_vs_pos),
+            ignore_yaw=ignore_yaw,
         )
         if goal_q is None:
             raise RuntimeError("Grasp TCP IK failed (WORK warm-start).")
+
+        if bool(getattr(cfg, "prefer_nearby_wrist", False)):
+            from .tcp_ik import prefer_nearby_wrist_goal
+
+            goal_q = prefer_nearby_wrist_goal(
+                scene,
+                targets.grasp_pos_m,
+                targets.grasp_rpy_rad,
+                home_q,
+                goal_q,
+                tcp,
+                pos_tol_m=float(cfg.grasp_position_tol_mm) * 1e-3,
+                ori_tol_rad=math.radians(float(cfg.grasp_orientation_tol_deg)),
+                ignore_yaw=ignore_yaw,
+            )
+
+        if ignore_yaw:
+            from .tcp_ik import target_pose_from_q
+
+            _, fk_rpy = target_pose_from_q(scene, goal_q, tcp)
+            natural = np.asarray(targets.grasp_rpy_rad, dtype=np.float64).copy()
+            natural[2] = float(fk_rpy[2])
+            targets.grasp_rpy_rad = natural
+            targets.pre_grasp_rpy_rad = natural.copy()
+            targets.debug["grasp_rpy_world_deg"] = [float(math.degrees(v)) for v in natural]
+            targets.debug["natural_yaw_deg"] = float(math.degrees(fk_rpy[2]))
+            print(
+                f"[ik-gui] yaw free (AB only); natural FK yaw="
+                f"{math.degrees(fk_rpy[2]):.2f} deg"
+            )
 
         tip_err_mm = print_grasp_ik_debug(
             scene, targets, goal_q, label="ik-gui", warm_start_q=home_q, tcp=tcp

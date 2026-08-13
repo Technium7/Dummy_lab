@@ -66,6 +66,13 @@ class TeleopLaunchConfig:
     sim_only: bool = False
     debug_serial: bool = False
     joint_current_limit_a: float = 0.0
+    # WASDQE: short click → creep; hold past threshold → legacy velocity jog
+    creep_enabled: bool = True
+    creep_step_m: float = 0.00012
+    creep_linear_speed: float = 0.00165
+    creep_accel_time: float = 0.20
+    creep_settle_tol: float = 1e-5
+    creep_hold_threshold_s: float = 0.20
 
 
 def run_teleop_session(
@@ -112,7 +119,12 @@ def run_teleop_session(
     )
     refresh_pybullet_display()
     print(f"PyBullet robot loaded (id={robot_id}). Close the GUI window to exit.")
-
+    if config.creep_enabled:
+        print(
+            f"WASDQE: press={config.creep_step_m * 1000:.2f} mm creep immediately "
+            f"(hold ≥{config.creep_hold_threshold_s:.2f}s = old velocity jog); "
+            f"HKUJ/IY hold-to-rotate."
+        )
     joint_indices, _, _, _, joint_names = get_controllable_joints(robot_id)
     if not joint_indices:
         raise SystemExit("No controllable revolute/prismatic joints found for IK.")
@@ -178,7 +190,12 @@ def run_teleop_session(
         joint_force=max(1.0, float(config.joint_force)),
         ik_damping=max(1e-6, float(config.ik_damping)),
         control_dt_s=control_dt_s,
-        home_use_firmware=config.home_use_firmware,
+        creep_enabled=bool(config.creep_enabled),
+        creep_step_m=max(0.0, float(config.creep_step_m)),
+        creep_linear_speed=max(0.0, float(config.creep_linear_speed)),
+        creep_accel_time=max(1e-3, float(config.creep_accel_time)),
+        creep_settle_tol=max(1e-9, float(config.creep_settle_tol)),
+        creep_hold_threshold_s=max(0.05, float(config.creep_hold_threshold_s)),
     )
     key_input = keys if keys is not None else PyBulletKeyInput()
     robot_for_hook = robot_control.proxy if hook is not None else None

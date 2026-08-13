@@ -16,7 +16,16 @@ _SOFTWARE_WIN = Path(__file__).resolve().parents[1]
 if str(_SOFTWARE_WIN) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_WIN))
 
-from camera.display import label_frame, require_cv2, resize_max, wait_quit_key
+from camera.display import (
+    WindowSizeState,
+    controls_title_for,
+    create_controls_window,
+    create_resizable_window,
+    label_frame,
+    require_cv2,
+    show_resizable,
+    wait_quit_key,
+)
 from camera.trackbars import attach_exposure_gain_trackbars, status_text
 from camera.zelux import DemoZeluxCamera, ZeluxCamera, list_zelux_devices
 
@@ -56,20 +65,22 @@ def main(argv: list[str] | None = None) -> int:
         )
     )
     title = "Zelux"
+    size_state = WindowSizeState()
     try:
         cam.open()
-        cv2.namedWindow(title, cv2.WINDOW_NORMAL)
+        create_resizable_window(cv2, title)
+        ctrl = controls_title_for(title)
+        create_controls_window(cv2, ctrl)
         state = attach_exposure_gain_trackbars(
-            cv2, title, cam, exposure_ms=args.exposure_ms, gain=args.gain
+            cv2, ctrl, cam, exposure_ms=args.exposure_ms, gain=args.gain
         )
-        print(f"Live: {cam.info.label()}  (Q/Esc to quit; use trackbars for exp/gain)")
+        print(f"Live: {cam.info.label()}  (Q/Esc to quit; drag image edges to resize)")
         while True:
             frame = cam.grab_bgr()
             if frame is None:
                 continue
             frame = label_frame(cv2, frame, status_text(cam, state))
-            frame = resize_max(cv2, frame, args.max_width)
-            cv2.imshow(title, frame)
+            show_resizable(cv2, title, frame, size_state, max_width=args.max_width)
             if wait_quit_key(cv2, 1):
                 break
     finally:

@@ -26,7 +26,16 @@ if str(_SOFTWARE_WIN) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_WIN))
 
 from camera.base import CameraBackend
-from camera.display import label_frame, require_cv2, resize_max, wait_quit_key
+from camera.display import (
+    WindowSizeState,
+    controls_title_for,
+    create_controls_window,
+    create_resizable_window,
+    label_frame,
+    require_cv2,
+    show_resizable,
+    wait_quit_key,
+)
 from camera.infinity import DemoInfinityCamera, InfinityCamera, list_infinity_devices
 from camera.trackbars import attach_exposure_gain_trackbars, status_text
 from camera.zelux import DemoZeluxCamera, ZeluxCamera, list_zelux_devices
@@ -217,21 +226,25 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     opened: list[tuple[str, CameraBackend, object]] = []
+    size_states: dict[str, WindowSizeState] = {}
     try:
         for title, cam, exp_ms, gain in cameras:
             print(f"Opening {title}...")
             cam.open()
             print(f"  -> {cam.info.label()}")
-            cv2.namedWindow(title, cv2.WINDOW_NORMAL)
+            create_resizable_window(cv2, title)
+            ctrl = controls_title_for(title)
+            create_controls_window(cv2, ctrl)
             state = attach_exposure_gain_trackbars(
-                cv2, title, cam, exposure_ms=exp_ms, gain=gain
+                cv2, ctrl, cam, exposure_ms=exp_ms, gain=gain
             )
             opened.append((title, cam, state))
+            size_states[title] = WindowSizeState()
 
         print("Live view running.")
         print("  Windows: " + ", ".join(t for t, _, _ in opened))
-        print("  Trackbars: Exposure_0.1ms (10=1ms), Gain_0.1 (100=10)")
-        print("  Press Q or Esc in a camera window to quit.")
+        print("  Exposure/gain trackbars are in the separate '… controls' windows.")
+        print("  Drag image window edges to resize; Q/Esc quits.")
         while True:
             for title, cam, state in opened:
                 frame = cam.grab_bgr()
@@ -247,8 +260,13 @@ def main(argv: list[str] | None = None) -> int:
                 else:
                     cam._last_frame = frame  # type: ignore[attr-defined]
                     frame = label_frame(cv2, frame, status_text(cam, state))
-                frame = resize_max(cv2, frame, args.max_width)
-                cv2.imshow(title, frame)
+                show_resizable(
+                    cv2,
+                    title,
+                    frame,
+                    size_states[title],
+                    max_width=args.max_width,
+                )
             if wait_quit_key(cv2, 1):
                 break
             time.sleep(0.001)

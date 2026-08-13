@@ -123,6 +123,10 @@ class GrabSensorConfig:
     # Simultaneous IK: cost=(pos/pos_tol)^2 + ik_ori_vs_pos*(ori/ori_tol)^2
     # 1.0 = equal at tolerance boundary; <1 favors TCP; >1 favors orientation
     ik_ori_vs_pos: float = 1.0
+    # Prefer IK goals that keep continuous wrist joints (J4/J6) near the seed.
+    prefer_nearby_wrist: bool = False
+    # Enforce roll/pitch (A/B) only; yaw floats from IK (not taught C).
+    ik_ignore_yaw: bool = False
     robot_in_table_frame: RobotInTableFrame = field(default_factory=RobotInTableFrame)
     # Start/return joints (firmware deg); from physical_env/robot_in_table.yaml work_position_deg
     work_position_deg: Tuple[float, float, float, float, float, float] = (
@@ -276,6 +280,8 @@ class GrabSensorConfig:
             grasp_orientation_tol_deg=float(data.get("grasp_orientation_tol_deg", 50.0)),
             grasp_position_tol_mm=float(data.get("grasp_position_tol_mm", 20.0)),
             ik_ori_vs_pos=float(data.get("ik_ori_vs_pos", 1.0)),
+            prefer_nearby_wrist=bool(data.get("prefer_nearby_wrist", False)),
+            ik_ignore_yaw=bool(data.get("ik_ignore_yaw", False)),
             robot_in_table_frame=robot_in_table,
             work_position_deg=tuple(float(v) for v in work_deg)[:6],  # type: ignore[arg-type]
             execute=ExecuteConfig(

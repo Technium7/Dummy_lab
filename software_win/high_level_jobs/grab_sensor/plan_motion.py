@@ -42,6 +42,7 @@ from .tcp_ik import (
     measure_tcp_target_pose_error,
     measure_target_pose_error,
     position_error_mm,
+    prefer_nearby_wrist_goal,
     refine_joint_config_to_target_pose,
     refine_joint_config_to_target_position,
     grasp_ik_goal_from_home,
@@ -674,6 +675,8 @@ def plan_grasp_segment(
     pos_tol_mm: float = 20.0,
     ori_vs_pos: float = 1.0,
     work_joints_deg_list: Sequence[float] | None = None,
+    prefer_nearby_wrist: bool = False,
+    ignore_yaw: bool = False,
 ) -> Tuple[Optional[np.ndarray], Optional[List[float]]]:
     """Final grasp: TCP IK warm-started from ``start_q`` (pre-grasp), then iLQR."""
     tcp = TcpOffset()
@@ -691,6 +694,7 @@ def plan_grasp_segment(
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
         ik_pos_tol_m=max_pos_err_m,
+        ignore_yaw=ignore_yaw,
     )
     if goal_q is None:
         seed_deg = (
@@ -712,10 +716,24 @@ def plan_grasp_segment(
             pos_tol_mm=float(pos_tol_mm),
             ori_tol_deg=math.degrees(float(ik_ori_tol_rad)),
             ori_vs_pos=float(ori_vs_pos),
+            ignore_yaw=ignore_yaw,
         )
     if goal_q is None:
         print("[grab_sensor] Final grasp TCP IK failed.")
         return None, None
+
+    if prefer_nearby_wrist:
+        goal_q = prefer_nearby_wrist_goal(
+            scene,
+            target_pos,
+            target_rpy,
+            start_q,
+            goal_q,
+            tcp,
+            pos_tol_m=max_pos_err_m,
+            ori_tol_rad=ik_ori_tol_rad,
+            ignore_yaw=ignore_yaw,
+        )
 
     tip_err_mm = tcp_error_mm(scene, target_pos, goal_q, tcp)
     if tip_err_mm > max_pos_err_m * 1000.0:
@@ -725,13 +743,32 @@ def plan_grasp_segment(
         )
         return None, None
 
-    _, ori_err = measure_tcp_target_pose_error(scene, target_pos, target_rpy, goal_q, tcp)
+    _, ori_err = measure_tcp_target_pose_error(
+        scene, target_pos, target_rpy, goal_q, tcp, ignore_yaw=ignore_yaw
+    )
     if ori_err > ik_ori_tol_rad:
         print(
             f"[grab_sensor] Final grasp TCP IK rejected: tcp_ori_err={math.degrees(ori_err):.1f} deg "
-            f"(limit {math.degrees(ik_ori_tol_rad):.1f} deg)"
+            f"(limit {math.degrees(ik_ori_tol_rad):.1f} deg"
+            f"{', AB only' if ignore_yaw else ''})"
         )
         return None, None
+
+    if ignore_yaw:
+        # Hold the natural FK yaw in the planned segment (do not enforce taught C).
+        _, fk_rpy = target_pose_from_q(scene, goal_q, tcp)
+        natural = np.asarray(targets.grasp_rpy_rad, dtype=np.float64).copy()
+        natural[2] = float(fk_rpy[2])
+        targets.grasp_rpy_rad = natural
+        targets.pre_grasp_rpy_rad = natural.copy()
+        targets.debug["grasp_rpy_world_deg"] = [float(math.degrees(v)) for v in natural]
+        targets.debug["ik_ignore_yaw"] = True
+        targets.debug["natural_yaw_deg"] = float(math.degrees(fk_rpy[2]))
+        target_rpy = natural
+        print(
+            f"[grab_sensor] yaw free (AB only); natural FK yaw="
+            f"{math.degrees(fk_rpy[2]):.2f} deg"
+        )
 
     traj = plan_joint_trajectory(
         scene,
@@ -1008,6 +1045,8 @@ def plan_approach_and_grasp(
             pos_tol_mm=float(cfg.grasp_position_tol_mm),
             ori_vs_pos=float(cfg.ik_ori_vs_pos),
             work_joints_deg_list=work_joints_deg(cfg),
+            prefer_nearby_wrist=bool(getattr(cfg, "prefer_nearby_wrist", False)),
+            ignore_yaw=bool(getattr(cfg, "ik_ignore_yaw", False)),
         )
         if grasp_traj is None or grasp_goal_q is None:
             raise RuntimeError(

@@ -63,18 +63,44 @@ def solve_tcp_ik(
     return [float(sol[j]) for j in scene.joint_indices[:n]]
 
 
+def _target_rpy_for_ori_err(
+    current_rpy: Sequence[float],
+    target_rpy: Sequence[float],
+    *,
+    ignore_yaw: bool,
+) -> np.ndarray:
+    """If ``ignore_yaw``, match only roll/pitch (A/B); let yaw float with FK."""
+    tgt = np.asarray(target_rpy, dtype=np.float64)[:3].copy()
+    if ignore_yaw:
+        tgt[2] = float(np.asarray(current_rpy, dtype=np.float64)[2])
+    return tgt
+
+
+def rpy_with_seed_yaw(
+    target_rpy: Sequence[float],
+    seed_yaw_rad: float,
+) -> np.ndarray:
+    """Keep taught roll/pitch; replace yaw (used as soft IK seed, not a hard C)."""
+    out = np.asarray(target_rpy, dtype=np.float64)[:3].copy()
+    out[2] = float(seed_yaw_rad)
+    return out
+
+
 def measure_tcp_target_pose_error(
     scene: PlanningScene,
     target_pos: Sequence[float],
     target_rpy: Sequence[float],
     q: Sequence[float],
     tcp: TcpOffset,
+    *,
+    ignore_yaw: bool = False,
 ) -> Tuple[float, float]:
     """TCP position + ``grasp_tcp_link`` orientation error vs target (rad)."""
     set_joint_positions(scene, q)
     tip_pos = tcp.tip_world(scene)
     tip_rpy = tcp_world_rpy_from_q(scene, q, tcp)
-    return pose_error_rad(tip_pos, tip_rpy, target_pos, target_rpy)
+    tgt_rpy = _target_rpy_for_ori_err(tip_rpy, target_rpy, ignore_yaw=ignore_yaw)
+    return pose_error_rad(tip_pos, tip_rpy, target_pos, tgt_rpy)
 
 
 def refine_joints_to_balanced_tcp_pose(
@@ -87,6 +113,7 @@ def refine_joints_to_balanced_tcp_pose(
     pos_tol_mm: float = 20.0,
     ori_tol_deg: float = 50.0,
     ori_vs_pos: float = 1.0,
+    ignore_yaw: bool = False,
 ) -> List[float]:
     """Joint refine minimizing TCP and orientation together.
 
@@ -94,6 +121,7 @@ def refine_joints_to_balanced_tcp_pose(
 
     ``ori_vs_pos=1`` treats being at the position tol and orientation tol as equal;
     ``>1`` favors orientation, ``<1`` favors TCP XYZ.
+    ``ignore_yaw``: only roll/pitch (A/B) enter the ori term.
     """
     if not tcp.has_tcp(scene):
         return list(q_init)
@@ -111,7 +139,8 @@ def refine_joints_to_balanced_tcp_pose(
         set_joint_positions(scene, q_try)
         tip_pos = tcp.tip_world(scene)
         tip_rpy = tcp_world_rpy_from_q(scene, q_try, tcp)
-        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, tip_rpy, tip_target, target_rpy_arr)
+        tgt_rpy = _target_rpy_for_ori_err(tip_rpy, target_rpy_arr, ignore_yaw=ignore_yaw)
+        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, tip_rpy, tip_target, tgt_rpy)
         pos_n = (pos_err_m * 1000.0) / pos_scale
         ori_n = math.degrees(ori_err_rad) / ori_scale
         return pos_n * pos_n + w_ori * ori_n * ori_n
@@ -151,6 +180,7 @@ def tcp_ik_goal_from_home(
     ori_tol_deg: float | None = None,
     ori_vs_pos: float = 1.0,
     balanced: bool = True,
+    ignore_yaw: bool = False,
 ) -> List[float] | None:
     """HOME warm-start TCP IK for an arbitrary pose (resets arm to HOME first).
 
@@ -158,6 +188,7 @@ def tcp_ik_goal_from_home(
     (see ``refine_joints_to_balanced_tcp_pose`` / config ``ik_ori_vs_pos``).
 
     Legacy ``prefer_position`` path: TCP XYZ first, then soft ori hold.
+    ``ignore_yaw``: enforce roll/pitch (A/B) only; yaw seeds from ``home_q`` FK.
     """
     tool = tcp if tcp is not None else TcpOffset()
     if not tool.has_tcp(scene):
@@ -165,7 +196,11 @@ def tcp_ik_goal_from_home(
     warm_q = [float(v) for v in home_q]
     set_joint_positions(scene, warm_q)
     tip = np.asarray(target_pos, dtype=np.float64)[:3]
-    target_orn = p.getQuaternionFromEuler([float(v) for v in target_rpy[:3]])
+    ik_rpy = np.asarray(target_rpy, dtype=np.float64)[:3]
+    if ignore_yaw:
+        _, seed_rpy = target_pose_from_q(scene, warm_q, tool)
+        ik_rpy = rpy_with_seed_yaw(ik_rpy, float(seed_rpy[2]))
+    target_orn = p.getQuaternionFromEuler([float(v) for v in ik_rpy])
     try:
         q_goal = solve_tcp_ik(
             scene,
@@ -191,6 +226,7 @@ def tcp_ik_goal_from_home(
             pos_tol_mm=pos_mm,
             ori_tol_deg=ori_deg,
             ori_vs_pos=float(ori_vs_pos),
+            ignore_yaw=ignore_yaw,
         )
         if not is_state_valid(scene, q_goal):
             return None
@@ -209,6 +245,7 @@ def tcp_ik_goal_from_home(
             tool,
             pos_tol_m=pos_hold_m,
             ori_tol_rad=math.radians(ori_deg),
+            ignore_yaw=ignore_yaw,
         )
         if not is_state_valid(scene, q_goal):
             return None
@@ -227,6 +264,7 @@ def grasp_ik_goal_from_home(
     ori_tol_deg: float | None = None,
     ori_vs_pos: float = 1.0,
     balanced: bool = True,
+    ignore_yaw: bool = False,
 ) -> List[float] | None:
     """HOME warm-start TCP IK for ``targets`` grasp pose (resets arm to HOME first)."""
     tool = tcp if tcp is not None else TcpOffset()
@@ -242,6 +280,7 @@ def grasp_ik_goal_from_home(
         ori_tol_deg=ori_tol_deg,
         ori_vs_pos=ori_vs_pos,
         balanced=balanced,
+        ignore_yaw=ignore_yaw,
     )
 
 
@@ -429,9 +468,12 @@ def measure_target_pose_error(
     target_rpy: Sequence[float],
     q: Sequence[float],
     tcp: TcpOffset,
+    *,
+    ignore_yaw: bool = False,
 ) -> Tuple[float, float]:
     pos, rpy = target_pose_from_q(scene, q, tcp)
-    return pose_error_rad(pos, rpy, target_pos, target_rpy)
+    tgt_rpy = _target_rpy_for_ori_err(rpy, target_rpy, ignore_yaw=ignore_yaw)
+    return pose_error_rad(pos, rpy, target_pos, tgt_rpy)
 
 
 def refine_joints_to_tcp_position(
@@ -488,6 +530,7 @@ def refine_joints_to_tcp_pose(
     *,
     pos_tol_m: float = _TCP_POS_TOL_M,
     ori_tol_rad: float = 0.02,
+    ignore_yaw: bool = False,
 ) -> List[float]:
     """Joint coordinate descent on TCP position + wrist orientation."""
     if not tcp.has_tcp(scene):
@@ -510,7 +553,8 @@ def refine_joints_to_tcp_pose(
         set_joint_positions(scene, q_try)
         tip_pos = tcp.tip_world(scene)
         _, link_rpy, _ = link_pose_from_q(scene, q_try)
-        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_target, target_rpy_arr)
+        tgt_rpy = _target_rpy_for_ori_err(link_rpy, target_rpy_arr, ignore_yaw=ignore_yaw)
+        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_target, tgt_rpy)
         return pos_err_m * 10000.0 + ori_err_rad
 
     steps = [0.02, 0.005, 0.001, 0.0002, 0.00005, 0.00001]
@@ -532,7 +576,8 @@ def refine_joints_to_tcp_pose(
             set_joint_positions(scene, q)
             tip_pos = tcp.tip_world(scene)
             _, link_rpy, _ = link_pose_from_q(scene, q)
-            pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_target, target_rpy_arr)
+            tgt_rpy = _target_rpy_for_ori_err(link_rpy, target_rpy_arr, ignore_yaw=ignore_yaw)
+            pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_target, tgt_rpy)
             if pos_err_m <= pos_tol_m and ori_err_rad <= ori_tol_rad:
                 break
 
@@ -548,6 +593,7 @@ def refine_joints_to_wrist_orientation_hold_tcp(
     *,
     pos_tol_m: float = _TCP_POS_TOL_M,
     ori_tol_rad: float = 0.02,
+    ignore_yaw: bool = False,
 ) -> List[float]:
     """Align wrist (link6) RPY to ``target_rpy`` while keeping TCP position fixed."""
     if not tcp.has_tcp(scene):
@@ -564,7 +610,8 @@ def refine_joints_to_wrist_orientation_hold_tcp(
         set_joint_positions(scene, q_try)
         tip_pos = tcp.tip_world(scene)
         _, link_rpy, _ = link_pose_from_q(scene, q_try)
-        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_locked, target_rpy_arr)
+        tgt_rpy = _target_rpy_for_ori_err(link_rpy, target_rpy_arr, ignore_yaw=ignore_yaw)
+        pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_locked, tgt_rpy)
         return ori_err_rad + pos_err_m * 10000.0
 
     steps = [0.02, 0.005, 0.001, 0.0002, 0.00005, 0.00001]
@@ -586,7 +633,8 @@ def refine_joints_to_wrist_orientation_hold_tcp(
             set_joint_positions(scene, q)
             tip_pos = tcp.tip_world(scene)
             _, link_rpy, _ = link_pose_from_q(scene, q)
-            pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_locked, target_rpy_arr)
+            tgt_rpy = _target_rpy_for_ori_err(link_rpy, target_rpy_arr, ignore_yaw=ignore_yaw)
+            pos_err_m, ori_err_rad = pose_error_rad(tip_pos, link_rpy, tip_locked, tgt_rpy)
             if pos_err_m <= pos_tol_m and ori_err_rad <= ori_tol_rad:
                 break
 
@@ -603,6 +651,7 @@ def refine_joint_config_to_target_pose(
     *,
     pos_tol_m: float = 1e-4,
     ori_tol_rad: float = 0.02,
+    ignore_yaw: bool = False,
 ) -> List[float]:
     if not tcp.has_tcp(scene):
         return refine_joint_config_to_pose(
@@ -616,6 +665,7 @@ def refine_joint_config_to_target_pose(
         tcp,
         pos_tol_m=pos_tol_m,
         ori_tol_rad=ori_tol_rad,
+        ignore_yaw=ignore_yaw,
     )
 
 
@@ -665,6 +715,99 @@ def _report_tcp_goal(
     )
 
 
+def prefer_nearby_wrist_goal(
+    scene: PlanningScene,
+    target_pos: Sequence[float],
+    target_rpy: Sequence[float],
+    start_q: Sequence[float],
+    goal_q: Sequence[float],
+    tcp: TcpOffset,
+    *,
+    pos_tol_m: float,
+    ori_tol_rad: float,
+    wrist_joint_indices: Sequence[int] = (3, 5),
+    ignore_yaw: bool = False,
+) -> List[float]:
+    """Prefer an IK goal that keeps J4/J6 near ``start_q`` when pose still meets tol.
+
+    PyBullet IK often accepts a spun continuous-wrist solution within a loose ori
+    tolerance; that wastes motion (and breaks quintic smoothing) without improving TCP.
+    """
+    tip = np.asarray(target_pos, dtype=np.float64)[:3]
+    rpy = np.asarray(target_rpy, dtype=np.float64)[:3]
+    start = [float(v) for v in start_q]
+    goal = [float(v) for v in goal_q]
+    idxs = [int(i) for i in wrist_joint_indices if 0 <= int(i) < len(goal)]
+
+    def _shortest(a: float, b: float) -> float:
+        return math.atan2(math.sin(b - a), math.cos(b - a))
+
+    def _wrist_travel(q: Sequence[float]) -> float:
+        return float(sum(abs(_shortest(start[j], float(q[j]))) for j in idxs))
+
+    def _score(q: Sequence[float]) -> tuple[float, float, float, float]:
+        pos_err, ori_err = measure_target_pose_error(
+            scene, tip, rpy, q, tcp, ignore_yaw=ignore_yaw
+        )
+        travel = _wrist_travel(q)
+        # Primary: stay in tol; then minimize useless wrist spin; then pose quality.
+        return (travel, ori_err, pos_err, float(np.linalg.norm(np.asarray(q) - np.asarray(start))))
+
+    seeds: list[list[float]] = [goal]
+    wrapped = list(goal)
+    for j in idxs:
+        wrapped[j] = start[j] + _shortest(start[j], goal[j])
+    seeds.append(wrapped)
+    pinned = list(goal)
+    for j in idxs:
+        pinned[j] = start[j]
+    seeds.append(pinned)
+    seeds.append(list(start))
+
+    best_q = list(goal)
+    best_key = _score(best_q)
+    refine_ori = min(float(ori_tol_rad), math.radians(15.0))
+
+    for seed in seeds:
+        try:
+            q = refine_joint_config_to_target_pose(
+                scene,
+                tip,
+                rpy,
+                seed,
+                tcp,
+                pos_tol_m=min(pos_tol_m, 0.002),
+                ori_tol_rad=refine_ori,
+                ignore_yaw=ignore_yaw,
+            )
+        except Exception:
+            continue
+        if not is_state_valid(scene, q):
+            continue
+        pos_err, ori_err = measure_target_pose_error(
+            scene, tip, rpy, q, tcp, ignore_yaw=ignore_yaw
+        )
+        if pos_err > pos_tol_m or ori_err > ori_tol_rad:
+            continue
+        key = _score(q)
+        if key < best_key:
+            best_key = key
+            best_q = list(q)
+
+    before = _wrist_travel(goal)
+    after = _wrist_travel(best_q)
+    if after + 1e-3 < before:
+        pos_err, ori_err = measure_target_pose_error(
+            scene, tip, rpy, best_q, tcp, ignore_yaw=ignore_yaw
+        )
+        print(
+            f"[grab_sensor] nearby-wrist IK: J4/J6 travel "
+            f"{math.degrees(before):.1f} -> {math.degrees(after):.1f} deg  "
+            f"(tip_err={pos_err * 1000:.2f} mm, ori_err={math.degrees(ori_err):.1f} deg)"
+        )
+    return best_q
+
+
 def _solve_wrist_ik_for_tcp(
     scene: PlanningScene,
     tip_pos: Sequence[float],
@@ -676,11 +819,15 @@ def _solve_wrist_ik_for_tcp(
     ik_ori_tol_rad: float,
     refine_ori_tol_rad: float,
     ik_pos_tol_m: float | None,
+    ignore_yaw: bool = False,
 ) -> Optional[List[float]]:
     """Direct 6-DOF IK on ``grasp_tcp_link`` + joint refinement."""
     best_pos_tol_m = pos_tol_m * 1.5 if ik_pos_tol_m is None else float(ik_pos_tol_m)
     tip_pos_arr = np.asarray(tip_pos, dtype=np.float64)
-    tip_rpy_arr = np.asarray(tip_rpy, dtype=np.float64)
+    tip_rpy_arr = np.asarray(tip_rpy, dtype=np.float64)[:3].copy()
+    if ignore_yaw:
+        _, seed_rpy = target_pose_from_q(scene, start_q, tcp)
+        tip_rpy_arr = rpy_with_seed_yaw(tip_rpy_arr, float(seed_rpy[2]))
     target_orn = p.getQuaternionFromEuler(list(tip_rpy_arr))
 
     rng = np.random.default_rng(_IK_REST_SEED)
@@ -697,17 +844,20 @@ def _solve_wrist_ik_for_tcp(
             q_goal = refine_joint_config_to_target_pose(
                 scene,
                 tip_pos_arr,
-                tip_rpy_arr,
+                tip_rpy,
                 q_seed,
                 tcp,
                 pos_tol_m=pos_tol_m,
                 ori_tol_rad=refine_ori_tol_rad,
+                ignore_yaw=ignore_yaw,
             )
         except Exception:
             continue
         if not is_state_valid(scene, q_goal):
             continue
-        pos_err, ori_err = measure_target_pose_error(scene, tip_pos_arr, tip_rpy_arr, q_goal, tcp)
+        pos_err, ori_err = measure_target_pose_error(
+            scene, tip_pos_arr, tip_rpy, q_goal, tcp, ignore_yaw=ignore_yaw
+        )
         if ori_err > ik_ori_tol_rad:
             continue
         # Prefer lower TCP error; break ori ties with smaller ori_err.
@@ -741,11 +891,15 @@ def _solve_tcp_joint_fallback(
     ik_ori_tol_rad: float,
     refine_ori_tol_rad: float,
     ik_pos_tol_m: float | None,
+    ignore_yaw: bool = False,
 ) -> Optional[List[float]]:
     """Fallback when wrist IK misses: few restarts + joint refinement on TCP + orientation."""
     best_pos_tol_m = pos_tol_m * 1.5 if ik_pos_tol_m is None else float(ik_pos_tol_m)
     tip_pos_arr = np.asarray(tip_pos, dtype=np.float64)
-    tip_rpy_arr = np.asarray(tip_rpy, dtype=np.float64)
+    tip_rpy_arr = np.asarray(tip_rpy, dtype=np.float64)[:3].copy()
+    if ignore_yaw:
+        _, seed_rpy = target_pose_from_q(scene, start_q, tcp)
+        tip_rpy_arr = rpy_with_seed_yaw(tip_rpy_arr, float(seed_rpy[2]))
     target_orn = p.getQuaternionFromEuler(list(tip_rpy_arr))
 
     rng = np.random.default_rng(_IK_REST_SEED)
@@ -762,17 +916,20 @@ def _solve_tcp_joint_fallback(
             q_goal = refine_joints_to_tcp_pose(
                 scene,
                 tip_pos_arr,
-                tip_rpy_arr,
+                tip_rpy,
                 q_seed,
                 tcp,
                 pos_tol_m=_TCP_POS_TOL_M,
                 ori_tol_rad=refine_ori_tol_rad,
+                ignore_yaw=ignore_yaw,
             )
         except Exception:
             continue
         if not is_state_valid(scene, q_goal):
             continue
-        pos_err, ori_err = measure_target_pose_error(scene, tip_pos_arr, tip_rpy_arr, q_goal, tcp)
+        pos_err, ori_err = measure_target_pose_error(
+            scene, tip_pos_arr, tip_rpy, q_goal, tcp, ignore_yaw=ignore_yaw
+        )
         if pos_err <= best_pos_tol_m and ori_err < best_ori_err:
             best_ori_err = ori_err
             best_pos_err = pos_err
@@ -795,6 +952,7 @@ def solve_goal_from_target_pose(
     ik_ori_tol_rad: float = 0.35,
     refine_ori_tol_rad: float = 0.02,
     ik_pos_tol_m: float | None = None,
+    ignore_yaw: bool = False,
 ) -> Optional[List[float]]:
     if not tcp.has_tcp(scene):
         return solve_goal_from_pose(
@@ -818,6 +976,7 @@ def solve_goal_from_target_pose(
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
         ik_pos_tol_m=ik_pos_tol_m,
+        ignore_yaw=ignore_yaw,
     )
     if q is not None:
         return q
@@ -833,6 +992,7 @@ def solve_goal_from_target_pose(
         ik_ori_tol_rad=ik_ori_tol_rad,
         refine_ori_tol_rad=refine_ori_tol_rad,
         ik_pos_tol_m=ik_pos_tol_m,
+        ignore_yaw=ignore_yaw,
     )
 
 

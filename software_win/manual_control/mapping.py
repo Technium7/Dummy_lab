@@ -6,6 +6,35 @@ from typing import Sequence
 JOINT_SIGNS = [-1.0, -1.0, 1.0, 1.0, 1.0, -1.0]
 JOINT_OFFSETS_DEG = [0.0, 75.0, 180.0, 0.0, 0.0, 0.0]
 HOME_JOINTS_DEG = [0.0, 0.0, 90.0, 0.0, 0.0, 0.0]
+# Fallback if physical_env/robot_in_table.yaml is missing (matches that file's work pose).
+_DEFAULT_WORK_JOINTS_DEG = [0.0, -55.0, 145.0, 0.0, 0.0, 0.0]
+_WORK_JOINTS_CACHE: list[float] | None = None
+
+
+def work_joints_deg() -> list[float]:
+    """Firmware-frame WORK pose for ``T`` (``physical_env/robot_in_table.yaml``)."""
+    global _WORK_JOINTS_CACHE
+    if _WORK_JOINTS_CACHE is not None:
+        return list(_WORK_JOINTS_CACHE)
+    vals = list(_DEFAULT_WORK_JOINTS_DEG)
+    try:
+        from pathlib import Path
+
+        import yaml
+
+        yaml_path = Path(__file__).resolve().parents[2] / "physical_env" / "robot_in_table.yaml"
+        if yaml_path.is_file():
+            data = yaml.safe_load(yaml_path.read_text(encoding="utf-8")) or {}
+            raw = data.get("work_position_deg")
+            if raw is not None:
+                vals = [float(v) for v in raw][:6]
+                while len(vals) < 6:
+                    vals.append(0.0)
+    except Exception:
+        pass
+    _WORK_JOINTS_CACHE = vals
+    return list(vals)
+
 
 # Matches firmware CtrlStepMotor reductions for J1..J6 (dummy_ref_core DummyRobot ctor).
 JOINT_REDUCTION = [50.0, 50.0, 50.0, 50.0, 50.0, 30.0]
@@ -177,6 +206,6 @@ def max_ascii_speed() -> float:
 
 
 def home_stream_ascii_speed() -> float:
-    """Use when driving the robot to HOME via streamed waypoints (``T`` latch)."""
+    """Use when driving the robot to WORK via streamed waypoints (``T`` latch)."""
     return max_ascii_speed()
 

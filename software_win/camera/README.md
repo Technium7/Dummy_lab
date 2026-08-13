@@ -67,9 +67,8 @@ Infinity Capture GUI before running so Lucam can open the USB camera.
 If colors look wrong, try `--infinity-bayer GB` (or `RG` / `GR`).
 
 
-Each live window has manual **Exposure_0.1ms** and **Gain_0.1** trackbars
-(auto exposure/gain disabled when the driver supports it). Overlay text shows
-current `exp=…ms` and `gain=…`.
+Each live **image** window is freely resizable. Exposure / gain trackbars live in a
+separate `… controls` window so Win32 OpenCV trackbars cannot lock image width.
 
 - Exposure trackbar value `10` → **1.0 ms**
 - Gain trackbar value `100` → **10.0**

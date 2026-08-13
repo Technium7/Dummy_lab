@@ -41,6 +41,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--rotation-weight", type=float, default=8.0)
     parser.add_argument("--joint-force", type=float, default=2000.0)
     parser.add_argument("--ik-damping", type=float, default=0.05)
+    parser.add_argument(
+        "--creep-step-mm",
+        type=float,
+        default=0.12,
+        help="WASDQE click step size in mm (default 0.12, matches epoxy z_creep).",
+    )
+    parser.add_argument(
+        "--creep-speed-mm-s",
+        type=float,
+        default=1.65,
+        help="Peak creep linear speed mm/s (default 1.65, matches epoxy z_creep).",
+    )
+    parser.add_argument(
+        "--creep-accel-s",
+        type=float,
+        default=0.20,
+        help="Creep smoothstep ramp-up time in seconds (default 0.20).",
+    )
+    parser.add_argument(
+        "--no-creep",
+        action="store_true",
+        help="Disable click-creep; restore hold-to-move WASDQE velocity jog.",
+    )
     parser.add_argument("--port", type=str, default=default_robot_port())
     parser.add_argument("--baudrate", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=1.0)
@@ -49,11 +72,6 @@ def parse_args() -> argparse.Namespace:
         type=float,
         default=70.0,
         help="Robot & waypoint period in ms (default 70).",
-    )
-    parser.add_argument(
-        "--home-firmware",
-        action="store_true",
-        help="T also sends firmware !HOME (blocks serial ~3s; default is stream-only home).",
     )
     parser.add_argument(
         "--sim-only",
@@ -120,10 +138,13 @@ def main() -> None:
             baudrate=args.baudrate,
             timeout=args.timeout,
             control_dt_ms=args.control_dt_ms,
-            home_use_firmware=args.home_firmware,
             sim_only=args.sim_only,
             debug_serial=args.debug_serial,
             joint_current_limit_a=args.joint_current_limit_a,
+            creep_enabled=not bool(args.no_creep),
+            creep_step_m=max(0.0, float(args.creep_step_mm) * 1e-3),
+            creep_linear_speed=max(0.0, float(args.creep_speed_mm_s) * 1e-3),
+            creep_accel_time=max(1e-3, float(args.creep_accel_s)),
             teleop_hook=teleop_hook,
             on_shutdown=on_shutdown,
         )
