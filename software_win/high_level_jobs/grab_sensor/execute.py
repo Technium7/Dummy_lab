@@ -760,6 +760,56 @@ def execute_return_segments_on_robot(
     )
 
 
+def execute_outbound_segments_on_robot(
+    robot: RobotAsciiInterface,
+    segment_list: Sequence[tuple[str, np.ndarray]],
+    cfg: GrabSensorConfig,
+    params: Mapping[str, Any],
+    *,
+    label: str = "",
+) -> None:
+    """Stream recorded outbound place segments (pre_grasp + grasp); stay at insert."""
+    from .plan_motion import work_joints_deg as _work_joints_deg
+
+    if not segment_list:
+        raise RuntimeError("traj_replay: empty outbound segment list.")
+
+    work_deg = _work_joints_deg(cfg)
+    cmd_mode = int(params.get("cmd_mode", 2))
+    home_first = bool(params.get("home_first", True))
+    joint_current_limit_a = float(
+        params.get("joint_current_limit_a", cfg.execute.joint_current_limit_a)
+    )
+    if not ensure_robot_ready(
+        robot,
+        cmd_mode=cmd_mode,
+        home_first=home_first,
+        open_hand=False,
+        joint_current_limit_a=joint_current_limit_a,
+        label=label,
+        start_joints_deg=work_deg if home_first else None,
+    ):
+        raise RuntimeError("Failed to arm robot for traj_replay.")
+
+    stream_kw = {
+        "smooth": bool(params.get("smooth", True)),
+        "send_interval_ms": float(params.get("send_interval_ms", 160.0)),
+        "speed_scale": float(params.get("speed_scale", 0.55)),
+        "label": label,
+    }
+    for i, (seg_label, traj) in enumerate(segment_list):
+        print(f"{label}traj_replay: {seg_label} ({len(traj)} samples).")
+        _stream_segment_or_raise(
+            robot,
+            np.asarray(traj, dtype=np.float64),
+            segment=seg_label,
+            stream_kw=stream_kw,
+            arm=False,
+            seed_from_robot=False,
+            sync_start_to_robot=(i == 0),
+        )
+
+
 def execute_standby_to_work(
     robot: RobotAsciiInterface,
     cfg: GrabSensorConfig,

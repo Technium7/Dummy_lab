@@ -10,7 +10,7 @@ from typing import Any, Mapping
 
 import numpy as np
 
-from .paths import RECORDS_DIR
+from .paths import LIBRARY_DIR, RECORDS_DIR
 
 _SEGMENT_KEYS = ("pre_grasp", "grasp", "lift", "home")
 
@@ -72,6 +72,18 @@ class MotionRecord:
             rev = reverse_segment(self.segment(key))
             if rev is not None:
                 out.append((key, label, rev))
+        return out
+
+    def to_insert_segments(self) -> list[tuple[str, np.ndarray]]:
+        """Outbound place path: WORK → pre → insert (pre_grasp + grasp)."""
+        out: list[tuple[str, np.ndarray]] = []
+        for key, label in (
+            ("pre_grasp", "WORK -> pre"),
+            ("grasp", "pre -> insert"),
+        ):
+            seg = self.segment(key)
+            if seg is not None:
+                out.append((label, np.asarray(seg, dtype=np.float64)))
         return out
 
     def return_to_work_segments(self) -> list[tuple[str, np.ndarray]]:
@@ -179,6 +191,55 @@ def save_record(record: MotionRecord, base: Path | None = None) -> Path:
 
 def load_record(name: str, base: Path | None = None) -> MotionRecord | None:
     path = record_path(name, base)
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text(encoding="utf-8"))
+    return MotionRecord.from_dict(data)
+
+
+def _safe_name(name: str) -> str:
+    return "".join(c if c.isalnum() or c in "-_" else "_" for c in name.strip()) or "traj"
+
+
+def library_dir(base: Path | None = None) -> Path:
+    """Named trajectory library under records/library (or base/library)."""
+    if base is None:
+        path = LIBRARY_DIR
+    else:
+        path = Path(base) / "library"
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def library_path(name: str, base: Path | None = None) -> Path:
+    return library_dir(base) / f"{_safe_name(name)}.json"
+
+
+def list_library(base: Path | None = None) -> list[str]:
+    root = library_dir(base)
+    names = sorted(p.stem for p in root.glob("*.json") if p.is_file())
+    return names
+
+
+def save_library(record: MotionRecord, name: str, base: Path | None = None) -> Path:
+    """Copy a motion record into the named trajectory library."""
+    named = MotionRecord(
+        name=_safe_name(name),
+        kind=record.kind,
+        created_utc=record.created_utc,
+        start_joints_deg=list(record.start_joints_deg),
+        segments=dict(record.segments),
+        plan_meta=dict(record.plan_meta),
+        extras=dict(record.extras),
+    )
+    path = library_path(named.name, base)
+    path.write_text(json.dumps(named.to_dict(), indent=2), encoding="utf-8")
+    print(f"[session] traj library saved: {path}")
+    return path
+
+
+def load_library(name: str, base: Path | None = None) -> MotionRecord | None:
+    path = library_path(name, base)
     if not path.is_file():
         return None
     data = json.loads(path.read_text(encoding="utf-8"))

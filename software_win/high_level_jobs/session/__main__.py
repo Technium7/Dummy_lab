@@ -11,6 +11,9 @@ _SOFTWARE_WIN = Path(__file__).resolve().parents[2]
 if str(_SOFTWARE_WIN) not in sys.path:
     sys.path.insert(0, str(_SOFTWARE_WIN))
 
+# Load repo .env.local before reading OPENAI_* defaults.
+import high_level_jobs.llm_client  # noqa: E402,F401
+
 from high_level_jobs.session.loop import (  # noqa: E402
     build_state,
     run_repl,
@@ -47,14 +50,20 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument(
         "--no-llm",
         action="store_true",
-        help="Disable LLM; free text uses keyword fallback only",
+        help="Disable LLM; only exact command tokens are accepted",
     )
     p.add_argument(
         "--llm-backend",
         choices=("ollama", "openai"),
-        default="ollama",
+        default=("openai" if os.environ.get("OPENAI_API_KEY") else "ollama"),
+        help="LLM provider (default: openai if OPENAI_API_KEY set, else ollama)",
     )
     p.add_argument("--llm-model", default="", help="Override OLLAMA_MODEL / OPENAI_MODEL")
+    p.add_argument(
+        "--yes-llm",
+        action="store_true",
+        help="Skip interactive review/confirm for LLM plans",
+    )
     args = p.parse_args(argv)
 
     state = build_state(
@@ -72,6 +81,7 @@ def main(argv: list[str] | None = None) -> int:
             llm_backend=args.llm_backend,
             llm_model=(args.llm_model or None),
             enable_llm=not args.no_llm,
+            confirm_llm_plans=not args.yes_llm,
         )
     except KeyboardInterrupt:
         print("\n[session] interrupted.")

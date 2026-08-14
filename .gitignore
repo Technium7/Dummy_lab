@@ -1,7 +1,11 @@
-.DS_Store
-.venv/
+# Local secrets / env overrides (never commit)
+.env
+.env.*
+!.env.example
+
+# Local conda env (never commit)
 .conda/
-.tools/
+
 **/.idea/
 **/.vscode/
 **/__pycache__/

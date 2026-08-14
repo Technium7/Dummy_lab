@@ -10,8 +10,13 @@ from high_level_jobs.grab_sensor.config_loader import (
 )
 from high_level_jobs.grab_sensor.execute import ensure_robot_ready
 from high_level_jobs.grab_sensor.plan_motion import work_joints_deg
-from high_level_jobs.session.commands import HANDLERS, SessionState, cmd_help, normalize_command
-from high_level_jobs.session.llm_map import map_utterance_to_command
+from high_level_jobs.session.commands import (
+    SessionState,
+    cmd_help,
+    normalize_command,
+    run_command,
+)
+from high_level_jobs.session.llm_map import Plan, map_utterance_to_plan
 from high_level_jobs.session.paths import RECORDS_DIR
 from robot_ascii_interface import RobotAsciiInterface
 from robot_config import default_robot_port
@@ -105,29 +110,78 @@ def shutdown(state: SessionState) -> None:
     release_robot_port(state)
 
 
-def resolve_command(
+def resolve_plan(
     line: str,
     *,
     llm_backend: str,
     llm_model: str | None,
     enable_llm: bool,
-) -> str:
+) -> Plan:
     text = line.strip()
     if not text:
-        return ""
+        return Plan()
     direct = normalize_command(text)
-    if direct:
-        return direct
-    # Known multi-word aliases already handled; free text → LLM / keywords.
+    # Exact command tokens (with optional args) skip the LLM.
+    if direct and not text.lower().startswith("llm "):
+        spaced = " ".join(text.lower().replace("-", "_").replace("_", " ").split())
+        forms = {direct.replace("_", " "), direct}
+        if any(spaced == f or spaced.startswith(f + " ") for f in forms):
+            return map_utterance_to_plan(text, use_llm=False)
     if text.lower().startswith("llm ") or enable_llm:
-        return map_utterance_to_command(
+        return map_utterance_to_plan(
             text,
             backend=llm_backend,
             model=llm_model,
             use_llm=enable_llm or text.lower().startswith("llm "),
         )
-    # Without LLM, still try keywords on free text.
-    return map_utterance_to_command(text, use_llm=False)
+    return map_utterance_to_plan(text, use_llm=False)
+
+
+def format_plan_review(plan: Plan) -> str:
+    return plan.format_review()
+
+
+def confirm_llm_plan(plan: Plan) -> bool:
+    """Print LLM plan and ask operator to confirm before execute."""
+    print(plan.format_review())
+    while True:
+        try:
+            ans = input("[session] run this plan? [y/N] ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            print()
+            return False
+        if ans in ("", "n", "no"):
+            print("[session] plan cancelled.")
+            return False
+        if ans in ("y", "yes"):
+            return True
+        print("[session] type y or n")
+
+
+def run_plan(state: SessionState, plan: Plan) -> str | None:
+    """Execute plan steps. Returns 'quit' if a quit step ran, else None."""
+    n = len(plan.steps)
+    if n == 0:
+        print("[session] empty plan.")
+        return None
+    if n > 1 and not plan.from_llm:
+        print(f"[session] plan ({n} steps): {plan.summary()}")
+    for i, step in enumerate(plan.steps, start=1):
+        if step.action == "quit":
+            print("[session] quitting...")
+            return "quit"
+        if n > 1:
+            print(f"[session] step {i}/{n}: {step.action} {step.params or ''}".rstrip())
+        try:
+            run_command(state, step.action, step.params)
+        except KeyboardInterrupt:
+            print("\n[session] plan interrupted — robot stays connected.")
+            return None
+        except Exception as exc:  # noqa: BLE001 — keep REPL alive
+            print(f"[session] ERROR in {step.action} (step {i}/{n}): {exc}")
+            print("[session] plan aborted.")
+            return None
+    return None
 
 
 def run_repl(
@@ -136,6 +190,7 @@ def run_repl(
     llm_backend: str = "ollama",
     llm_model: str | None = None,
     enable_llm: bool = True,
+    confirm_llm_plans: bool = True,
 ) -> int:
     cmd_help(state)
     while True:
@@ -147,7 +202,7 @@ def run_repl(
         if not line:
             continue
         try:
-            cmd = resolve_command(
+            plan = resolve_plan(
                 line,
                 llm_backend=llm_backend,
                 llm_model=llm_model,
@@ -156,23 +211,15 @@ def run_repl(
         except Exception as exc:  # noqa: BLE001
             print(f"[session] could not parse command: {exc}")
             continue
-        if not cmd:
+        if plan.is_empty():
             print("[session] empty command.")
             continue
-        if cmd == "quit":
-            print("[session] quitting...")
+        if plan.from_llm and confirm_llm_plans:
+            if not confirm_llm_plan(plan):
+                continue
+        result = run_plan(state, plan)
+        if result == "quit":
             break
-        handler = HANDLERS.get(cmd)
-        if handler is None:
-            print(f"[session] unknown command: {cmd}")
-            continue
-        state.last_command = cmd
-        try:
-            handler(state)
-        except KeyboardInterrupt:
-            print("\n[session] command interrupted — robot stays connected.")
-        except Exception as exc:  # noqa: BLE001 — keep REPL alive
-            print(f"[session] ERROR in {cmd}: {exc}")
     return 0
 
 

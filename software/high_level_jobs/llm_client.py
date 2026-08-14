@@ -16,7 +16,9 @@ class LLMClient(Protocol):
 
 def _http_post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_sec: float) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+    # Some hosts (e.g. Groq/Cloudflare) reject urllib's default User-Agent (403/1010).
+    hdrs = {"User-Agent": "DummyLab-high_level_jobs/1.0", **headers}
+    req = urllib.request.Request(url, data=data, headers=hdrs, method="POST")
     with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
         body = resp.read().decode("utf-8")
     return json.loads(body)
@@ -118,7 +120,8 @@ class OpenAICompatClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            "temperature": 0.2,
+            "temperature": 0,
+            "response_format": {"type": "json_object"},
         }
         headers = {
             "Content-Type": "application/json",
