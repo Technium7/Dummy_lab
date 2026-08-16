@@ -39,7 +39,8 @@ Subtasks (action name -> function):
   wants to leave insert / go back to work between visits.
 - standby: Fresh plan from current joints to WORK (no library). Use if lost / no record.
 - power_optimization: From current INSERT, PM100 search/climb; STAY. Needs prior place
-  extras. Only if user asks to optimize/search power.
+  extras. Appends the final peak reading to the same JSONL as record_power
+  (source=power_optimization). Only if user asks to optimize/search power.
 - wait: Hold current pose for N seconds. Params: required seconds (min->sec). ONLY if
   user asked to wait/pause/dwell between visits (usually at WORK after return).
 - manual: Hand off to teleop. stop: emergency stop. help / quit: meta.

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Mapping
 
 import numpy as np
@@ -250,6 +251,21 @@ def execute_power_optimize_on_robot(
             insert_power_w=seed_p,
         )
         save_power_scan_debug(cfg, scan_result)
+        from high_level_jobs.power_measure.record_power import log_optimization_power
+
+        log_path = params.get("power_log_path")
+        if log_path is None:
+            from high_level_jobs.session.paths import POWER_LOG_DIR, POWER_LOG_NAME
+
+            log_path = POWER_LOG_DIR / POWER_LOG_NAME
+        log_optimization_power(
+            scan_result.to_dict(),
+            log_path=Path(log_path),
+            extras=params.get("power_log_extras") or {},
+            settle_s=float(cfg.power_scan.final_hold_s),
+            n_reads=int(cfg.power_scan.final_meter_samples),
+            label=f"{label}[power_optimization] ",
+        )
 
         if pull_up_after:
             lift_mm = float(cfg.approach.post_grasp_lift_mm)

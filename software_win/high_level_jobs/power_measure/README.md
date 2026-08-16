@@ -95,3 +95,4 @@ Flow with `--ik-gui` / `--plan-gui`: live click → Enter/E → **camera/OpenCV 
 Config: [`config/default_power_measure.yaml`](config/default_power_measure.yaml).
 Debug power log: `debug/power_scan.json`.
 Session records: `../session/records/power_measure.json`.
+Final optimization power also appends to `../session/records/power_logs/record_power.jsonl` (`source: power_optimization`).

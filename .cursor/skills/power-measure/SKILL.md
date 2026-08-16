@@ -37,6 +37,7 @@ python -m high_level_jobs.power_measure --execute --port COM3   # full composed
 ```
 
 Records: `software_win/high_level_jobs/session/records/power_measure.json`.
+Final optimization power also appends to `session/records/power_logs/record_power.jsonl`.
 
 ## Agent rules
 

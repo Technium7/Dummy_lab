@@ -36,7 +36,7 @@ session> quit
 | `grab_sensor` | Detect → grasp → lift → **WORK** (sensor held) | Saves `records/grab_sensor.json` for `put_sensor` |
 | `put_sensor` | Reverse grab segments → open at grasp → **WORK** | Reads `grab_sensor.json` |
 | `power_measure` | Live click → **place only** (WORK→insert) → **stay**; optional `save_as=<name>` | Saves `power_measure.json` + optional library entry |
-| `power_optimization` | From current insert: PM100 search/climb → **stay** | Needs prior place extras (`click_uv`, `grasp_goal_q`) |
+| `power_optimization` | From current insert: PM100 search/climb → **stay** | Needs prior place extras; appends final peak to `records/power_logs/record_power.jsonl` |
 | `record_power` | Settle (default 1s) at current pose; average PM100; append JSONL | `records/power_logs/record_power.jsonl` |
 | `return` | Stream recorded return path to **WORK**; optional `name=<lib>` | Default `power_measure.json`, or library traj |
 | `standby` | **Fresh plan** current joints → WORK | — |

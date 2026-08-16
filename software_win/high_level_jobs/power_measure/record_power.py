@@ -103,6 +103,7 @@ def record_averaged_power(
     if dry_run:
         entry = {
             "t_utc": ts,
+            "source": "record_power",
             "settle_s": settle_s,
             "n_reads": n_reads,
             "power_w": None,
@@ -110,7 +111,7 @@ def record_averaged_power(
             "dry_run": True,
             "extras": dict(extras or {}),
         }
-        _append_log(log_path, entry)
+        append_power_log(log_path, entry)
         print(f"{label}dry-run: skip meter")
         return entry
 
@@ -142,6 +143,7 @@ def record_averaged_power(
     power_w = float(sum(samples) / len(samples))
     entry = {
         "t_utc": ts,
+        "source": "record_power",
         "settle_s": settle_s,
         "n_reads": n_reads,
         "power_w": power_w,
@@ -153,14 +155,63 @@ def record_averaged_power(
             if extras and k in extras
         },
     }
-    _append_log(log_path, entry)
+    append_power_log(log_path, entry)
     print(f"{label}averaged power = {power_w:.6e} W  (n={n_reads}, settle={settle_s:g}s)")
     if log_path is not None:
         print(f"{label}logged -> {log_path}")
     return entry
 
 
-def _append_log(log_path: Path | None, entry: Mapping[str, Any]) -> None:
+def log_optimization_power(
+    scan: Mapping[str, Any] | None,
+    *,
+    log_path: Path | None,
+    extras: Mapping[str, Any] | None = None,
+    settle_s: float = 0.7,
+    n_reads: int = 5,
+    dry_run: bool = False,
+    label: str = "[power_optimization] ",
+) -> dict[str, Any] | None:
+    """Append the optimizer's final peak reading to the session power JSONL."""
+    ts = datetime.now(timezone.utc).isoformat()
+    extra = dict(extras or {})
+    best = dict((scan or {}).get("best") or {}) if not dry_run else {}
+    power_w = best.get("power_w") if not dry_run else None
+    if not dry_run and power_w is None:
+        print(f"{label}no final peak to log (scan best missing).")
+        return None
+
+    for k in ("a_mm", "b_mm", "tcp_m"):
+        if k in best:
+            extra[k] = best[k]
+    extra = {
+        k: extra[k]
+        for k in ("click_uv", "traj_name", "name", "a_mm", "b_mm", "tcp_m")
+        if k in extra
+    }
+    samples: list[float] = []
+    if power_w is not None:
+        samples = [float(power_w)]
+    entry = {
+        "t_utc": ts,
+        "source": "power_optimization",
+        "settle_s": float(settle_s),
+        "n_reads": int(n_reads),
+        "power_w": float(power_w) if power_w is not None else None,
+        "samples_w": samples,
+        "dry_run": bool(dry_run),
+        "stop_reason": "" if dry_run else str((scan or {}).get("stop_reason") or ""),
+        "extras": extra,
+    }
+    append_power_log(log_path, entry)
+    if power_w is not None:
+        print(f"{label}final power = {float(power_w):.6e} W  (logged peak)")
+    if log_path is not None:
+        print(f"{label}logged -> {log_path}")
+    return entry
+
+
+def append_power_log(log_path: Path | None, entry: Mapping[str, Any]) -> None:
     if log_path is None:
         return
     log_path = Path(log_path)

@@ -25,7 +25,7 @@ Docs: `software_win/high_level_jobs/session/README.md`.
 | `grab_sensor` | Pick → WORK; save `session/records/grab_sensor.json` |
 | `put_sensor` | Reverse grab record → release → WORK |
 | `power_measure` | **Place only** at click; stay; save return traj; optional `save_as=<lib>` |
-| `power_optimization` | PM100 search/climb from insert; stay |
+| `power_optimization` | PM100 search/climb from insert; stay; log final peak to `records/power_logs/` |
 | `record_power` | Settle 1s at pose; average PM100 → `records/power_logs/` |
 | `return` | Recorded traj → WORK (optional `name=<lib>`) |
 | `standby` | Replan current → WORK |

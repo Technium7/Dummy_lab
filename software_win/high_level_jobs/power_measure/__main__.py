@@ -157,6 +157,9 @@ def main() -> int:
         params["insert_power_w"] = record.extras.get("insert_power_w") or 0.0
         params["along_max_w"] = record.extras.get("along_max_w") or 0.0
         params["insert_samples"] = record.extras.get("insert_samples") or []
+        params["power_log_extras"] = {
+            k: record.extras[k] for k in ("click_uv", "traj_name", "name") if k in record.extras
+        }
         try:
             run_power_optimize(cfg, insert, params)
         except KeyboardInterrupt:

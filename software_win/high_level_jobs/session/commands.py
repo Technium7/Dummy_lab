@@ -152,7 +152,8 @@ Commands (type one per line):
   put_sensor           Put sensor back using the saved grab motion
   power_measure        Place sensor at click target, stay, record return traj
                          optional: save_as=<library_name>
-  power_optimization   Search/climb power from current insert pose, stay
+  power_optimization   Search/climb power from current insert pose, stay;
+                         appends final peak to records/power_logs/record_power.jsonl
   record_power         Wait joints quiet, sleep settle_s (1s), then average PM100
   return               Return to WORK (default power_measure record, or name=<lib>)
   standby              Fresh plan from current pose back to WORK
@@ -311,11 +312,32 @@ def cmd_power_optimization(state: SessionState) -> None:
     params["insert_power_w"] = extras.get("insert_power_w") or 0.0
     params["along_max_w"] = extras.get("along_max_w") or 0.0
     params["insert_samples"] = extras.get("insert_samples") or []
+    log_path = Path(state.records_dir) / "power_logs" / POWER_LOG_NAME
+    params["power_log_path"] = log_path
+    params["power_log_extras"] = {
+        k: extras[k] for k in ("click_uv", "traj_name", "name") if k in extras
+    }
     print("[session] power_optimization: search/climb from current pose...")
     if state.dry_run:
+        from high_level_jobs.power_measure.record_power import log_optimization_power
+
+        log_optimization_power(
+            None,
+            log_path=log_path,
+            extras=params["power_log_extras"],
+            settle_s=float(cfg.power_scan.final_hold_s),
+            n_reads=int(cfg.power_scan.final_meter_samples),
+            dry_run=True,
+        )
         print("[session] dry-run: skip execute")
         return
-    run_power_optimize(cfg, insert, params, robot=state.robot)
+    out = run_power_optimize(cfg, insert, params, robot=state.robot)
+    scan = out.get("power_scan") or {}
+    best = (scan.get("best") or {}) if isinstance(scan, dict) else {}
+    if best.get("power_w") is not None:
+        state.power_place_extras["recorded_power_w"] = best["power_w"]
+        state.power_place_extras["opt_a_mm"] = best.get("a_mm")
+        state.power_place_extras["opt_b_mm"] = best.get("b_mm")
     state.armed_at_work = False
     print("[session] power_optimization done; use return or standby.")
 
