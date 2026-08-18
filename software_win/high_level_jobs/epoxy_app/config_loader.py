@@ -56,10 +56,11 @@ class EpoxyConfig:
     record_result_dir: Path
     record_hz: float = 15.0
     zelux: ZeluxCamConfig = ZeluxCamConfig()
+    zelux_front: ZeluxCamConfig = ZeluxCamConfig(index=1)
     infinity: InfinityCamConfig = InfinityCamConfig()
 
     def camera_roles(self) -> tuple[str, ...]:
-        return ("zelux", "infinity")
+        return ("zelux", "zelux_front", "infinity")
 
 
 def _zelux_from_mapping(raw: Mapping[str, Any] | None) -> ZeluxCamConfig:
@@ -100,5 +101,11 @@ def load_epoxy_config(path: Path | str | None = None) -> EpoxyConfig:
         record_result_dir=_resolve_path(result_raw),
         record_hz=float(data.get("record_hz", 15.0)),
         zelux=_zelux_from_mapping(cams.get("zelux")),
+        zelux_front=_zelux_from_mapping(
+            cams.get("zelux_front")
+            or cams.get("zelux_side")
+            or cams.get("front")
+            or {"index": 1}
+        ),
         infinity=_infinity_from_mapping(cams.get("infinity")),
     )

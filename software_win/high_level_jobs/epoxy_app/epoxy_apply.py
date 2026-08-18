@@ -17,7 +17,9 @@ Keys (focus the PyBullet window):
   C  save pending recording
   (WASD / QE / … — normal teleop jog while idle)
 
-OpenCV windows ``epoxy_apply Zelux`` (predictions) and ``epoxy_apply Infinity`` (live view).
+OpenCV windows ``epoxy_apply Zelux side`` (tip / contact / FSM, ``*_zelux.jpg``)
+and ``epoxy_apply Zelux front`` (same overlay, ``*_zelux_front.jpg``).
+``epoxy_apply Infinity`` is live view only.
   x  emergency stop (same as PyBullet X when a camera window has focus)
 """
 
@@ -61,7 +63,8 @@ from manual_control.teleop_tick import KeyInput, PyBulletKeyInput, TeleopTickRes
 from manual_control.urdf_tools import build_package_map, choose_description, discover_descriptions, materialize_urdf
 from robot_config import DEFAULT_ROBOT, default_robot_port, repo_root
 
-_ZELUX_TITLE = "epoxy_apply Zelux"
+_ZELUX_FRONT_TITLE = "epoxy_apply Zelux front"
+_ZELUX_SIDE_TITLE = "epoxy_apply Zelux side"
 _INFINITY_TITLE = "epoxy_apply Infinity"
 _PREVIEW_MAX_WIDTH = 960
 _MOVEMENT_KEYS = frozenset("wsadqehkujiy")
@@ -110,8 +113,10 @@ class EpoxyApplySession:
         ik_cfg: IkStepConfig,
         sim_hz: float,
         recorder: EpisodeRecorder | None = None,
+        vision_engine_front: VisionEngine | None = None,
     ) -> None:
         self.vision = vision_engine
+        self.vision_front = vision_engine_front
         self.epoxy_cfg = epoxy_cfg
         self.control_cfg = control_cfg
         self.ik_cfg = ik_cfg
@@ -231,11 +236,16 @@ class EpoxyApplySession:
             and self._controller.state == ControlState.CHECK_FLOW
         )
         if not in_check_flow:
-            self.vision.reset()
+            self._reset_vision()
         self._vision_paused.clear()
         if self._controller is not None:
             self._controller.set_vision_live(True)
         self._publish(vision_paused=False, ctrl_message="vision armed")
+
+    def _reset_vision(self) -> None:
+        self.vision.reset()
+        if self.vision_front is not None:
+            self.vision_front.reset()
 
     def _snapshot(self) -> dict[str, Any]:
         with self._lock:
@@ -273,7 +283,7 @@ class EpoxyApplySession:
         self._hold_after_estop = False
         self._vision_paused.clear()
         self._mover.clear_abort()
-        self.vision.reset()
+        self._reset_vision()
         self._controller.reset()
         self._controller.set_vision_live(True)
         self._applying = True
@@ -356,26 +366,47 @@ class EpoxyApplySession:
     def _vision_main(self) -> None:
         cv2 = require_cv2()
         zelux: ZeluxCamera | None = None
+        zelux_front: ZeluxCamera | None = None
         infinity: InfinityCamera | None = None
         z = self.epoxy_cfg.zelux
+        zf = self.epoxy_cfg.zelux_front
         inf = self.epoxy_cfg.infinity
-        try:
-            print("[epoxy_apply] Opening Zelux + Infinity…", flush=True)
-            zelux = ZeluxCamera(
-                serial=z.serial or None,
-                exposure_s=max(z.exposure_ms, 0.1) / 1000.0,
-                gain=z.gain,
-                index=z.index,
+
+        def _open_zelux(cfg, *, label: str) -> ZeluxCamera:
+            cam = ZeluxCamera(
+                serial=cfg.serial or None,
+                exposure_s=max(cfg.exposure_ms, 0.1) / 1000.0,
+                gain=cfg.gain,
+                index=cfg.index,
             )
-            zelux.open()
-            cv2.namedWindow(_ZELUX_TITLE, cv2.WINDOW_NORMAL)
-            print(f"[epoxy_apply] Zelux live: {zelux.info.label()}", flush=True)
+            cam.open()
+            print(f"[epoxy_apply] {label} live: {cam.info.label()}", flush=True)
+            return cam
+
+        try:
+            print("[epoxy_apply] Opening Zelux side + front + Infinity…", flush=True)
+            zelux = _open_zelux(z, label="Zelux side")
+            cv2.namedWindow(_ZELUX_SIDE_TITLE, cv2.WINDOW_NORMAL)
             if self.recorder is not None:
                 self.recorder.set_camera_labels({"zelux": zelux.info.label()})
         except Exception as exc:  # noqa: BLE001
-            print(f"[epoxy_apply] Zelux open failed: {exc}", flush=True)
+            print(f"[epoxy_apply] Zelux side open failed: {exc}", flush=True)
             self._publish(camera_ok=False, ctrl_message=f"camera fail: {exc}")
             return
+
+        try:
+            zelux_front = _open_zelux(zf, label="Zelux front")
+            cv2.namedWindow(_ZELUX_FRONT_TITLE, cv2.WINDOW_NORMAL)
+            if self.recorder is not None:
+                labels = dict(self.recorder._camera_labels)
+                labels["zelux_front"] = zelux_front.info.label()
+                self.recorder.set_camera_labels(labels)
+        except Exception as exc:  # noqa: BLE001
+            print(
+                f"[epoxy_apply] Zelux front open failed (side+apply continue): {exc}",
+                flush=True,
+            )
+            zelux_front = None
 
         try:
             infinity = InfinityCamera(
@@ -400,13 +431,14 @@ class EpoxyApplySession:
             )
             infinity = None
 
+        last_front: dict[str, Any] | None = None
         try:
             while not self._stop.is_set():
                 try:
                     frame = zelux.grab_bgr()
                 except Exception as exc:  # noqa: BLE001
                     self._publish(camera_ok=False, inference_ok=False)
-                    print(f"[epoxy_apply] Zelux grab error: {exc}", flush=True)
+                    print(f"[epoxy_apply] Zelux side grab error: {exc}", flush=True)
                     time.sleep(0.05)
                     continue
                 if frame is None:
@@ -417,7 +449,6 @@ class EpoxyApplySession:
                 paused = self._vision_paused.is_set()
                 ctrl = self._snapshot()
                 if paused:
-                    # Live preview only — do not run cascade/filter while tip is moving.
                     vs = ctrl.get("vision_state", VisionState.NOT_TOUCHING)
                     result = {
                         "vision_state": vs,
@@ -438,29 +469,80 @@ class EpoxyApplySession:
                     self.recorder is not None and self.recorder.is_recording
                 )
                 overlay = self._draw_overlay(
-                    cv2, frame, result, ctrl, recording=recording, vision_paused=paused
+                    cv2,
+                    frame,
+                    result,
+                    ctrl,
+                    recording=recording,
+                    vision_paused=paused,
+                    role="side FSM",
                 )
                 shown = resize_max(cv2, overlay, _PREVIEW_MAX_WIDTH)
-                cv2.imshow(_ZELUX_TITLE, shown)
+                cv2.imshow(_ZELUX_SIDE_TITLE, shown)
+
+                status = str(ctrl.get("ctrl_state", "IDLE"))
+                tag = "REC" if recording else ("HOLD" if paused else "LIVE")
+                front_bgr = None
+                if zelux_front is not None:
+                    try:
+                        front_bgr = zelux_front.grab_bgr()
+                        if front_bgr is not None:
+                            if paused:
+                                front_result = last_front or {
+                                    "vision_state": VisionState.NOT_TOUCHING,
+                                    "contact_probability": 0.0,
+                                    "flow_probability": 0.0,
+                                    "phase_name": "paused",
+                                    "tip_xy": None,
+                                    "tip_conf": 0.0,
+                                    "used_crop": False,
+                                    "crop_size": 0,
+                                    "inference_ok": True,
+                                }
+                            elif self.vision_front is not None:
+                                front_result = self.vision_front.process_bgr(front_bgr)
+                                last_front = front_result
+                            else:
+                                front_result = None
+                            if front_result is not None:
+                                front_shown = self._draw_overlay(
+                                    cv2,
+                                    front_bgr,
+                                    front_result,
+                                    ctrl,
+                                    recording=recording,
+                                    vision_paused=paused,
+                                    role="front",
+                                )
+                            else:
+                                front_shown = label_frame(cv2, front_bgr, f"{tag} | {status}")
+                            front_shown = resize_max(cv2, front_shown, _PREVIEW_MAX_WIDTH)
+                            cv2.imshow(_ZELUX_FRONT_TITLE, front_shown)
+                    except Exception as exc:  # noqa: BLE001
+                        print(f"[epoxy_apply] Zelux front grab error: {exc}", flush=True)
 
                 inf_bgr = None
                 if infinity is not None:
                     try:
                         inf_bgr = infinity.grab_bgr()
                         if inf_bgr is not None:
-                            status = str(ctrl.get("ctrl_state", "IDLE"))
-                            tag = "REC" if recording else ("HOLD" if paused else "LIVE")
                             inf_shown = label_frame(cv2, inf_bgr, f"{tag} | {status}")
                             inf_shown = resize_max(cv2, inf_shown, _PREVIEW_MAX_WIDTH)
                             cv2.imshow(_INFINITY_TITLE, inf_shown)
                     except Exception as exc:  # noqa: BLE001
                         print(f"[epoxy_apply] Infinity grab error: {exc}", flush=True)
 
-                if self.recorder is not None and recording and inf_bgr is not None:
-                    self.recorder.ingest_bgr_frames(
-                        {"zelux": frame, "infinity": inf_bgr},
-                        device_labels=self.recorder._camera_labels,
-                    )
+                if self.recorder is not None and recording:
+                    frames_bgr = {"zelux": frame}
+                    if front_bgr is not None:
+                        frames_bgr["zelux_front"] = front_bgr
+                    if inf_bgr is not None:
+                        frames_bgr["infinity"] = inf_bgr
+                    if len(frames_bgr) >= 2:
+                        self.recorder.ingest_bgr_frames(
+                            frames_bgr,
+                            device_labels=self.recorder._camera_labels,
+                        )
 
                 key = cv2.waitKey(1) & 0xFF
                 if key in (ord("x"), ord("X")):
@@ -489,14 +571,14 @@ class EpoxyApplySession:
                         phase_name="paused",
                     )
         finally:
-            for cam in (zelux, infinity):
+            for cam in (zelux, zelux_front, infinity):
                 if cam is None:
                     continue
                 try:
                     cam.close()
                 except Exception:  # noqa: BLE001
                     pass
-            for title in (_ZELUX_TITLE, _INFINITY_TITLE):
+            for title in (_ZELUX_FRONT_TITLE, _ZELUX_SIDE_TITLE, _INFINITY_TITLE):
                 try:
                     cv2.destroyWindow(title)
                 except Exception:  # noqa: BLE001
@@ -511,6 +593,7 @@ class EpoxyApplySession:
         *,
         recording: bool = False,
         vision_paused: bool = False,
+        role: str = "",
     ) -> np.ndarray:
         overlay = frame.copy()
         tip = result.get("tip_xy")
@@ -537,7 +620,7 @@ class EpoxyApplySession:
         if vision_paused:
             vs_txt = "PAUSED (creeping)"
         lines = [
-            f"vision {vs_txt}",
+            f"{role}  vision {vs_txt}".strip(),
             f"contact {result['contact_probability']:.3f}  "
             f"flow {result.get('flow_probability', 0):.3f}  "
             f"phase {result.get('phase_name', '-')}",
@@ -621,6 +704,7 @@ def main(argv: list[str] | None = None) -> int:
     fixed_base = args.fixed_base and not args.floating_base
 
     engine, vcfg = _build_vision_engine(args)
+    engine_front = engine.fork()
     epoxy_cfg = load_epoxy_config(args.epoxy_config)
     control_cfg = ControllerConfig.from_dict(vcfg)
     c = vcfg.get("control", {})
@@ -645,6 +729,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     session = EpoxyApplySession(
         vision_engine=engine,
+        vision_engine_front=engine_front,
         epoxy_cfg=epoxy_cfg,
         control_cfg=control_cfg,
         ik_cfg=ik_cfg,
@@ -670,7 +755,8 @@ def main(argv: list[str] | None = None) -> int:
         "  G = start apply   |   X = emergency stop (hold pose)\n"
         "  R = start/stop recording  |  C = save → record_result\n"
         f"  Record dir: {epoxy_cfg.record_result_dir}\n"
-        "  Live cameras: 'epoxy_apply Zelux' (predictions) + 'epoxy_apply Infinity'.",
+        "  Live cameras: 'epoxy_apply Zelux side' (*_zelux.jpg, FSM) + "
+        "'epoxy_apply Zelux front' (*_zelux_front.jpg) + 'epoxy_apply Infinity'.",
         flush=True,
     )
     session.start()

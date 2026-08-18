@@ -778,7 +778,9 @@ def plan_grasp_segment(
         target_rpy,
         enable_collision_penalty=enable_collision,
         tcp_position_error_m=_tcp_position_error_m_fn(tcp),
-        joint_guess_mode="early",
+        # Short Z insert: J1-first sequencing densifies near-duplicates and
+        # makes the quintic smoother explode (peak_v millions deg/s).
+        joint_guess_mode="linear",
     )
     if traj is None:
         return None, None

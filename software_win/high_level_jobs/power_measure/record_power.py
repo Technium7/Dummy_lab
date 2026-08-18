@@ -26,37 +26,19 @@ def wait_until_joints_quiet(
     timeout_s: float = 10.0,
     label: str = "[record_power] ",
 ) -> bool:
-    """Poll joints until consecutive reads differ by ≤ tol_deg (motion stopped)."""
-    from trajectory_run.run_planned_trajectory import read_physical_joints
-
-    tol = max(1e-3, float(tol_deg))
-    need = max(1, int(stable_reads))
-    poll = max(0.05, float(poll_s))
-    deadline = time.perf_counter() + max(0.5, float(timeout_s))
-    prev: list[float] | None = None
-    stable = 0
-    print(
-        f"{label}waiting for joints quiet "
-        f"(tol≤{tol:.3f} deg, {need} stable reads, timeout {timeout_s:g}s)..."
+    """Poll joints until consecutive GETJPOS reads differ by ≤ tol_deg."""
+    from trajectory_run.run_planned_trajectory import (
+        wait_until_joints_quiet as _wait_quiet,
     )
-    while time.perf_counter() < deadline:
-        cur = read_physical_joints(robot)
-        if cur is None:
-            time.sleep(poll)
-            continue
-        if prev is not None:
-            err = float(np.max(np.abs(np.asarray(cur[:6]) - np.asarray(prev[:6]))))
-            if err <= tol:
-                stable += 1
-                if stable >= need:
-                    print(f"{label}joints quiet (Δ≤{err:.4f} deg).")
-                    return True
-            else:
-                stable = 0
-        prev = list(cur[:6])
-        time.sleep(poll)
-    print(f"{label}warning: joints not quiet within {timeout_s:g}s; continuing.")
-    return False
+
+    return _wait_quiet(
+        robot,
+        tol_deg=tol_deg,
+        stable_reads=stable_reads,
+        poll_s=poll_s,
+        timeout_s=timeout_s,
+        label=label,
+    )
 
 
 def _pin_current_pose(robot: Any, *, label: str = "") -> None:

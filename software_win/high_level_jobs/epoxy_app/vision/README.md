@@ -46,8 +46,11 @@ Apply runs save as `dataset/record_result/result_######/`. Prefill from the casc
 
 ```powershell
 python -m high_level_jobs.epoxy_app.vision.label_tool --results --episode 1 --seed-checkpoint --device cuda
+# same contact/phase keys while viewing the front camera:
+python -m high_level_jobs.epoxy_app.vision.label_tool --results --episode 1 --camera front
 # optional tip labels on the same take:
 python -m high_level_jobs.epoxy_app.vision.tip_label_tool --results --episode 1
+python -m high_level_jobs.epoxy_app.vision.tip_label_tool --results --episode 1 --camera front
 # preview predictions:
 python -m high_level_jobs.epoxy_app.vision.demo_episode --results --episode 1 --device cuda
 ```
@@ -57,11 +60,13 @@ Labeled `result_*` episodes are **auto-added to train** the next time you run `v
 
 ```powershell
 python -m high_level_jobs.epoxy_app.vision.tip_label_tool --episode 1
+# front Zelux (writes tip_front, does not overwrite side tip):
+python -m high_level_jobs.epoxy_app.vision.tip_label_tool --results --episode 14 --camera front
 ```
 
 Click = tip · `a/d` navigate · `x` clear · `w` save. Sparse tips OK — training interpolates between marks (`tip.interpolate_labels`).
 
-Writes `"tip": {"x": …, "y": …}` into `labels.json`.
+Writes `"tip"` (side / `*_zelux.jpg`) or `"tip_front"` (front / `*_zelux_front.jpg`) into `labels.json`.
 
 ## 2c. Review / auto-label more episodes (after tip_train)
 
@@ -71,6 +76,8 @@ python -m high_level_jobs.epoxy_app.vision.tip_review_tool --episode 6 --device 
 python -m high_level_jobs.epoxy_app.vision.tip_review_tool --episode 6 --device cuda --fill-on-start
 # re-predict model tips with temporal tracking (keeps human clicks):
 python -m high_level_jobs.epoxy_app.vision.tip_review_tool --episode 6 --device cuda --refill-model
+# same on the front camera:
+python -m high_level_jobs.epoxy_app.vision.tip_review_tool --results --episode 14 --device cuda --camera front --fill-on-start
 ```
 
 Green cross = model pred · cyan circle = human tip · orange = model-saved tip.  
@@ -123,7 +130,7 @@ python -m high_level_jobs.epoxy_app.epoxy_apply --sim-only
 5. **`R`** start/stop recording the run; **`C`** saves to `dataset/record_result/result_######/` (not training `episodes/`).
 6. Label/correct that take, then retrain — see §2a.
 
-Live overlays: `epoxy_apply Zelux` (tip / contact / phase / FSM) and `epoxy_apply Infinity` (live view). Vision still runs on Zelux only.
+Live overlays: `epoxy_apply Zelux side` (tip / contact / phase + FSM, `*_zelux.jpg`) and `epoxy_apply Zelux front` (same weights, `*_zelux_front.jpg`). Apply FSM uses **side**. Infinity is live view only. **R** records all live cameras into the same `result_######` frames.
 
 ## Safety
 

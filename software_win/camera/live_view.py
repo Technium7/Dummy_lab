@@ -48,13 +48,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--list", action="store_true", help="List detected cameras and exit")
     p.add_argument("--demo", action="store_true", help="Synthetic frames (no hardware)")
 
-    p.add_argument("--front-serial", default="", help="Thorlabs serial for front Zelux")
-    p.add_argument("--front-index", type=int, default=0, help="Front Zelux index if serial omitted")
+    p.add_argument("--front-serial", default="38862", help="Thorlabs serial for front Zelux")
+    p.add_argument("--front-index", type=int, default=1, help="Front Zelux index if serial omitted")
     p.add_argument("--front-exposure-ms", type=float, default=10.0, help="Initial front exposure (ms)")
     p.add_argument("--front-gain", type=float, default=0.0, help="Initial front gain")
 
-    p.add_argument("--side-serial", default="", help="Thorlabs serial for side Zelux")
-    p.add_argument("--side-index", type=int, default=1, help="Side Zelux index if serial omitted")
+    p.add_argument("--side-serial", default="35968", help="Thorlabs serial for side Zelux")
+    p.add_argument("--side-index", type=int, default=0, help="Side Zelux index if serial omitted")
     p.add_argument("--side-exposure-ms", type=float, default=10.0, help="Initial side exposure (ms)")
     p.add_argument("--side-gain", type=float, default=0.0, help="Initial side gain")
 

@@ -38,10 +38,13 @@ from high_level_jobs.epoxy_app.config_loader import load_epoxy_config
 from high_level_jobs.epoxy_app.view_episode import resolve_episode
 from high_level_jobs.epoxy_app.vision.config_util import load_vision_config, resolve_repo_path
 from high_level_jobs.epoxy_app.vision.dataset import (
-    list_zelux_stems,
+    camera_frame_path,
+    list_camera_stems,
     load_labels,
+    normalize_camera_role,
     parse_tip,
     save_labels,
+    tip_key_for_role,
 )
 from high_level_jobs.epoxy_app.vision.preprocess import bgr_to_gray, to_model_tensor
 from high_level_jobs.epoxy_app.vision.tip_model import build_tip_model, load_tip_checkpoint
@@ -56,15 +59,15 @@ def _ensure_row(labels: dict, stem: str) -> dict:
     return row
 
 
-def set_tip(labels: dict, stem: str, x: float, y: float, *, source: str = "human") -> None:
+def set_tip(labels: dict, stem: str, x: float, y: float, *, source: str = "human", key: str = "tip") -> None:
     row = _ensure_row(labels, stem)
-    row["tip"] = {"x": float(x), "y": float(y), "source": source}
+    row[key] = {"x": float(x), "y": float(y), "source": source}
 
 
-def clear_tip(labels: dict, stem: str) -> None:
+def clear_tip(labels: dict, stem: str, *, key: str = "tip") -> None:
     row = labels.get(stem)
-    if row and "tip" in row:
-        del row["tip"]
+    if row and key in row:
+        del row[key]
 
 
 def _load_tip_net(vcfg: dict, device: torch.device, checkpoint: str | None):
@@ -114,12 +117,13 @@ def _run_tracked_preds(
     image_size: int,
     device: torch.device,
     tip_cfg: dict,
+    role: str = "zelux",
 ) -> dict[str, tuple[float, float, float]]:
     """Predict tips in order with temporal tracking (avoids apply-blob lock)."""
     tracker = TipTracker(TipTrackConfig.from_tip_cfg(tip_cfg))
     preds: dict[str, tuple[float, float, float]] = {}
     for stem in stems:
-        path = episode_dir / f"{stem}_zelux.jpg"
+        path = camera_frame_path(episode_dir, stem, role)
         bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if bgr is None:
             preds[stem] = (0.0, 0.0, 0.0)
@@ -151,6 +155,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Overwrite tips with source=model using tracked predictions (keeps human tips)",
     )
+    parser.add_argument(
+        "--camera",
+        default="zelux",
+        help="zelux/side (*_zelux.jpg) or zelux_front/front (*_zelux_front.jpg)",
+    )
     args = parser.parse_args(argv)
 
     vcfg = load_vision_config(args.vision_config)
@@ -163,9 +172,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Episode not found under {dataset_dir}: {args.episode}", file=sys.stderr)
         return 1
 
-    stems = list_zelux_stems(episode_dir)
+    role = normalize_camera_role(args.camera)
+    tip_key = tip_key_for_role(role)
+    stems = list_camera_stems(episode_dir, role)
     if not stems:
-        print(f"No *_zelux.jpg in {episode_dir}", file=sys.stderr)
+        print(f"No *_{role}.jpg in {episode_dir}", file=sys.stderr)
         return 1
 
     device_s = args.device
@@ -202,6 +213,7 @@ def main(argv: list[str] | None = None) -> int:
             image_size=image_size,
             device=device,
             tip_cfg=tip_cfg,
+            role=role,
         )
 
     def ensure_pred(stem: str) -> tuple[float, float, float]:
@@ -214,15 +226,15 @@ def main(argv: list[str] | None = None) -> int:
         n_fill = 0
         for stem in stems:
             row = labels.get(stem) or {}
-            tip = row.get("tip") if isinstance(row, dict) else None
+            tip = row.get(tip_key) if isinstance(row, dict) else None
             src = str(tip.get("source") or "") if isinstance(tip, dict) else ""
             if args.refill_model:
                 if tip is not None and src == "human":
                     continue
-            elif parse_tip(labels.get(stem)) is not None:
+            elif parse_tip(labels.get(stem), key=tip_key) is not None:
                 continue
             x, y, _c = preds[stem]
-            set_tip(labels, stem, x, y, source="model")
+            set_tip(labels, stem, x, y, source="model", key=tip_key)
             n_fill += 1
         dirty = n_fill > 0
         mode = "refill-model" if args.refill_model else "fill missing"
@@ -239,28 +251,28 @@ def main(argv: list[str] | None = None) -> int:
 
     cv2.setMouseCallback(win, on_mouse)
 
-    print(f"Review {episode_dir.name} ({len(stems)} frames)")
+    print(f"Review {episode_dir.name} {role} ({len(stems)} frames)")
     print("click=fix  space=accept pred  f=fill missing  a/d [/]  x clear  w save  q quit")
 
     while True:
         stem = stems[idx]
-        path = episode_dir / f"{stem}_zelux.jpg"
+        path = camera_frame_path(episode_dir, stem, role)
         img = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if img is None:
             idx = min(idx + 1, len(stems) - 1)
             continue
 
         if click["xy"] is not None:
-            set_tip(labels, stem, click["xy"][0], click["xy"][1], source="human")
+            set_tip(labels, stem, click["xy"][0], click["xy"][1], source="human", key=tip_key)
             click["xy"] = None
             dirty = True
 
         px, py, pconf = ensure_pred(stem)
-        saved = parse_tip(labels.get(stem))
+        saved = parse_tip(labels.get(stem), key=tip_key)
         src = ""
         row = labels.get(stem) or {}
-        if isinstance(row.get("tip"), dict):
-            src = str(row["tip"].get("source") or "")
+        if isinstance(row.get(tip_key), dict):
+            src = str(row[tip_key].get("source") or "")
 
         display = img.copy()
         # Model prediction (green)
@@ -283,7 +295,7 @@ def main(argv: list[str] | None = None) -> int:
             else "saved=NONE"
         )
         lines = [
-            f"{idx + 1}/{len(stems)}  {stem}",
+            f"{idx + 1}/{len(stems)}  {path.name}",
             f"pred=({px:.0f},{py:.0f}) conf={pconf:.2f}",
             tip_line,
             "click fix | space accept | f fill | a/d [/] | x | w | q",
@@ -296,17 +308,17 @@ def main(argv: list[str] | None = None) -> int:
         key = cv2.waitKey(30) & 0xFF
 
         if key == ord(" "):
-            set_tip(labels, stem, px, py, source="model")
+            set_tip(labels, stem, px, py, source="model", key=tip_key)
             dirty = True
             idx = min(idx + 1, len(stems) - 1)
         elif key == ord("f"):
             ensure_all_preds()
             n_fill = 0
             for s in stems:
-                if parse_tip(labels.get(s)) is not None:
+                if parse_tip(labels.get(s), key=tip_key) is not None:
                     continue
                 x, y, _c = preds[s]
-                set_tip(labels, s, x, y, source="model")
+                set_tip(labels, s, x, y, source="model", key=tip_key)
                 n_fill += 1
             dirty = dirty or n_fill > 0
             print(f"Filled {n_fill} missing tips with tracked model")
@@ -319,7 +331,7 @@ def main(argv: list[str] | None = None) -> int:
         elif key == ord("["):
             idx = max(idx - 10, 0)
         elif key == ord("x"):
-            clear_tip(labels, stem)
+            clear_tip(labels, stem, key=tip_key)
             dirty = True
         elif key == ord("w"):
             save_labels(episode_dir, labels)

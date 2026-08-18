@@ -52,8 +52,12 @@ def _http_post_json(url: str, headers: dict[str, str], payload: dict[str, Any], 
     # Some hosts (e.g. Groq/Cloudflare) reject urllib's default User-Agent (403/1010).
     hdrs = {"User-Agent": "DummyLab-high_level_jobs/1.0", **headers}
     req = urllib.request.Request(url, data=data, headers=hdrs, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
-        body = resp.read().decode("utf-8")
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
+            body = resp.read().decode("utf-8")
+    except urllib.error.HTTPError as e:
+        err_body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"HTTP {e.code} {e.reason}: {err_body[:800]}") from e
     return json.loads(body)
 
 
@@ -147,21 +151,44 @@ class OpenAICompatClient:
         if not self.api_key:
             raise RuntimeError("OPENAI_API_KEY is not set for OpenAICompatClient")
         url = f"{self.base_url}/chat/completions"
-        # temperature 0 + json_object => stable, parseable plans (Groq/OpenAI-compat).
-        payload: dict[str, Any] = {
+        messages = [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ]
+        base: dict[str, Any] = {
             "model": self.model,
-            "messages": [
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
-            "temperature": 0,
-            "response_format": {"type": "json_object"},
+            "messages": messages,
+            "max_tokens": 4096,
         }
+        model_id = str(self.model or "")
+        if "gpt-oss" in model_id:
+            # Reasoning models often 400 in json_object mode; keep CoT short.
+            base["reasoning_effort"] = "low"
+
+        # Groq JSON-object mode can 400 if the model emits non-JSON (common on gpt-oss).
+        attempts: list[dict[str, Any]] = [
+            {**base, "temperature": 0, "response_format": {"type": "json_object"}},
+            {**base, "temperature": 0},
+            dict(base),
+        ]
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
-        out = _http_post_json(url, headers, payload, self.timeout_sec)
+        last_err: Exception | None = None
+        out: dict[str, Any] | None = None
+        for payload in attempts:
+            try:
+                out = _http_post_json(url, headers, payload, self.timeout_sec)
+                break
+            except RuntimeError as e:
+                last_err = e
+                msg = str(e)
+                if "HTTP 400" in msg or "HTTP 429" in msg:
+                    continue
+                raise
+        if out is None:
+            raise last_err if last_err is not None else RuntimeError("chat/completions failed")
         try:
             return str(out["choices"][0]["message"]["content"])
         except (KeyError, IndexError, TypeError) as e:

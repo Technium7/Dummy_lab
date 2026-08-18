@@ -11,9 +11,14 @@ record_result_dir: software_win/high_level_jobs/epoxy_app/dataset/record_result
 record_hz: 15.0
 # --- Cameras (opened only while R recording is active) ---
 cameras:
-  zelux:
-    serial: ""          # optional Thorlabs serial; empty = first device / index
-    index: 0
+  zelux:                # SIDE Zelux — *_zelux.jpg, tip/contact train + apply FSM
+    serial: "35968"
+    index: 0            # ignored when serial is set
+    exposure_ms: 10.0
+    gain: 0.0
+  zelux_front:          # FRONT Zelux — *_zelux_front.jpg, same tip/contact overlay
+    serial: "38862"
+    index: 1
     exposure_ms: 10.0
     gain: 0.0
   infinity:

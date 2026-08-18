@@ -21,7 +21,14 @@ if str(_SOFTWARE_WIN) not in sys.path:
 
 from high_level_jobs.epoxy_app.config_loader import load_epoxy_config
 from high_level_jobs.epoxy_app.view_episode import resolve_episode
-from high_level_jobs.epoxy_app.vision.dataset import list_zelux_stems, load_labels, save_labels
+from high_level_jobs.epoxy_app.vision.dataset import (
+    camera_frame_path,
+    list_camera_stems,
+    load_labels,
+    normalize_camera_role,
+    save_labels,
+    tip_key_for_role,
+)
 
 
 def _ensure_row(labels: dict, stem: str) -> dict:
@@ -32,15 +39,15 @@ def _ensure_row(labels: dict, stem: str) -> dict:
     return row
 
 
-def set_tip(labels: dict, stem: str, x: float, y: float) -> None:
+def set_tip(labels: dict, stem: str, x: float, y: float, *, key: str = "tip") -> None:
     row = _ensure_row(labels, stem)
-    row["tip"] = {"x": float(x), "y": float(y)}
+    row[key] = {"x": float(x), "y": float(y)}
 
 
-def clear_tip(labels: dict, stem: str) -> None:
+def clear_tip(labels: dict, stem: str, *, key: str = "tip") -> None:
     row = labels.get(stem)
-    if row and "tip" in row:
-        del row["tip"]
+    if row and key in row:
+        del row[key]
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -51,6 +58,11 @@ def main(argv: list[str] | None = None) -> int:
         "--results",
         action="store_true",
         help="Use dataset/record_result (apply runs) instead of training episodes/",
+    )
+    parser.add_argument(
+        "--camera",
+        default="zelux",
+        help="zelux/side (*_zelux.jpg) or zelux_front/front (*_zelux_front.jpg)",
     )
     args = parser.parse_args(argv)
 
@@ -63,9 +75,11 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Episode not found under {dataset_dir}: {args.episode}", file=sys.stderr)
         return 1
 
-    stems = list_zelux_stems(episode_dir)
+    role = normalize_camera_role(args.camera)
+    tip_key = tip_key_for_role(role)
+    stems = list_camera_stems(episode_dir, role)
     if not stems:
-        print(f"No *_zelux.jpg in {episode_dir}", file=sys.stderr)
+        print(f"No *_{role}.jpg in {episode_dir}", file=sys.stderr)
         return 1
 
     labels = load_labels(episode_dir)
@@ -82,25 +96,25 @@ def main(argv: list[str] | None = None) -> int:
 
     cv2.setMouseCallback(win, on_mouse)
 
-    print(f"Tip-labeling {episode_dir.name} ({len(stems)} Zelux frames)")
+    print(f"Tip-labeling {episode_dir.name} {role} ({len(stems)} frames)")
     print("click=tip  a/d nav  [/] ±10  x clear  w save  q quit")
     print("Sparse tips OK — training can interpolate between marked frames.")
 
     while True:
         stem = stems[idx]
-        path = episode_dir / f"{stem}_zelux.jpg"
+        path = camera_frame_path(episode_dir, stem, role)
         img = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if img is None:
             idx = min(idx + 1, len(stems) - 1)
             continue
 
         if click["xy"] is not None:
-            set_tip(labels, stem, click["xy"][0], click["xy"][1])
+            set_tip(labels, stem, click["xy"][0], click["xy"][1], key=tip_key)
             click["xy"] = None
             dirty = True
 
         row = labels.get(stem) or {}
-        tip = row.get("tip")
+        tip = row.get(tip_key)
         display = img.copy()
         if tip and "x" in tip and "y" in tip:
             tx, ty = int(round(float(tip["x"]))), int(round(float(tip["y"])))
@@ -111,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
 
         tip_txt = f"tip=({tip['x']:.0f},{tip['y']:.0f})" if tip else "tip=NONE"
         lines = [
-            f"{idx + 1}/{len(stems)}  {stem}_zelux.jpg",
+            f"{idx + 1}/{len(stems)}  {path.name}",
             tip_txt,
             "click tip | a/d [/] x clear w q",
         ]
@@ -131,7 +145,7 @@ def main(argv: list[str] | None = None) -> int:
         elif key == ord("["):
             idx = max(idx - 10, 0)
         elif key == ord("x"):
-            clear_tip(labels, stem)
+            clear_tip(labels, stem, key=tip_key)
             dirty = True
         elif key == ord("w"):
             save_labels(episode_dir, labels)

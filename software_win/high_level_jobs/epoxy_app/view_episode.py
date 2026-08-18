@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dual-view episode player for epoxy demos (Zelux + Infinity, one control bar).
+"""Episode player for epoxy demos (Zelux front / side / Infinity, one control bar).
 
 Usage::
 
@@ -26,7 +26,13 @@ from PIL import Image, ImageTk
 
 from high_level_jobs.epoxy_app.config_loader import load_epoxy_config
 
-_ROLES = ("zelux", "infinity")
+_ROLES = ("zelux", "zelux_front", "infinity")
+_ROLE_ALIASES = {"zelux_front": ("zelux_side",)}
+_ROLE_TITLES = {
+    "zelux": "ZELUX SIDE",
+    "zelux_front": "ZELUX FRONT",
+    "infinity": "INFINITY",
+}
 _PREVIEW_MAX = 720
 _SPEEDS = (0.25, 0.5, 1.0, 1.5, 2.0, 4.0)
 
@@ -112,6 +118,12 @@ def load_frames(episode_dir: Path) -> tuple[list[FrameRef], float]:
         paths: dict[str, Path] = {}
         for role in _ROLES:
             img = episode_dir / _color_filename(stem, role)
+            if not img.is_file():
+                for alias in _ROLE_ALIASES.get(role, ()):
+                    alt = episode_dir / _color_filename(stem, alias)
+                    if alt.is_file():
+                        img = alt
+                        break
             if img.is_file():
                 paths[role] = img
         if len(paths) < 2:
@@ -264,13 +276,14 @@ class EpisodeViewer:
         views.pack(fill="both", expand=True)
         views.columnconfigure(0, weight=1)
         views.columnconfigure(1, weight=1)
+        views.columnconfigure(2, weight=1)
         views.rowconfigure(1, weight=1)
 
         self.view_labels: dict[str, Any] = {}
         for col, role in enumerate(_ROLES):
-            ttk.Label(views, text=role.upper(), font=("Segoe UI", 11, "bold")).grid(
-                row=0, column=col, sticky="w", padx=(4, 4)
-            )
+            ttk.Label(
+                views, text=_ROLE_TITLES.get(role, role.upper()), font=("Segoe UI", 11, "bold")
+            ).grid(row=0, column=col, sticky="w", padx=(4, 4))
             panel = tk.Label(
                 views,
                 background="#111111",

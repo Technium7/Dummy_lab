@@ -89,15 +89,63 @@ def stems_before_removing(stems: Sequence[str], labels: dict[str, dict[str, Any]
     return list(stems[:cut])
 
 
-def parse_tip(row: dict[str, Any] | None) -> tuple[float, float] | None:
+def parse_tip(row: dict[str, Any] | None, *, key: str = "tip") -> tuple[float, float] | None:
     if not row:
         return None
-    tip = row.get("tip")
+    tip = row.get(key)
     if not isinstance(tip, dict):
         return None
     if "x" not in tip or "y" not in tip:
         return None
     return float(tip["x"]), float(tip["y"])
+
+
+CAMERA_ROLE_ALIASES = {
+    "zelux": "zelux",
+    "side": "zelux",
+    "zelux_front": "zelux_front",
+    "front": "zelux_front",
+    "zelux_side": "zelux_front",
+}
+TIP_KEY_FOR_ROLE = {
+    "zelux": "tip",
+    "zelux_front": "tip_front",
+}
+
+
+def normalize_camera_role(raw: str | None) -> str:
+    key = str(raw or "zelux").strip().lower()
+    if key not in CAMERA_ROLE_ALIASES:
+        raise ValueError(
+            f"Unknown camera {raw!r}. Use zelux/side or zelux_front/front."
+        )
+    return CAMERA_ROLE_ALIASES[key]
+
+
+def tip_key_for_role(role: str) -> str:
+    return TIP_KEY_FOR_ROLE[normalize_camera_role(role)]
+
+
+def camera_frame_path(episode_dir: Path, stem: str, role: str = "zelux") -> Path:
+    role = normalize_camera_role(role)
+    path = Path(episode_dir) / f"{stem}_{role}.jpg"
+    if path.is_file():
+        return path
+    if role == "zelux_front":
+        alt = Path(episode_dir) / f"{stem}_zelux_side.jpg"
+        if alt.is_file():
+            return alt
+    return path
+
+
+def list_camera_stems(episode_dir: Path, role: str = "zelux") -> list[str]:
+    role = normalize_camera_role(role)
+    suffix = f"_{role}.jpg"
+    paths = sorted(Path(episode_dir).glob(f"*{suffix}"))
+    if not paths and role == "zelux_front":
+        suffix = "_zelux_side.jpg"
+        paths = sorted(Path(episode_dir).glob(f"*{suffix}"))
+    return [p.name[: -len(suffix)] for p in paths]
 
 
 def interpolate_tips_along_stems(
@@ -155,7 +203,10 @@ def discover_tip_labeled_episodes(*dataset_dirs: Path) -> list[Path]:
                 if not p.is_dir():
                     continue
                 labels = load_labels(p)
-                if any(parse_tip(row) is not None for row in labels.values()):
+                if any(
+                    parse_tip(row) is not None or parse_tip(row, key="tip_front") is not None
+                    for row in labels.values()
+                ):
                     found.append(p)
     return sorted(found, key=lambda p: p.name)
 
@@ -199,8 +250,7 @@ def save_labels(episode_dir: Path, frames: dict[str, dict[str, Any]]) -> None:
 
 
 def list_zelux_stems(episode_dir: Path) -> list[str]:
-    paths = sorted(episode_dir.glob("*_zelux.jpg"))
-    return [p.name[: -len("_zelux.jpg")] for p in paths]
+    return list_camera_stems(episode_dir, "zelux")
 
 
 def discover_labeled_episodes(*dataset_dirs: Path) -> list[Path]:
@@ -249,12 +299,20 @@ def load_episode_samples(
     tip_map = (
         interpolate_tips_along_stems(stems, tip_marked) if interpolate_tips else dict(tip_marked)
     )
+    front_marked = {
+        s: t for s in stems if (t := parse_tip(labels.get(s), key="tip_front")) is not None
+    }
+    front_tip_map = (
+        interpolate_tips_along_stems(stems, front_marked) if interpolate_tips else dict(front_marked)
+    )
     samples: list[FrameSample] = []
     prev: Path | None = None
+    prev_front: Path | None = None
     for stem in stems:
         row = labels.get(stem)
         if row is None:
-            prev = episode_dir / f"{stem}_zelux.jpg"
+            prev = camera_frame_path(episode_dir, stem, "zelux")
+            prev_front = camera_frame_path(episode_dir, stem, "zelux_front")
             continue
 
         state = (row.get("state") or "").strip().upper() or None
@@ -275,23 +333,38 @@ def load_episode_samples(
             # Legacy contact/flow without state name
             phase = 1 if flow == 1 else 0
 
-        path = episode_dir / f"{stem}_zelux.jpg"
-        if not path.exists():
-            continue
-        samples.append(
-            FrameSample(
-                episode_id=episode_dir.name,
-                stem=stem,
-                frame_path=path,
-                prev_frame_path=prev,
-                contact=contact,
-                flow=flow,
-                state=state,
-                phase=phase,
-                tip_xy=tip_map.get(stem),
+        path = camera_frame_path(episode_dir, stem, "zelux")
+        if path.exists():
+            samples.append(
+                FrameSample(
+                    episode_id=episode_dir.name,
+                    stem=stem,
+                    frame_path=path,
+                    prev_frame_path=prev,
+                    contact=contact,
+                    flow=flow,
+                    state=state,
+                    phase=phase,
+                    tip_xy=tip_map.get(stem),
+                )
             )
-        )
-        prev = path
+            prev = path
+        front_path = camera_frame_path(episode_dir, stem, "zelux_front")
+        if front_path.exists():
+            samples.append(
+                FrameSample(
+                    episode_id=episode_dir.name,
+                    stem=f"{stem}_front",
+                    frame_path=front_path,
+                    prev_frame_path=prev_front if prev_front and prev_front.exists() else None,
+                    contact=contact,
+                    flow=flow,
+                    state=state,
+                    phase=phase,
+                    tip_xy=front_tip_map.get(stem),
+                )
+            )
+            prev_front = front_path
     return samples
 
 
@@ -299,12 +372,35 @@ def load_tip_samples(
     episode_dir: Path,
     *,
     interpolate_tips: bool = True,
+    role: str | None = None,
 ) -> list[FrameSample]:
     """Frames with tip coordinates (marked or interpolated) for TipNet training."""
+    roles = (normalize_camera_role(role),) if role else ("zelux", "zelux_front")
+    samples: list[FrameSample] = []
+    for cam_role in roles:
+        samples.extend(
+            _load_tip_samples_for_role(
+                episode_dir, cam_role, interpolate_tips=interpolate_tips
+            )
+        )
+    return samples
+
+
+def _load_tip_samples_for_role(
+    episode_dir: Path,
+    role: str,
+    *,
+    interpolate_tips: bool,
+) -> list[FrameSample]:
     labels = load_labels(episode_dir)
-    stems_all = list_zelux_stems(episode_dir)
+    stems_all = list_camera_stems(episode_dir, role)
+    if not stems_all:
+        return []
     stems = stems_before_removing(stems_all, labels)
-    tip_marked = {s: t for s in stems if (t := parse_tip(labels.get(s))) is not None}
+    tip_key = tip_key_for_role(role)
+    tip_marked = {
+        s: t for s in stems if (t := parse_tip(labels.get(s), key=tip_key)) is not None
+    }
     if not tip_marked:
         return []
     tip_map = (
@@ -313,7 +409,7 @@ def load_tip_samples(
     samples: list[FrameSample] = []
     prev: Path | None = None
     for stem in stems:
-        path = episode_dir / f"{stem}_zelux.jpg"
+        path = camera_frame_path(episode_dir, stem, role)
         tip = tip_map.get(stem)
         if tip is None or not path.exists():
             prev = path if path.exists() else prev
@@ -321,7 +417,7 @@ def load_tip_samples(
         samples.append(
             FrameSample(
                 episode_id=episode_dir.name,
-                stem=stem,
+                stem=stem if role == "zelux" else f"{stem}_front",
                 frame_path=path,
                 prev_frame_path=prev,
                 contact=0,

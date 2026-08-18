@@ -42,7 +42,7 @@ Optional: set `THORLABS_TSI_DLL_PATH` if ThorCam DLLs are not under the default 
 python software_win\camera\list_devices.py
 python software_win\camera\live_view.py          # Zelux front + side + Infinity
 python software_win\camera\live_view.py --demo  # no hardware
-python software_win\camera\live_view.py --front-serial <SN1> --side-serial <SN2>
+python software_win\camera\live_view.py --front-serial 38862 --side-serial 35968
 python software_win\camera\live_view.py --zelux-only   # front + side only
 python software_win\camera\live_zelux.py --serial <SN>
 python software_win\camera\live_infinity.py --opencv-index 0

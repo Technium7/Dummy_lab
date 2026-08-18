@@ -55,11 +55,24 @@ class VisionEngine:
         self.device = device
         self.image_size = image_size
         self.contact_threshold = contact_threshold
+        self.filter_cfg = filter_cfg
         self.filter = TemporalVisionFilter(filter_cfg)
         self.tip_model = tip_model
         self.tip_cfg = tip_cfg or {"enabled": False}
         self.tip_tracker = TipTracker(TipTrackConfig.from_tip_cfg(self.tip_cfg))
         self._prev: np.ndarray | None = None
+
+    def fork(self) -> "VisionEngine":
+        """Same weights, independent tip track + temporal filter (second camera)."""
+        return VisionEngine(
+            self.model,
+            self.device,
+            self.image_size,
+            self.filter_cfg,
+            contact_threshold=self.contact_threshold,
+            tip_model=self.tip_model,
+            tip_cfg=dict(self.tip_cfg),
+        )
 
     def reset(self) -> None:
         self.filter.reset()

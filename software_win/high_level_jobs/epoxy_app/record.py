@@ -30,7 +30,11 @@ from manual_control.teleop_tick import TeleopTickResult
 
 from .config_loader import EpoxyConfig, InfinityCamConfig, ZeluxCamConfig
 
-_PREVIEW_TITLES = {"zelux": "epoxy Zelux", "infinity": "epoxy Infinity"}
+_PREVIEW_TITLES = {
+    "zelux": "epoxy Zelux side",
+    "zelux_front": "epoxy Zelux front",
+    "infinity": "epoxy Infinity",
+}
 _PREVIEW_MAX_WIDTH = 960
 
 
@@ -198,25 +202,36 @@ class EpisodeRecorder:
         self._staging_dir = self._staging_root() / "current"
         self._staging_dir.mkdir(parents=True, exist_ok=True)
         self._frame_idx = 0
+        roles = self.cfg.camera_roles()
+        cameras_meta: list[dict[str, Any]] = [
+            {
+                "role": "zelux",
+                "serial": self.cfg.zelux.serial,
+                "index": self.cfg.zelux.index,
+            },
+            {
+                "role": "zelux_front",
+                "serial": self.cfg.zelux_front.serial,
+                "index": self.cfg.zelux_front.index,
+            },
+            {
+                "role": "infinity",
+                "camera_number": self.cfg.infinity.camera_number,
+                "opencv_index": self.cfg.infinity.opencv_index,
+            },
+        ]
+        if self._camera_labels:
+            cameras_meta = [
+                {"role": role, "label": self._camera_labels.get(role, "")}
+                for role in roles
+            ]
         meta = {
             "created": time.time(),
             "record_hz": self.cfg.record_hz,
             "task": self.task_name,
-            "num_cameras": 2,
-            "cameras": [
-                {"role": "zelux", "serial": self.cfg.zelux.serial},
-                {
-                    "role": "infinity",
-                    "camera_number": self.cfg.infinity.camera_number,
-                    "opencv_index": self.cfg.infinity.opencv_index,
-                },
-            ],
+            "num_cameras": len(cameras_meta),
+            "cameras": cameras_meta,
         }
-        if self._camera_labels:
-            meta["cameras"] = [
-                {"role": role, "label": self._camera_labels.get(role, "")}
-                for role in ("zelux", "infinity")
-            ]
         (self._staging_dir / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
         self._next_save_s = 0.0
 
@@ -320,7 +335,7 @@ class EpisodeRecorder:
         """Save a synchronized frame pair when recording (external camera owners)."""
         if self.own_cameras or not self._recording_active.is_set():
             return
-        if "zelux" not in frames_bgr or "infinity" not in frames_bgr:
+        if "zelux" not in frames_bgr:
             return
         now = time.perf_counter()
         period = 1.0 / max(self.cfg.record_hz, 1.0)
@@ -368,9 +383,7 @@ class EpisodeRecorder:
         snap: _RecordSnapshot,
         frames_by_role: dict[str, _GrabbedFrame],
     ) -> dict[str, Any] | None:
-        if self._staging_dir is None:
-            return None
-        if "zelux" not in frames_by_role or "infinity" not in frames_by_role:
+        if self._staging_dir is None or "zelux" not in frames_by_role:
             return None
         joint_vel_deg_s = [
             sim_vel_rad_to_transformed_deg_s(i, float(snap.commanded_velocity[i]))
@@ -505,15 +518,8 @@ class EpisodeRecorder:
             if cameras:
                 return True
             try:
-                print("[epoxy_app] Opening Zelux + Infinity for live view...", flush=True)
+                print("[epoxy_app] Opening Zelux side + front + Infinity…", flush=True)
                 cameras["zelux"] = _open_zelux(self.cfg.zelux)
-                cameras["infinity"] = _open_infinity(self.cfg.infinity)
-                _ensure_windows()
-                print(
-                    f"[epoxy_app] Live view ready: "
-                    f"{cameras['zelux'].info.label()} | {cameras['infinity'].info.label()}",
-                    flush=True,
-                )
             except Exception as exc:
                 _stop_cameras()
                 print(f"[epoxy_app] Camera open failed (teleop unchanged): {exc}", flush=True)
@@ -523,6 +529,17 @@ class EpisodeRecorder:
                     flush=True,
                 )
                 return False
+            try:
+                cameras["zelux_front"] = _open_zelux(self.cfg.zelux_front)
+            except Exception as exc:
+                print(f"[epoxy_app] Zelux front open failed (side continues): {exc}", flush=True)
+            try:
+                cameras["infinity"] = _open_infinity(self.cfg.infinity)
+            except Exception as exc:
+                print(f"[epoxy_app] Infinity open failed (Zelux continues): {exc}", flush=True)
+            _ensure_windows()
+            labels = " | ".join(cam.info.label() for cam in cameras.values())
+            print(f"[epoxy_app] Live view ready: {labels}", flush=True)
             now = time.perf_counter()
             next_save_s = now
             next_preview_s = now
@@ -537,9 +554,9 @@ class EpisodeRecorder:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
             meta["cameras"] = [
                 {"role": role, "label": cameras[role].info.label()}
-                for role in ("zelux", "infinity")
-                if role in cameras
+                for role in cameras
             ]
+            meta["num_cameras"] = len(meta["cameras"])
             meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
         # Open cameras immediately so --record-demos always shows live windows.
@@ -687,11 +704,14 @@ def create_manual_control_record_hook(
         cfg = load_epoxy_config()
     recorder = EpisodeRecorder(cfg=cfg, dataset_dir=cfg.dataset_dir)
     z = cfg.zelux
+    zf = cfg.zelux_front
     inf = cfg.infinity
     print(
-        "[epoxy_app] Demo recording armed (live Zelux + Infinity windows open).\n"
-        f"  Zelux: serial={z.serial or 'auto'} index={z.index} "
-        f"exp={z.exposure_ms}ms gain={z.gain}\n"
+        "[epoxy_app] Demo recording armed (live Zelux side + front + Infinity).\n"
+        f"  Zelux side:  serial={z.serial or 'auto'} index={z.index} "
+        f"exp={z.exposure_ms}ms gain={z.gain}  → *_zelux.jpg\n"
+        f"  Zelux front: serial={zf.serial or 'auto'} index={zf.index} "
+        f"exp={zf.exposure_ms}ms gain={zf.gain}  → *_zelux_front.jpg\n"
         f"  Infinity: #={inf.camera_number} opencv={inf.opencv_index} "
         f"exp={inf.exposure_ms}ms gain={inf.gain}\n"
         f"  Dataset: {cfg.dataset_dir}\n"

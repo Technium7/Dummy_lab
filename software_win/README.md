@@ -119,7 +119,7 @@ python software_win\camera\live_zelux.py
 python software_win\camera\live_infinity.py --opencv-index 0
 ```
 
-`live_view.py` opens **three** OpenCV windows (Zelux front + Zelux side + Infinity). Press **Q** / **Esc** to quit. Pin with `--front-serial` / `--side-serial` after `list_devices.py`.
+`live_view.py` opens **three** OpenCV windows (Zelux front + Zelux side + Infinity). Press **Q** / **Esc** to quit. Serials are pinned in `epoxy_app/config/default_epoxy.yaml` (`zelux` = side 35968, `zelux_front` = front 38862); `live_view.py` uses the same defaults.
 
 ## Windows notes vs Linux `software/`
 

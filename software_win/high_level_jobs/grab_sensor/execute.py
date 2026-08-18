@@ -31,6 +31,7 @@ from trajectory_run.run_planned_trajectory import (  # noqa: E402
     sim_trajectory_to_robot_deg,
     stream_waypoints_deg,
     wait_until_joints,
+    wait_until_joints_quiet,
 )
 
 from .models import GrabSensorConfig, GraspTargets
@@ -273,28 +274,79 @@ def execute_grasp_trajectory(
     )
 
 
+def _hand_command(
+    robot: RobotAsciiInterface,
+    action: str,
+    *,
+    label: str = "",
+    settle_s: float,
+) -> None:
+    """Drive the gripper only after joints are quiet and GETJPOS works."""
+    assert action in ("open", "close")
+    wait_until_joints_quiet(robot, timeout_s=20.0, label=label)
+    q = read_physical_joints(robot)
+    if q is None:
+        print(f"{label}warning: GETJPOS still None; delaying hand command 1s.")
+        time.sleep(1.0)
+        q = read_physical_joints(robot)
+    if q is None:
+        raise RuntimeError(
+            f"{label.strip() or 'grab'} GETJPOS still None after settle; "
+            "not sending HAND (serial busy / arm not settled)."
+        )
+    robot.hold_stream_pose(clamp_firmware_joints_deg(q), _hold_stream_speed())
+    time.sleep(0.25)
+
+    verb = "Opening" if action == "open" else "Closing"
+    print(f"{label}{verb} gripper...")
+    session = getattr(robot, "_session", None)
+    if session is not None:
+        session.discard_stream_acks(max_lines=512)
+    en = robot.hand_enable(wait_ms=600)
+    print(f"{label}HAND_EN -> {en}")
+    time.sleep(0.2)
+    if action == "open":
+        resp = robot.hand_open(wait_ms=600)
+        tag = "HAND_O"
+    else:
+        resp = robot.hand_close(wait_ms=600)
+        tag = "HAND_C"
+    print(f"{label}{tag} -> {resp}")
+    if resp is None or "ok hand" not in str(resp).lower():
+        time.sleep(0.5)
+        if session is not None:
+            session.discard_stream_acks(max_lines=512)
+        robot.hand_enable(wait_ms=800)
+        resp = (
+            robot.hand_open(wait_ms=800)
+            if action == "open"
+            else robot.hand_close(wait_ms=800)
+        )
+        print(f"{label}{tag} retry -> {resp}")
+        if resp is None or "ok hand" not in str(resp).lower():
+            raise RuntimeError(
+                f"{label.strip() or 'grab'} {tag} got {resp!r}; "
+                "gripper not confirmed before next arm stream."
+            )
+    time.sleep(max(0.8, float(settle_s)))
+
+
 def open_gripper(
     robot: RobotAsciiInterface,
     *,
     label: str = "",
-    settle_s: float = 0.35,
+    settle_s: float = 1.5,
 ) -> None:
-    print(f"{label}Opening gripper at pre-grasp...")
-    robot.hand_enable()
-    time.sleep(0.1)
-    robot.hand_open()
-    time.sleep(settle_s)
+    _hand_command(robot, "open", label=label, settle_s=settle_s)
 
 
 def close_gripper(
     robot: RobotAsciiInterface,
     *,
     label: str = "",
-    settle_s: float = 0.5,
+    settle_s: float = 1.5,
 ) -> None:
-    print(f"{label}Closing gripper at grasp...")
-    robot.hand_close()
-    time.sleep(settle_s)
+    _hand_command(robot, "close", label=label, settle_s=settle_s)
 
 
 def _populate_pre_grasp_joints_deg(exec_params: dict[str, Any], meta: Mapping[str, Any]) -> None:
@@ -846,7 +898,7 @@ def execute_standby_to_work(
     if current is None:
         raise RuntimeError("standby: cannot read current joints.")
 
-    scene = build_scene(cfg)
+    scene, temp_file = build_scene(cfg)
     try:
         start_q = start_q_from_robot_joints_deg(scene, current)
         home_traj, home_goal_q = plan_return_home_segment(
@@ -889,3 +941,8 @@ def execute_standby_to_work(
         from trajectory_planner.scene import disconnect_planning_scene
 
         disconnect_planning_scene(scene)
+        if temp_file is not None:
+            try:
+                Path(temp_file).unlink(missing_ok=True)
+            except OSError:
+                pass

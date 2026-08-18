@@ -35,8 +35,10 @@ from high_level_jobs.epoxy_app.vision.config_util import load_vision_config, res
 from high_level_jobs.epoxy_app.vision.dataset import (
     ALLOWED_LABEL_STATES,
     STATE_TO_LABELS,
-    list_zelux_stems,
+    camera_frame_path,
+    list_camera_stems,
     load_labels,
+    normalize_camera_role,
     normalize_record_result_names,
     save_labels,
 )
@@ -95,6 +97,7 @@ def seed_labels_from_checkpoint(
     checkpoint: str | None,
     device_s: str,
     overwrite: bool,
+    role: str = "zelux",
 ) -> int:
     """Run cascade + temporal filter; fill unlabeled (or all if overwrite) stems."""
     vcfg = load_vision_config(vision_config)
@@ -119,7 +122,7 @@ def seed_labels_from_checkpoint(
     for stem in stems:
         if not overwrite and stem in labels and labels[stem].get("state"):
             # Still advance temporal state from image so later frames stay consistent
-            path = episode_dir / f"{stem}_zelux.jpg"
+            path = camera_frame_path(episode_dir, stem, role)
             bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
             if bgr is None:
                 continue
@@ -139,7 +142,7 @@ def seed_labels_from_checkpoint(
             prev_gray = gray
             continue
 
-        path = episode_dir / f"{stem}_zelux.jpg"
+        path = camera_frame_path(episode_dir, stem, role)
         bgr = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if bgr is None:
             continue
@@ -185,6 +188,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--checkpoint", default=None)
     parser.add_argument("--vision-config", default=None)
     parser.add_argument("--device", default="cuda")
+    parser.add_argument(
+        "--camera",
+        default="zelux",
+        help="zelux/side (*_zelux.jpg) or zelux_front/front (*_zelux_front.jpg)",
+    )
     args = parser.parse_args(argv)
 
     epoxy_cfg = load_epoxy_config(args.config)
@@ -198,9 +206,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Episode not found under {dataset_dir}: {args.episode}", file=sys.stderr)
         return 1
 
-    stems = list_zelux_stems(episode_dir)
+    role = normalize_camera_role(args.camera)
+    stems = list_camera_stems(episode_dir, role)
     if not stems:
-        print(f"No *_zelux.jpg in {episode_dir}", file=sys.stderr)
+        print(f"No *_{role}.jpg in {episode_dir}", file=sys.stderr)
         return 1
 
     labels = load_labels(episode_dir)
@@ -214,6 +223,7 @@ def main(argv: list[str] | None = None) -> int:
                 checkpoint=args.checkpoint,
                 device_s=args.device,
                 overwrite=bool(args.reseed),
+                role=role,
             )
         except Exception as exc:  # noqa: BLE001
             print(f"Seed failed: {exc}", file=sys.stderr)
@@ -234,7 +244,7 @@ def main(argv: list[str] | None = None) -> int:
     cv2.namedWindow(win, cv2.WINDOW_NORMAL)
 
     src = "record_result" if args.results else "episodes"
-    print(f"Labeling [{src}] {episode_dir.name} ({len(stems)} Zelux frames)")
+    print(f"Labeling [{src}] {episode_dir.name} {role} ({len(stems)} frames)")
     print("1/n NOT  2/t TOUCH  3/f FLOW  4/s SETTLED  5/m REMOVING")
     print("a/d nav  [/] ±10  r range-fill  w save  q quit")
     print("Train cuts at first REMOVING (that frame and after are ignored).")
@@ -249,7 +259,7 @@ def main(argv: list[str] | None = None) -> int:
     while True:
         stem = stems[idx]
         if idx != cached_idx:
-            path = episode_dir / f"{stem}_zelux.jpg"
+            path = camera_frame_path(episode_dir, stem, role)
             cached_img = cv2.imread(str(path), cv2.IMREAD_COLOR)
             cached_idx = idx
         img = cached_img
@@ -264,7 +274,7 @@ def main(argv: list[str] | None = None) -> int:
 
         display = img.copy()
         lines = [
-            f"{idx + 1}/{len(stems)}  {stem}_zelux.jpg  [{src}]",
+            f"{idx + 1}/{len(stems)}  {stem}_{role}.jpg  [{src}]",
             f"label: {shown}",
             f"brush: {brush}  (space applies brush)",
             "1 NOT  2 TOUCH  3 FLOW  4 SETTLED  5 REMOVING | a/d [/] r w q",

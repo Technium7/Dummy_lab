@@ -53,6 +53,9 @@ Composition guidance (derive from functions, do not copy recipes):
 - Need to be at WORK between visits? -> return after record_power (matching name).
 - Need idle time at WORK between repeats? -> wait only when requested (after return).
 - Repeating a cycle K more times? -> use then_repeat for the repeating suffix.
+- Same spot N times: steps = FIRST visit with power_measure(save_as=<name>);
+  then_repeat times=N-1 uses traj_replay(name=<name>), never another power_measure.
+  then_repeat must not contain power_measure.
 
 Output a single JSON object only (no markdown), with this schema:
 {"steps":[{"action":"<action>","params":{...}}, ...],
@@ -302,6 +305,48 @@ def _sanitize_plan(plan: Plan, *, utterance: str) -> Plan:
                     params["seconds"] = params.pop(alt)
                     break
         out.append(PlanStep(step.action, params))
+    return _rewrite_same_spot_repeats(Plan(steps=out), utterance=utterance)
+
+
+def _rewrite_same_spot_repeats(plan: Plan, *, utterance: str) -> Plan:
+    """Same-spot N× visits: one click (power_measure), later visits traj_replay."""
+    n_rep = _utterance_repeat_count(utterance)
+    t = utterance.lower()
+    if n_rep is None or n_rep < 2:
+        return plan
+    if not re.search(r"\b(measure|power|same\s+spot|same\s+place)\b", t):
+        return plan
+    n_pm = sum(1 for s in plan.steps if s.action == "power_measure")
+    if n_pm <= 1:
+        return plan
+
+    lib = ""
+    for s in plan.steps:
+        if s.action == "power_measure":
+            lib = str(s.params.get("save_as") or s.params.get("name") or "").strip()
+            if lib:
+                break
+        if s.action in ("traj_replay", "traj_save"):
+            lib = str(s.params.get("name") or "").strip()
+            if lib:
+                break
+    lib = lib or "spot"
+
+    out: list[PlanStep] = []
+    seen_pm = False
+    for s in plan.steps:
+        params = dict(s.params)
+        if s.action == "power_measure":
+            if not seen_pm:
+                seen_pm = True
+                params["save_as"] = lib
+                out.append(PlanStep("power_measure", params))
+            else:
+                out.append(PlanStep("traj_replay", {"name": lib}))
+            continue
+        if s.action in ("traj_replay", "return") and not str(params.get("name") or "").strip():
+            params["name"] = lib
+        out.append(PlanStep(s.action, params))
     return Plan(steps=out)
 
 

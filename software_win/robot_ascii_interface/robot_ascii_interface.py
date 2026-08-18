@@ -248,17 +248,17 @@ class RobotAsciiInterface:
         resp = self.send_command('!DISABLE')
         return resp
 
-    def hand_open(self):
+    def hand_open(self, wait_ms: int = 500):
         """Open the gripper (firmware: !HAND_O)."""
-        return self.send_command('!HAND_O')
+        return self.send_command("!HAND_O", wait_ms=wait_ms)
 
-    def hand_close(self):
+    def hand_close(self, wait_ms: int = 500):
         """Close the gripper (firmware: !HAND_C)."""
-        return self.send_command('!HAND_C')
+        return self.send_command("!HAND_C", wait_ms=wait_ms)
 
-    def hand_enable(self):
+    def hand_enable(self, wait_ms: int = 500):
         """Enable gripper driver (firmware: !HAND_EN)."""
-        return self.send_command('!HAND_EN')
+        return self.send_command("!HAND_EN", wait_ms=wait_ms)
 
     # Query Commands
     def get_joint_pos(self):

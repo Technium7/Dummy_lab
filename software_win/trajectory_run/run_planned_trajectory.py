@@ -570,9 +570,13 @@ def stream_waypoints_deg(
 
     _discard_stream_acks(robot)
     if settle_timeout_sec > 0.0:
-        print(f"{label}Waiting for motion to settle...")
-        if not robot.wait_for_motion_complete(timeout_sec=min(settle_timeout_sec, 30.0)):
-            print(f"{label}Warning: settle timeout ({settle_timeout_sec:.0f} s).")
+        if not wait_until_joints_quiet(
+            robot,
+            timeout_s=float(settle_timeout_sec),
+            label=label,
+        ):
+            print(f"{label}Failed: joints not quiet after stream.")
+            return False
     return True
 
 
@@ -583,6 +587,55 @@ def read_physical_joints(robot: RobotAsciiInterface, retries: int = 5) -> List[f
             return [float(v) for v in joints[:6]]
         time.sleep(0.05)
     return None
+
+
+def wait_until_joints_quiet(
+    robot: RobotAsciiInterface,
+    *,
+    tol_deg: float = 0.12,
+    stable_reads: int = 5,
+    poll_s: float = 0.15,
+    timeout_s: float = 20.0,
+    label: str = "",
+) -> bool:
+    """Block until GETJPOS works and consecutive reads differ by ≤ tol_deg.
+
+    Failed GETJPOS resets the stable counter (serial still busy / arm still
+    streaming). Do not treat a missing reply as already still.
+    """
+    tol = max(1e-3, float(tol_deg))
+    need = max(1, int(stable_reads))
+    poll = max(0.05, float(poll_s))
+    deadline = time.perf_counter() + max(0.5, float(timeout_s))
+    prev: list[float] | None = None
+    stable = 0
+    print(
+        f"{label}waiting for joints quiet "
+        f"(GETJPOS ok, Δ≤{tol:.3f} deg, {need} stable reads, timeout {timeout_s:g}s)..."
+    )
+    session = getattr(robot, "_session", None)
+    while time.perf_counter() < deadline:
+        if session is not None:
+            session.discard_stream_acks(max_lines=512)
+        cur = read_physical_joints(robot, retries=2)
+        if cur is None:
+            stable = 0
+            prev = None
+            time.sleep(poll)
+            continue
+        if prev is not None:
+            err = float(np.max(np.abs(np.asarray(cur[:6]) - np.asarray(prev[:6]))))
+            if err <= tol:
+                stable += 1
+                if stable >= need:
+                    print(f"{label}joints quiet (Δ≤{err:.4f} deg).")
+                    return True
+            else:
+                stable = 0
+        prev = list(cur[:6])
+        time.sleep(poll)
+    print(f"{label}warning: joints not quiet within {timeout_s:g}s; continuing.")
+    return False
 
 
 def prepare_robot_trajectory(
