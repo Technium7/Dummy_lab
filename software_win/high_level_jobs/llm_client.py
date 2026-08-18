@@ -129,6 +129,16 @@ class OllamaClient:
         return content
 
 
+def _chat_temperature(model: str) -> float:
+    raw = os.environ.get("OPENAI_TEMPERATURE")
+    if raw is not None and str(raw).strip() != "":
+        return float(raw)
+    # gpt-oss is calibrated for temperature=1; forcing 0 makes plans flaky.
+    if "gpt-oss" in (model or ""):
+        return 1.0
+    return 0.0
+
+
 @dataclass
 class OpenAICompatClient:
     """
@@ -161,14 +171,20 @@ class OpenAICompatClient:
             "max_tokens": 4096,
         }
         model_id = str(self.model or "")
+        temp = _chat_temperature(model_id)
+        base["temperature"] = temp
         if "gpt-oss" in model_id:
             # Reasoning models often 400 in json_object mode; keep CoT short.
             base["reasoning_effort"] = "low"
+            base["top_p"] = 1.0
+        elif "qwen" in model_id:
+            # Qwen 3.6 on Groq: disable thinking so JSON mode stays valid.
+            base["reasoning_effort"] = "none"
 
         # Groq JSON-object mode can 400 if the model emits non-JSON (common on gpt-oss).
+        # Keep the same temperature on every retry (do not drop it to the API default).
         attempts: list[dict[str, Any]] = [
-            {**base, "temperature": 0, "response_format": {"type": "json_object"}},
-            {**base, "temperature": 0},
+            {**base, "response_format": {"type": "json_object"}},
             dict(base),
         ]
         headers = {

@@ -16,13 +16,17 @@ not from fixed example patterns. Use the fewest steps that satisfy the request.
 Do not invent goals the user did not ask for (no wait, no optimize, no extra returns).
 
 World model (keep this consistent while planning):
-- Poses of interest: WORK (idle holding), INSERT (sensor placed at a target), elsewhere.
-- Trajectory library: named joint-space motions. A name can be replayed later without
-  a new click. Choosing a new click requires power_measure (optionally save_as=name).
+- Poses: WORK vs INSERT. Holding vs empty are different.
+- grab_sensor ends WORK + HOLDING. put_sensor RELEASES the sensor (WORK + EMPTY).
+- return moves INSERT -> WORK but STILL HOLDING. return is not put_sensor.
+- After put_sensor the arm is empty, so a later place/measure needs grab_sensor first.
+- Trajectory library: named joint-space motions. Replay needs a saved name.
+  A new click requires power_measure (optionally save_as=name).
 
 Subtasks (action name -> function):
 - grab_sensor: Detect/pick sensor, end at WORK holding it. Writes grab record for put_sensor.
-- put_sensor: Reverse grab record, release sensor, end at WORK. Needs prior grab_sensor.
+- put_sensor: Reverse grab record, RELEASE sensor into the holder, end at WORK empty.
+  Must start at WORK holding (return first if currently at INSERT).
 - power_measure: Operator clicks a NEW image target; move WORK->INSERT; STAY at insert;
   record outbound+return traj. Params: optional save_as=<name> also stores that traj in
   the library under <name>. Use when the place is not already in the library / is new.
@@ -34,15 +38,14 @@ Subtasks (action name -> function):
 - record_power: At CURRENT pose (typically INSERT after place/replay): wait until
   joints are quiet, pin stream target, sleep {"seconds":1} (default), then average
   PM100. Use when the user asks to record / log / sample power.
-- return: From INSERT (or after place/replay), stream saved return traj to WORK.
-  Params: optional name (library); else last power_measure record. Use when the user
-  wants to leave insert / go back to work between visits.
+- return: From INSERT, stream saved return traj to WORK, STILL HOLDING.
+  Params: optional name (library); else last power_measure record.
 - standby: Fresh plan from current joints to WORK (no library). Use if lost / no record.
 - power_optimization: From current INSERT, PM100 search/climb; STAY. Needs prior place
   extras. Appends the final peak reading to the same JSONL as record_power
   (source=power_optimization). Only if user asks to optimize/search power.
-- wait: Hold current pose for N seconds. Params: required seconds (min->sec). ONLY if
-  user asked to wait/pause/dwell between visits (usually at WORK after return).
+- wait: Hold CURRENT pose for N seconds. Params: required seconds (min->sec). ONLY if
+  the user asked to wait/pause/dwell. It does not move the arm and does not put/release.
 - manual: Hand off to teleop. stop: emergency stop. help / quit: meta.
 - epoxy_apply: stub / usually unavailable.
 
@@ -50,12 +53,11 @@ Composition guidance (derive from functions, do not copy recipes):
 - Need a new place? -> power_measure (add save_as if that traj will be reused).
 - Need the same place again? -> traj_replay(name), not another power_measure.
 - Need a settled power reading at insert? -> record_power after place/replay (before return).
-- Need to be at WORK between visits? -> return after record_power (matching name).
-- Need idle time at WORK between repeats? -> wait only when requested (after return).
-- Repeating a cycle K more times? -> use then_repeat for the repeating suffix.
-- Same spot N times: steps = FIRST visit with power_measure(save_as=<name>);
-  then_repeat times=N-1 uses traj_replay(name=<name>), never another power_measure.
-  then_repeat must not contain power_measure.
+- Need WORK while still holding? -> return.
+- Need the sensor in the holder? -> put_sensor (after return if at INSERT).
+- wait only if requested, and only after the pose/holding state already matches the request.
+- Repeating a suffix K more times? -> then_repeat for that suffix.
+- then_repeat must not contain power_measure when the place is already saved.
 
 Output a single JSON object only (no markdown), with this schema:
 {"steps":[{"action":"<action>","params":{...}}, ...],
@@ -256,8 +258,39 @@ def _coerce(raw: str) -> Any:
         return s
 
 
+def _utterance_wait_seconds(text: str) -> float | None:
+    t = text.lower()
+    m = re.search(
+        r"\b(?:wait|pause|dwell)\s+(\d+(?:\.\d+)?)\s*(min|minutes|s|sec|seconds)?\b",
+        t,
+    )
+    if m is None:
+        m = re.search(
+            r"(\d+(?:\.\d+)?)\s*(min|minutes|s|sec|seconds)\b.{0,24}\b(wait|pause|dwell)\b",
+            t,
+        )
+    if m is None:
+        return None
+    value = float(m.group(1))
+    unit = (m.group(2) or "s").lower()
+    if unit.startswith("min"):
+        value *= 60.0
+    return value
+
+
 def _utterance_asks_wait(text: str) -> bool:
     return bool(re.search(r"\b(wait|pause|dwell)\b", text.lower()))
+
+
+def _utterance_asks_put_sensor(text: str) -> bool:
+    t = text.lower()
+    return bool(
+        re.search(
+            r"\bput\b.{0,48}\bsensor\b|\bsensor\b.{0,48}\bput(\s+back)?\b|"
+            r"\bput\s+it\s+(back|away)\b|\brelease\b.{0,24}\bsensor\b",
+            t,
+        )
+    )
 
 
 def _utterance_repeat_count(text: str) -> int | None:
@@ -304,6 +337,10 @@ def _sanitize_plan(plan: Plan, *, utterance: str) -> Plan:
                 if alt in params:
                     params["seconds"] = params.pop(alt)
                     break
+            if "seconds" not in params:
+                inferred = _utterance_wait_seconds(utterance)
+                if inferred is not None:
+                    params["seconds"] = inferred
         out.append(PlanStep(step.action, params))
     return _rewrite_same_spot_repeats(Plan(steps=out), utterance=utterance)
 
@@ -378,6 +415,10 @@ def _plan_is_capability_coherent(plan: Plan, *, utterance: str) -> bool:
             return False
         if n_rep is not None and n_record < n_rep:
             return False
+
+    n_put = actions.count("put_sensor")
+    if _utterance_asks_put_sensor(utterance) and n_put < 1:
+        return False
 
     # traj_replay / traj_save need a name.
     for s in plan.steps:
