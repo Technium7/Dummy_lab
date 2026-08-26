@@ -66,7 +66,7 @@ class VisionModelsConfig:
     center_head_path: Path = field(default_factory=lambda: MODEL_DIR / "center_head.pt")
     confidence: float = 0.35
     crop_padding_px: int = 12
-    max_proposals: int = 16
+    max_proposals: int = 0  # 0 = no cap
     yolo_model_path: Path | None = field(default_factory=lambda: MODEL_DIR / "sensor_yolo.pt")
 
 
@@ -195,7 +195,7 @@ class GrabSensorConfig:
             center_head_path=_resolve(vision_raw.get("center_head_path"), MODEL_DIR / "center_head.pt"),
             confidence=float(vision_raw.get("confidence", 0.35)),
             crop_padding_px=int(vision_raw.get("crop_padding_px", 12)),
-            max_proposals=int(vision_raw.get("max_proposals", 16)),
+            max_proposals=int(vision_raw.get("max_proposals", 0)),
             yolo_model_path=_resolve(
                 vision_raw.get("yolo_model_path"), MODEL_DIR / "sensor_yolo.pt"
             ),

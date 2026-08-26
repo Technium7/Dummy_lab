@@ -67,6 +67,7 @@ python -m high_level_jobs.epoxy_app.vision.tip_label_tool --results --episode 14
 Click = tip · `a/d` navigate · `x` clear · `w` save. Sparse tips OK — training interpolates between marks (`tip.interpolate_labels`).
 
 Writes `"tip"` (side / `*_zelux.jpg`) or `"tip_front"` (front / `*_zelux_front.jpg`) into `labels.json`.
+`tip_train` / `vision.train` still use **side** frames only (`tip` + `*_zelux.jpg`).
 
 ## 2c. Review / auto-label more episodes (after tip_train)
 

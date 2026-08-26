@@ -1,0 +1,328 @@
+{
+  "id": "20260810_150903_928",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "sensor",
+      "bbox_xyxy": [
+        116.0,
+        204.0,
+        266.0,
+        395.0
+      ],
+      "kpts": [
+        [
+          188.0,
+          276.0
+        ],
+        [
+          194.0,
+          323.0
+        ]
+      ],
+      "axis_deg": 82.72499504211075,
+      "bbox_source": "manual"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        329.0,
+        258.0,
+        385.0,
+        314.0
+      ],
+      "kpts": [
+        [
+          357.0,
+          286.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        356.0,
+        259.0,
+        412.0,
+        315.0
+      ],
+      "kpts": [
+        [
+          384.0,
+          287.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        396.0,
+        211.0,
+        452.0,
+        267.0
+      ],
+      "kpts": [
+        [
+          424.0,
+          239.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        389.0,
+        172.0,
+        445.0,
+        228.0
+      ],
+      "kpts": [
+        [
+          417.0,
+          200.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        432.0,
+        177.0,
+        488.0,
+        233.0
+      ],
+      "kpts": [
+        [
+          460.0,
+          205.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        459.0,
+        248.0,
+        515.0,
+        304.0
+      ],
+      "kpts": [
+        [
+          487.0,
+          276.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        363.0,
+        303.0,
+        419.0,
+        359.0
+      ],
+      "kpts": [
+        [
+          391.0,
+          331.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        403.0,
+        301.0,
+        459.0,
+        357.0
+      ],
+      "kpts": [
+        [
+          431.0,
+          329.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        425.0,
+        299.0,
+        481.0,
+        355.0
+      ],
+      "kpts": [
+        [
+          453.0,
+          327.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        450.0,
+        299.0,
+        506.0,
+        355.0
+      ],
+      "kpts": [
+        [
+          478.0,
+          327.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        485.0,
+        303.0,
+        541.0,
+        359.0
+      ],
+      "kpts": [
+        [
+          513.0,
+          331.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        403.0,
+        325.0,
+        459.0,
+        381.0
+      ],
+      "kpts": [
+        [
+          431.0,
+          353.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        461.0,
+        372.0,
+        517.0,
+        428.0
+      ],
+      "kpts": [
+        [
+          489.0,
+          400.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        425.0,
+        376.0,
+        481.0,
+        432.0
+      ],
+      "kpts": [
+        [
+          453.0,
+          404.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        372.0,
+        377.0,
+        428.0,
+        433.0
+      ],
+      "kpts": [
+        [
+          400.0,
+          405.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        402.0,
+        435.0,
+        458.0,
+        479.0
+      ],
+      "kpts": [
+        [
+          430.0,
+          463.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        447.0,
+        420.0,
+        503.0,
+        476.0
+      ],
+      "kpts": [
+        [
+          475.0,
+          448.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        471.0,
+        418.0,
+        527.0,
+        474.0
+      ],
+      "kpts": [
+        [
+          499.0,
+          446.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    }
+  ],
+  "intrinsics": {
+    "fx": 617.4710083007812,
+    "fy": 615.7157592773438,
+    "ppx": 319.1906433105469,
+    "ppy": 244.21168518066406,
+    "width": 640,
+    "height": 480
+  },
+  "files": {
+    "image": "images/20260810_150903_928.png",
+    "depth": "depth/20260810_150903_928.npy"
+  }
+}

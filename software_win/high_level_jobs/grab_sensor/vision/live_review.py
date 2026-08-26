@@ -48,14 +48,24 @@ def main(argv: list[str] | None = None) -> int:
         rgb = np.asarray(Image.open(args.out / img_rel).convert("RGB"))
         bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
         for obj in data.get("objects") or []:
-            _draw_object(cv2, bgr, obj)
+            old = obj.get("contact_uv_before_shift")
+            if old and len(old) >= 2:
+                cv2.drawMarker(
+                    bgr,
+                    (int(old[0]), int(old[1])),
+                    (160, 160, 160),
+                    cv2.MARKER_TILTED_CROSS,
+                    14,
+                    1,
+                )
+            _draw_object(cv2, bgr, obj, show_holder_pt=False, show_grasp_pt=False)
         h, w = bgr.shape[:2]
         panel = np.zeros((PANEL_H, w, 3), dtype=np.uint8)
         panel[:] = (35, 35, 35)
         cv2.putText(
             panel,
             f"[{idx + 1}/{len(labels)}] {data.get('id')}  objects={len(data.get('objects') or [])}  "
-            "A/D=prev/next  Q=quit  (edit: python -m high_level_jobs.grab_sensor.vision.relabel)",
+            "gray=old contact  A/D=prev/next  Q=quit  (edit: vision.relabel)",
             (8, 40),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.45,

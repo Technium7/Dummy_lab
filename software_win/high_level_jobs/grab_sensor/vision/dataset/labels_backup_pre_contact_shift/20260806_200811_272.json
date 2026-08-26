@@ -1,0 +1,77 @@
+{
+  "id": "20260806_200811_272",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        198.00032000000002,
+        327.0,
+        288.00032,
+        417.0
+      ],
+      "kpts": [
+        [
+          243.00032000000002,
+          372.0
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        402.00032,
+        275.00016,
+        492.00032,
+        365.00016
+      ],
+      "kpts": [
+        [
+          447.00032,
+          320.00016
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        363.0,
+        113.00016,
+        453.0,
+        203.00016
+      ],
+      "kpts": [
+        [
+          408.0,
+          158.00016
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        266.00032,
+        60.0,
+        356.00032,
+        150.0
+      ],
+      "kpts": [
+        [
+          311.00032,
+          105.0
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    }
+  ],
+  "intrinsics": {},
+  "files": {
+    "image": "images/20260806_200811_272.png",
+    "depth": null
+  },
+  "recovered_note": "RGB from sensor_yolo export; depth + sensor keypoints lost \u2014 open relabel, add sensor contact+corner, S"
+}

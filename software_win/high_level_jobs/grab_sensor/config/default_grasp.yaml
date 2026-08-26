@@ -20,7 +20,7 @@ vision:
   center_head_path: software_win/high_level_jobs/grab_sensor/vision/dataset/model/center_head.pt
   confidence: 0.35
   crop_padding_px: 16
-  max_proposals: 16
+  max_proposals: 0  # 0 = no cap; keep every YOLO box above confidence
 
 grasp_position_from_table: true
 

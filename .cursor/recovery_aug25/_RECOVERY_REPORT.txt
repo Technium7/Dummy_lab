@@ -1,0 +1,67 @@
+Aug 25 grab_sensor vision recovery report
+============================================================
+Source: transcript 9e2b47bd (Aug 24 edits) replayed onto git HEAD (beabe9a).
+Excluded: Aug 26 StrReplace on export_yolo_dataset, train_yolo, train_heads.
+No Aug 25-dated transcript edits found; Aug 24 evening == end-of-Aug-25 working tree for these files.
+
+## train_heads.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+544/-54 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\train_heads.py
+  - YOLO-matched crops; --train-first/--test-last chrono split; along/perp MAE; center YOLO crops
+  - Does NOT include Aug26 train-first-alone/random-test behavior
+
+## export_yolo_dataset.py
+  Recovery: FULL
+  vs HEAD: IDENTICAL to HEAD (no Aug24-25 delta)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\export_yolo_dataset.py
+  - Aug25 end == HEAD; --train-first/--val-last were Aug26-only (excluded)
+  - Those Aug26 flags are reconstructible from transcript L253-254 if needed
+
+## train_yolo.py
+  Recovery: FULL
+  vs HEAD: IDENTICAL to HEAD (no Aug24-25 delta)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\train_yolo.py
+  - Aug25 end == HEAD; --train-first/--val-last were Aug26-only (excluded)
+  - Those Aug26 flags are reconstructible from transcript L253-254 if needed
+
+## infer.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+5/-4 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\infer.py
+  - max_proposals uncapped when 0
+
+## live_detect.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+16/-16 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\live_detect.py
+  - Aug24 overlay/freeze preview drawing updates
+
+## live_label.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+26/-14 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\live_label.py
+  - Aug24 _draw_object holder/contact drawing updates
+
+## live_review.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+12/-2 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\live_review.py
+  - Aug24 richer review overlay via shared draw helpers
+
+## models.py
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+4/-4 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\models.py
+  - VisionConfig.max_proposals default 0
+
+## default_grasp.yaml
+  Recovery: FULL
+  vs HEAD: DIFFERS from HEAD (+11/-11 lines)
+  Written: C:\Users\PQE_339_ThinkPad\Documents\Dummy_lab\.cursor\recovery_aug25\default_grasp.yaml
+  - vision.max_proposals: 0
+
+## live_* feature markers
+  live_label show_holder_pt: True
+  live_detect imports _draw_object from live_label: True
+  live_review uses _draw_object: True

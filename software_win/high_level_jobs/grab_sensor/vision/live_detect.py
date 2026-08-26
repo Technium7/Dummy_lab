@@ -154,7 +154,7 @@ def _draw_ui(
     bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
     h, w = bgr.shape[:2]
     for obj in objects:
-        _draw_object(cv2, bgr, obj)
+        _draw_object(cv2, bgr, obj, show_holder_pt=False, show_grasp_pt=False)
     if current and current.get("kpts"):
         tmp = {
             "class": current.get("class") or class_name,
@@ -168,7 +168,7 @@ def _draw_ui(
                 )
             except ValueError:
                 pass
-        _draw_object(cv2, bgr, tmp)
+        _draw_object(cv2, bgr, tmp, show_holder_pt=False, show_grasp_pt=False)
 
     mode = "FROZEN-edit" if frozen else "LIVE"
     panel = np.zeros((PANEL_H, w, 3), dtype=np.uint8)
@@ -351,7 +351,7 @@ def run_live_detect(
                     )
                     prev = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
                     for obj in objs:
-                        _draw_object(cv2, prev, obj)
+                        _draw_object(cv2, prev, obj, show_holder_pt=False, show_grasp_pt=False)
                     (out_dir / "previews").mkdir(parents=True, exist_ok=True)
                     cv2.imwrite(str(out_dir / "previews" / f"{rec['id']}.png"), prev)
                     state["saved_count"] = len(iter_labels(out_dir))
@@ -420,7 +420,7 @@ def run_live_detect(
                 )
                 prev = cv2.cvtColor(state["freeze_rgb"], cv2.COLOR_RGB2BGR)
                 for obj in state["objects"]:
-                    _draw_object(cv2, prev, obj)
+                    _draw_object(cv2, prev, obj, show_holder_pt=False, show_grasp_pt=False)
                 (out_dir / "previews").mkdir(parents=True, exist_ok=True)
                 cv2.imwrite(str(out_dir / "previews" / f"{rec['id']}.png"), prev)
                 state["saved_count"] = len(iter_labels(out_dir))

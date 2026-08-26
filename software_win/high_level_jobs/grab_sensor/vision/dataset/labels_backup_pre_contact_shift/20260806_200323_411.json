@@ -1,0 +1,104 @@
+{
+  "id": "20260806_200323_411",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        229.0,
+        82.0,
+        319.0,
+        172.0
+      ],
+      "kpts": [
+        [
+          274.0,
+          127.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        305.0,
+        133.0,
+        395.0,
+        223.0
+      ],
+      "kpts": [
+        [
+          350.0,
+          178.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        366.0,
+        166.0,
+        456.0,
+        256.0
+      ],
+      "kpts": [
+        [
+          411.0,
+          211.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "other",
+      "bbox_xyxy": [
+        260.0,
+        185.0,
+        350.0,
+        275.0
+      ],
+      "kpts": [
+        [
+          305.0,
+          230.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "sensor",
+      "bbox_xyxy": [
+        262.0,
+        205.0,
+        412.0,
+        396.0
+      ],
+      "kpts": [
+        [
+          334.0,
+          277.0
+        ],
+        [
+          340.0,
+          324.0
+        ]
+      ],
+      "axis_deg": 82.72499504211075,
+      "bbox_source": "manual"
+    }
+  ],
+  "intrinsics": {
+    "fx": 610.814697265625,
+    "fy": 610.5267944335938,
+    "ppx": 314.0621337890625,
+    "ppy": 234.38771057128906,
+    "width": 640,
+    "height": 480
+  },
+  "files": {
+    "image": "images/20260806_200323_411.png",
+    "depth": "depth/20260806_200323_411.npy"
+  }
+}

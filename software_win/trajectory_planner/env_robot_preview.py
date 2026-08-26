@@ -135,6 +135,34 @@ def load_static_obj_mesh(
     )
 
 
+_INCH_TO_M = 0.0254
+
+
+def _draw_table_xyz_axes(*, length_m: float = 5.0 * _INCH_TO_M, radius_m: float = 0.0015) -> None:
+    """RGB table triad as visual cylinders (5 inches by default).
+
+    PyBullet's GUI grid also draws a hardcoded 1 m RGB frame at the origin;
+    that overlay is disabled separately via COV_ENABLE_GUI.
+    """
+    half = float(length_m) * 0.5
+    radius = float(radius_m)
+    # GEOM_CYLINDER is Z-aligned; rotate so +X/+Y/+Z match table axes.
+    specs = (
+        ([half, 0.0, 0.0], [0.0, math.pi / 2.0, 0.0], [1.0, 0.15, 0.15, 1.0]),
+        ([0.0, half, 0.0], [-math.pi / 2.0, 0.0, 0.0], [0.15, 0.9, 0.25, 1.0]),
+        ([0.0, 0.0, half], [0.0, 0.0, 0.0], [0.25, 0.45, 1.0, 1.0]),
+    )
+    for pos, rpy, rgba in specs:
+        vis = p.createVisualShape(p.GEOM_CYLINDER, radius=radius, length=length_m, rgbaColor=rgba)
+        p.createMultiBody(
+            baseMass=0,
+            baseCollisionShapeIndex=-1,
+            baseVisualShapeIndex=vis,
+            basePosition=pos,
+            baseOrientation=p.getQuaternionFromEuler(rpy),
+        )
+
+
 def sim_to_user(value: float, offset: float, sign: float) -> float:
     return sign * (offset - value)
 
@@ -180,7 +208,10 @@ def run_preview(
     robot_base_orientation: Sequence[float],
     robot_in_table_display: str,
 ) -> None:
-    cid = p.connect(p.GUI)
+    # --nogui hides the Example Browser side panel *and* the built-in 1 m RGB
+    # origin triad (drawGrid). Joint sliders still work if you press G, but
+    # that also restores the 1 m overlay.
+    cid = p.connect(p.GUI, options="--nogui")
     if cid < 0:
         raise SystemExit("Failed to open PyBullet GUI")
 
@@ -191,7 +222,10 @@ def run_preview(
 
     p.resetSimulation()
     p.setGravity(0, 0, -9.81)
-    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 1)
+    p.configureDebugVisualizer(p.COV_ENABLE_GUI, 0)
+    p.configureDebugVisualizer(p.COV_ENABLE_RGB_BUFFER_PREVIEW, 0)
+    p.configureDebugVisualizer(p.COV_ENABLE_DEPTH_BUFFER_PREVIEW, 0)
+    p.configureDebugVisualizer(p.COV_ENABLE_SEGMENTATION_MARK_PREVIEW, 0)
 
     if load_plane:
         plane_path = Path(pybullet_data.getDataPath()) / "plane.urdf"
@@ -225,16 +259,7 @@ def run_preview(
         flags=load_flags,
     )
 
-    axis_len = 0.08
-    rx, ry, rz = (float(v) for v in robot_base_position[:3])
-    p.addUserDebugLine([0, 0, 0], [axis_len, 0, 0], [1, 0, 0], 3, 0)
-    p.addUserDebugLine([0, 0, 0], [0, axis_len, 0], [0, 1, 0], 3, 0)
-    p.addUserDebugLine([0, 0, 0], [0, 0, axis_len], [0, 0, 1], 3, 0)
-    p.addUserDebugText("table 0,0", [0, 0, 0.02], [1, 1, 1], 1.2, 0)
-    p.addUserDebugLine([rx, ry, rz], [rx + axis_len, ry, rz], [1, 0.4, 0.4], 2, 0)
-    p.addUserDebugLine([rx, ry, rz], [rx, ry + axis_len, rz], [0.4, 1, 0.4], 2, 0)
-    p.addUserDebugLine([rx, ry, rz], [rx, ry, rz + axis_len], [0.4, 0.4, 1], 2, 0)
-    p.addUserDebugText("robot base", [rx, ry, rz + 0.02], [1, 1, 0], 1.2, 0)
+    _draw_table_xyz_axes(length_m=5.0 * _INCH_TO_M)
 
     boxes = [p.getAABB(robot_id, -1), p.getAABB(env_id, -1)]
     aabb_min, aabb_max = _aabb_union(boxes)

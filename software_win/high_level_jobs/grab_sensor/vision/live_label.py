@@ -70,7 +70,14 @@ def _sensor_need() -> int:
     return SENSOR_NUM_KPTS
 
 
-def _draw_object(cv2, bgr: np.ndarray, obj: dict) -> None:
+def _draw_object(
+    cv2,
+    bgr: np.ndarray,
+    obj: dict,
+    *,
+    show_holder_pt: bool = True,
+    show_grasp_pt: bool = True,
+) -> None:
     cls = obj.get("class", "other")
     color = CLASS_COLORS.get(cls, (200, 200, 200))
     bbox = obj.get("bbox_xyxy")
@@ -80,6 +87,8 @@ def _draw_object(cv2, bgr: np.ndarray, obj: dict) -> None:
         cv2.putText(bgr, cls, (x0, max(12, y0 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
     kpts = obj.get("kpts") or []
     for i, uv in enumerate(kpts):
+        if cls == "sensor" and i != SENSOR_CONTACT_IDX and not show_holder_pt:
+            continue
         u, v = int(uv[0]), int(uv[1])
         marker = (
             cv2.MARKER_TILTED_CROSS
@@ -87,6 +96,8 @@ def _draw_object(cv2, bgr: np.ndarray, obj: dict) -> None:
             else cv2.MARKER_CROSS
         )
         cv2.drawMarker(bgr, (u, v), color, marker, 16, 2)
+        if cls == "sensor" and not show_holder_pt:
+            continue
         label = "C" if (cls == "sensor" and i == 0) else ("H" if cls == "sensor" and i == 1 else str(i))
         cv2.putText(bgr, label, (u + 4, v - 4), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
     if cls == "sensor" and len(kpts) >= SENSOR_NUM_KPTS:
@@ -99,10 +110,11 @@ def _draw_object(cv2, bgr: np.ndarray, obj: dict) -> None:
             2,
             tipLength=0.25,
         )
-        gx, gy = grasp_uv_from_sensor_kpts(
-            kpts, offset_px=DEFAULT_GRASP_OFFSET_PX, bbox_xyxy=bbox
-        )
-        cv2.circle(bgr, (int(gx), int(gy)), 7, (0, 0, 255), 2)
+        if show_grasp_pt:
+            gx, gy = grasp_uv_from_sensor_kpts(
+                kpts, offset_px=DEFAULT_GRASP_OFFSET_PX, bbox_xyxy=bbox
+            )
+            cv2.circle(bgr, (int(gx), int(gy)), 7, (0, 0, 255), 2)
 
 
 def _draw_ui(cv2, frame_rgb: np.ndarray, state: dict) -> np.ndarray:

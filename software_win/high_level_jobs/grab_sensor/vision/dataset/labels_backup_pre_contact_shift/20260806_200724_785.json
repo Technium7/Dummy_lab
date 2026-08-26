@@ -1,0 +1,83 @@
+{
+  "id": "20260806_200724_785",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        233.0,
+        190.0,
+        323.0,
+        280.0
+      ],
+      "kpts": [
+        [
+          278.0,
+          235.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        256.0,
+        135.0,
+        346.0,
+        225.0
+      ],
+      "kpts": [
+        [
+          301.0,
+          180.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        260.0,
+        264.0,
+        350.0,
+        354.0
+      ],
+      "kpts": [
+        [
+          305.0,
+          309.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        318.0,
+        211.0,
+        408.0,
+        301.0
+      ],
+      "kpts": [
+        [
+          363.0,
+          256.0
+        ]
+      ],
+      "bbox_source": "auto_from_kpts"
+    }
+  ],
+  "intrinsics": {
+    "fx": 610.814697265625,
+    "fy": 610.5267944335938,
+    "ppx": 314.0621337890625,
+    "ppy": 234.38771057128906,
+    "width": 640,
+    "height": 480
+  },
+  "files": {
+    "image": "images/20260806_200724_785.png",
+    "depth": "depth/20260806_200724_785.npy"
+  }
+}

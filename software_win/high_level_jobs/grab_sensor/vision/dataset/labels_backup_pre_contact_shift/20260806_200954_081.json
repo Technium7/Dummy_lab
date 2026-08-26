@@ -1,0 +1,77 @@
+{
+  "id": "20260806_200954_081",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        135.0,
+        306.99984,
+        225.0,
+        396.99984
+      ],
+      "kpts": [
+        [
+          180.0,
+          351.99984
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        333.0,
+        12.999839999999999,
+        423.0,
+        102.99984
+      ],
+      "kpts": [
+        [
+          378.0,
+          57.99984
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "other",
+      "bbox_xyxy": [
+        407.99968,
+        189.0,
+        497.99968,
+        279.0
+      ],
+      "kpts": [
+        [
+          452.99968,
+          234.0
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "other",
+      "bbox_xyxy": [
+        372.00032,
+        318.99984,
+        462.00032,
+        408.99984
+      ],
+      "kpts": [
+        [
+          417.00032,
+          363.99984
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    }
+  ],
+  "intrinsics": {},
+  "files": {
+    "image": "images/20260806_200954_081.png",
+    "depth": null
+  },
+  "recovered_note": "RGB from sensor_yolo export; depth + sensor keypoints lost \u2014 open relabel, add sensor contact+corner, S"
+}

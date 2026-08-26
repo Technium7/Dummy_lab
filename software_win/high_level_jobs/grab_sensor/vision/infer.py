@@ -51,7 +51,7 @@ def _nms_peaks(heat: np.ndarray, *, max_n: int, thresh: float) -> list[tuple[int
             if v >= heat[y - 1 : y + 2, x - 1 : x + 2].max():
                 peaks.append((x, y, v))
     peaks.sort(key=lambda t: t[2], reverse=True)
-    return peaks[:max_n]
+    return peaks if max_n <= 0 else peaks[:max_n]
 
 
 def _load_ckpt(model: torch.nn.Module, path: Path, device: torch.device) -> bool:
@@ -124,7 +124,8 @@ def _yolo_boxes(
         ]
         out.append((bbox, conf, name))
     out.sort(key=lambda t: t[1], reverse=True)
-    return out[: int(vision.max_proposals)]
+    limit = int(vision.max_proposals)
+    return out if limit <= 0 else out[:limit]
 
 
 class CascadeSceneDetector:

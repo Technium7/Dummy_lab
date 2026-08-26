@@ -1,0 +1,82 @@
+{
+  "id": "20260806_201042_796",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        61.99968,
+        12.999839999999999,
+        151.99968,
+        102.99984
+      ],
+      "kpts": [
+        [
+          106.99968,
+          57.99984
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        332.00032,
+        17.00016,
+        422.00032,
+        107.00016
+      ],
+      "kpts": [
+        [
+          377.00032,
+          62.00016
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        403.0,
+        185.00016,
+        493.0,
+        275.00016
+      ],
+      "kpts": [
+        [
+          448.0,
+          230.00016
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "sensor",
+      "bbox_xyxy": [
+        118.0,
+        248.0,
+        308.0,
+        415.0
+      ],
+      "kpts": [
+        [
+          236.0,
+          320.0
+        ],
+        [
+          190.0,
+          343.0
+        ]
+      ],
+      "axis_deg": 153.434948822922,
+      "bbox_source": "manual"
+    }
+  ],
+  "intrinsics": {},
+  "files": {
+    "image": "images/20260806_201042_796.png",
+    "depth": null
+  },
+  "recovered_note": "RGB from sensor_yolo export; depth + sensor keypoints lost \u2014 open relabel, add sensor contact+corner, S"
+}

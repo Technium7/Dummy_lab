@@ -1,0 +1,98 @@
+{
+  "id": "20260806_201136_922",
+  "width": 640,
+  "height": 480,
+  "objects": [
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        221.99968,
+        138.0,
+        311.99968,
+        228.0
+      ],
+      "kpts": [
+        [
+          266.99968,
+          183.0
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "post",
+      "bbox_xyxy": [
+        423.0,
+        425.00016,
+        513.0,
+        479.00016
+      ],
+      "kpts": [
+        [
+          468.0,
+          452.00016
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "other",
+      "bbox_xyxy": [
+        442.00032,
+        389.00016000000005,
+        532.00032,
+        479.00016000000005
+      ],
+      "kpts": [
+        [
+          487.00032,
+          434.00016000000005
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "other",
+      "bbox_xyxy": [
+        301.0,
+        161.00016000000002,
+        391.0,
+        251.00016000000002
+      ],
+      "kpts": [
+        [
+          346.0,
+          206.00016000000002
+        ]
+      ],
+      "bbox_source": "recovered_from_yolo_export"
+    },
+    {
+      "class": "sensor",
+      "bbox_xyxy": [
+        365.0,
+        19.0,
+        552.0,
+        185.0
+      ],
+      "kpts": [
+        [
+          437.0,
+          91.0
+        ],
+        [
+          480.0,
+          113.0
+        ]
+      ],
+      "axis_deg": 27.0955524937518,
+      "bbox_source": "manual"
+    }
+  ],
+  "intrinsics": {},
+  "files": {
+    "image": "images/20260806_201136_922.png",
+    "depth": null
+  },
+  "recovered_note": "RGB from sensor_yolo export; depth + sensor keypoints lost \u2014 open relabel, add sensor contact+corner, S"
+}

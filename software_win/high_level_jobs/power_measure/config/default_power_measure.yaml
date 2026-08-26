@@ -16,7 +16,7 @@ camera_serial: ""
 # (falls back to software/camera/calibration_table/runs/)
 # table_calib_path: software_win/camera/calibration_table/runs/run_YYYYMMDD_HHMMSS/table_calib.json
 
-measured_height_in: 2.5
+measured_height_in: 2
 tcp_above_measured_in: 4.25
 tcp_left_of_radial_in: 1.25
 yaw_cw_from_radial_deg: 90.0
